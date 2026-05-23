@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Boat Dealership Platform Valuation and Forecast Report</title>
+  <style>
+    :root {
+      --navy: #0f2740;
+      --navy-soft: #1f4468;
+      --teal: #117a8b;
+      --foam: #e9f5f7;
+      --sand: #f4efe6;
+      --ink: #17212b;
+      --muted: #5a6877;
+      --line: #cfd9de;
+      --card: #ffffff;
+      --page: #f6f4ef;
+      --success: #1d6e5b;
+      --accent: #b6852c;
+      --warning: #9b5c1b;
+      --shadow: 0 18px 48px rgba(15, 39, 64, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    @page {
+      size: letter;
+      margin: 0.55in;
+    }
+
+    body {
+      margin: 0;
+      font-family: Aptos, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: linear-gradient(180deg, #eef3f4 0%, var(--page) 28%, #fcfbf8 100%);
+      line-height: 1.45;
+    }
+
+    main {
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 28px 18px 44px;
+    }
+
+    .cover {
+      position: relative;
+      overflow: hidden;
+      padding: 34px 34px 28px;
+      border-radius: 28px;
+      color: #fff;
+      background:
+        radial-gradient(circle at top right, rgba(255, 255, 255, 0.22), transparent 30%),
+        radial-gradient(circle at left bottom, rgba(17, 122, 139, 0.28), transparent 28%),
+        linear-gradient(140deg, #0f2740 0%, #173756 42%, #1f4468 72%, #2b6785 100%);
+      box-shadow: var(--shadow);
+      break-inside: avoid;
+    }
+
+    .cover::after {
+      content: "";
+      position: absolute;
+      inset: 22px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 22px;
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      padding: 7px 12px;
+      border-radius: 999px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      font-size: 11px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.9);
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      line-height: 1.1;
+    }
+
+    h1 {
+      max-width: 760px;
+      margin-top: 18px;
+      font-size: 42px;
+      letter-spacing: -0.02em;
+    }
+
+    .lead {
+      max-width: 760px;
+      margin-top: 18px;
+      font-size: 16px;
+      color: rgba(255, 255, 255, 0.88);
+    }
+
+    .cover-meta {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 26px;
+    }
+
+    .meta-card,
+    .stat-card,
+    .callout,
+    .panel,
+    .mini-panel {
+      break-inside: avoid;
+    }
+
+    .meta-card {
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.11);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .meta-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.74);
+    }
+
+    .meta-value {
+      display: block;
+      margin-top: 8px;
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .summary-grid,
+    .three-up,
+    .two-up,
+    .four-up {
+      display: grid;
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    .summary-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .three-up {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .two-up {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .four-up {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .stat-card {
+      padding: 18px;
+      border-radius: 20px;
+      background: var(--card);
+      border: 1px solid rgba(15, 39, 64, 0.08);
+      box-shadow: 0 10px 30px rgba(15, 39, 64, 0.08);
+    }
+
+    .stat-card strong {
+      display: block;
+      margin-top: 12px;
+      font-size: 28px;
+      color: var(--navy);
+    }
+
+    .stat-card span {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .stat-card p {
+      margin: 10px 0 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    section {
+      margin-top: 24px;
+    }
+
+    .panel {
+      padding: 22px 24px;
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid rgba(15, 39, 64, 0.08);
+      box-shadow: 0 14px 36px rgba(15, 39, 64, 0.07);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+    }
+
+    .panel h2 {
+      font-size: 28px;
+      color: var(--navy);
+    }
+
+    .section-intro {
+      margin-top: 10px;
+      max-width: 900px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .callout {
+      padding: 18px 20px;
+      border-radius: 20px;
+      background: linear-gradient(180deg, var(--foam) 0%, #f9fbfb 100%);
+      border-left: 5px solid var(--teal);
+    }
+
+    .callout h3 {
+      font-size: 20px;
+      color: var(--navy);
+    }
+
+    .callout p {
+      margin: 10px 0 0;
+      color: var(--muted);
+    }
+
+    .mini-panel {
+      padding: 18px;
+      border-radius: 18px;
+      background: var(--sand);
+      border: 1px solid rgba(15, 39, 64, 0.08);
+    }
+
+    .mini-panel h3 {
+      font-size: 18px;
+      color: var(--navy);
+    }
+
+    .mini-panel p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .pill {
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--navy);
+      background: #edf2f5;
+      border: 1px solid rgba(15, 39, 64, 0.08);
+    }
+
+    table {
+      width: 100%;
+      margin-top: 16px;
+      border-collapse: collapse;
+      font-size: 13px;
+      background: rgba(255, 255, 255, 0.82);
+      border-radius: 18px;
+      overflow: hidden;
+    }
+
+    th,
+    td {
+      padding: 11px 12px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--line);
+    }
+
+    th {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--navy);
+      background: #edf2f5;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .money {
+      white-space: nowrap;
+      font-weight: 700;
+      color: var(--navy);
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    ul {
+      margin: 12px 0 0;
+      padding-left: 18px;
+    }
+
+    li {
+      margin-top: 7px;
+    }
+
+    .formula {
+      padding: 14px 16px;
+      margin-top: 14px;
+      border-radius: 16px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 13px;
+      color: #eef8fa;
+      background: linear-gradient(90deg, var(--navy) 0%, var(--navy-soft) 100%);
+    }
+
+    .note {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .forecast-card {
+      padding: 20px;
+      border-radius: 22px;
+      border: 1px solid rgba(15, 39, 64, 0.08);
+      background: var(--card);
+      box-shadow: 0 10px 30px rgba(15, 39, 64, 0.07);
+    }
+
+    .forecast-card h3 {
+      font-size: 22px;
+      color: var(--navy);
+    }
+
+    .scenario-tag {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .scenario-tag.conservative {
+      color: var(--warning);
+      background: #fff1e5;
+    }
+
+    .scenario-tag.base {
+      color: var(--teal);
+      background: #e6f4f6;
+    }
+
+    .scenario-tag.upside {
+      color: var(--success);
+      background: #e9f6f2;
+    }
+
+    .band {
+      margin-top: 14px;
+      height: 12px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #e8eef1;
+      position: relative;
+    }
+
+    .band span {
+      display: block;
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--teal) 0%, var(--accent) 100%);
+    }
+
+    .band-low span {
+      width: 26%;
+    }
+
+    .band-mid span {
+      width: 56%;
+    }
+
+    .band-high span {
+      width: 94%;
+    }
+
+    .footer-call {
+      padding: 20px 24px;
+      border-radius: 24px;
+      color: #fff;
+      background: linear-gradient(135deg, #173756 0%, #2b6785 100%);
+      box-shadow: var(--shadow);
+    }
+
+    .footer-call h2 {
+      color: #fff;
+      font-size: 30px;
+    }
+
+    .footer-call p,
+    .footer-call li {
+      color: rgba(255, 255, 255, 0.88);
+    }
+
+    .page-break {
+      break-before: page;
+      page-break-before: always;
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+
+      main {
+        padding: 0;
+        max-width: none;
+      }
+
+      .panel,
+      .forecast-card,
+      .stat-card,
+      .mini-panel,
+      .cover,
+      .footer-call {
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="cover">
+      <span class="eyebrow">Valuation + 5-Year Revenue Forecast</span>
+      <h1>Boat Dealership Platform Strategic Value, Build Cost, and Commercial Forecast</h1>
+      <p class="lead">
+        Detailed valuation report for the Boat Dealership Cloud Operating Diagram / Builder / Flow Map platform,
+        reframed as a production-grade marine dealership operations product with deployment, monetization, and exit-value assumptions.
+      </p>
+
+      <div class="cover-meta">
+        <div class="meta-card">
+          <span class="meta-label">Prepared</span>
+          <span class="meta-value">May 20, 2026</span>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Best Base-Case Build Budget</span>
+          <span class="meta-value">$3.07M</span>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Production-Ready Strategic Value</span>
+          <span class="meta-value">$3.5M to $6.5M</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="summary-grid">
+      <article class="stat-card">
+        <span>Current Scope</span>
+        <strong>236 Nodes</strong>
+        <p>Modeled operating entities across the live canvas, flow builder, and top-down flow map.</p>
+      </article>
+      <article class="stat-card">
+        <span>Relationship Depth</span>
+        <strong>787 Edges</strong>
+        <p>Cross-functional handoffs spanning demand, operations, finance, marina, and retention systems.</p>
+      </article>
+      <article class="stat-card">
+        <span>Commercial Entry Band</span>
+        <strong>$8M to $18M</strong>
+        <p>Most practical early-traction valuation once recurring revenue and customer proof appear.</p>
+      </article>
+      <article class="stat-card">
+        <span>Upside Band</span>
+        <strong>$20M to $45M</strong>
+        <p>Reachable if the product becomes a sticky niche operating layer for marine dealer groups.</p>
+      </article>
+    </section>
+
+    <section class="panel">
+      <h2>Executive Position</h2>
+      <p class="section-intro">
+        This platform should not be valued like a simple diagramming interface. The current asset already contains a meaningful operating model,
+        a reusable domain graph, multiple end-user views, export behavior, state persistence, and a clear roadmap toward a real vertical SaaS or enterprise operating layer.
+      </p>
+
+      <div class="two-up">
+        <div class="callout">
+          <h3>Most Defensible Short Answer</h3>
+          <p>
+            If fully built into a production-grade marine dealership operations platform, the project likely represents roughly
+            <strong>$2.0M to $4.8M</strong> in full build cost, with a practical base-case budget near <strong>$3.07M</strong>.
+            Once production ready, but before strong recurring revenue, it reasonably supports a strategic asset value of about
+            <strong>$3.5M to $6.5M</strong>.
+          </p>
+        </div>
+        <div class="callout">
+          <h3>Commercial Upside View</h3>
+          <p>
+            Once paying customers, repeatable onboarding, and real ARR exist, the valuation should move from replacement-cost logic
+            to recurring-revenue logic. That is the shift that opens the path toward <strong>$8M to $18M</strong> in early traction,
+            and potentially <strong>$20M to $45M</strong> if the product becomes a durable category platform.
+          </p>
+        </div>
+      </div>
+
+      <div class="pill-row">
+        <span class="pill">Interactive live canvas</span>
+        <span class="pill">Flow builder with add-node and add-edge controls</span>
+        <span class="pill">Top-down flow map</span>
+        <span class="pill">PDF, SVG, Mermaid, and JSON exports</span>
+        <span class="pill">Local state persistence</span>
+        <span class="pill">Quick ops modes</span>
+        <span class="pill">Ctrl/Cmd multi-select</span>
+        <span class="pill">Domain-specific marine dealership model</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>What Is Actually Being Valued</h2>
+      <p class="section-intro">
+        The current project is best understood as the front edge of a vertical operations system for marine dealerships and marina-linked revenue,
+        not just a presentation artifact. The existing prototype already encodes a significant amount of business process logic and commercial framing.
+      </p>
+
+      <div class="three-up">
+        <article class="mini-panel">
+          <h3>Current Surfaces</h3>
+          <p>Live interactive operating diagram, separate top-down scaffold, current PDF/SVG exports, and structured JSON/Mermaid downloads.</p>
+        </article>
+        <article class="mini-panel">
+          <h3>Modeled Scope</h3>
+          <p>14 groups, 236 nodes, 787 edges, 236 descriptions, and 236 stored positions in the latest working export.</p>
+        </article>
+        <article class="mini-panel">
+          <h3>Current Limitation</h3>
+          <p>The project still reads as a front-end-heavy prototype until it has a production backend, live auth, tenants, connectors, audit trails, and customer deployment tooling.</p>
+        </article>
+      </div>
+
+      <div class="formula">
+        Strategic Asset Value = Replacement Cost + Domain IP Premium + Time Saved - Commercialization Discount
+      </div>
+
+      <p class="note">
+        Commercialization discount remains meaningful until there is recurring revenue, referenceable customers, and deployment repeatability.
+      </p>
+    </section>
+
+    <section class="panel page-break">
+      <h2>Full Production Build Cost</h2>
+      <p class="section-intro">
+        The cost model below assumes a serious build, not a compressed demo. It includes architecture, product work, production frontend hardening,
+        backend and tenant systems, connectors, KPI/reporting, security, release management, and deployment readiness.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Cost Category</th>
+            <th>Low</th>
+            <th>Base</th>
+            <th>High</th>
+            <th>Why It Matters</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Product strategy, discovery, architecture</td>
+            <td class="money">$90K</td>
+            <td class="money">$140K</td>
+            <td class="money">$200K</td>
+            <td class="muted">Translates the domain graph into a sellable platform and prevents expensive rework later.</td>
+          </tr>
+          <tr>
+            <td>UX/UI and interaction design</td>
+            <td class="money">$120K</td>
+            <td class="money">$180K</td>
+            <td class="money">$260K</td>
+            <td class="muted">Required to move from a capable prototype into a product operators can live in daily.</td>
+          </tr>
+          <tr>
+            <td>Frontend production application hardening</td>
+            <td class="money">$220K</td>
+            <td class="money">$320K</td>
+            <td class="money">$450K</td>
+            <td class="muted">Includes stability, performance, accessibility, and reusable interface systems.</td>
+          </tr>
+          <tr>
+            <td>Backend, APIs, persistence, auth, tenant model</td>
+            <td class="money">$350K</td>
+            <td class="money">$550K</td>
+            <td class="money">$850K</td>
+            <td class="muted">This is the largest readiness gap between current prototype value and real platform value.</td>
+          </tr>
+          <tr>
+            <td>Integrations and partner connectors</td>
+            <td class="money">$300K</td>
+            <td class="money">$500K</td>
+            <td class="money">$850K</td>
+            <td class="muted">Marine dealer software becomes sticky only when it is wired into real operational systems.</td>
+          </tr>
+          <tr>
+            <td>Analytics, KPI engine, reporting, data model</td>
+            <td class="money">$220K</td>
+            <td class="money">$380K</td>
+            <td class="money">$650K</td>
+            <td class="muted">Executive and operator dashboards are a direct value driver and a major part of retention.</td>
+          </tr>
+          <tr>
+            <td>Security, RBAC, audit, compliance, admin tooling</td>
+            <td class="money">$160K</td>
+            <td class="money">$280K</td>
+            <td class="money">$450K</td>
+            <td class="muted">Necessary for trust, deployment approval, and enterprise-grade account control.</td>
+          </tr>
+          <tr>
+            <td>QA, accessibility, performance, release testing</td>
+            <td class="money">$150K</td>
+            <td class="money">$240K</td>
+            <td class="money">$350K</td>
+            <td class="muted">Protects product credibility and reduces cost of customer-facing defects.</td>
+          </tr>
+          <tr>
+            <td>DevOps, cloud infrastructure, monitoring, deployment</td>
+            <td class="money">$140K</td>
+            <td class="money">$220K</td>
+            <td class="money">$350K</td>
+            <td class="muted">Turns the product from a codebase into a reliably deployable service.</td>
+          </tr>
+          <tr>
+            <td>Project leadership, documentation, training, UAT</td>
+            <td class="money">$170K</td>
+            <td class="money">$260K</td>
+            <td class="money">$380K</td>
+            <td class="muted">Critical for implementation success and operator handoff in enterprise accounts.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="four-up">
+        <article class="stat-card">
+          <span>Low Case</span>
+          <strong>$1.92M</strong>
+          <p>Only works if scope stays focused and platformization stays disciplined.</p>
+        </article>
+        <article class="stat-card">
+          <span>Base Case</span>
+          <strong>$3.07M</strong>
+          <p>Most realistic full build budget for a credible production platform.</p>
+        </article>
+        <article class="stat-card">
+          <span>High Case</span>
+          <strong>$4.79M</strong>
+          <p>Appropriate if integrations, enterprise control layers, and rollout complexity expand.</p>
+        </article>
+        <article class="stat-card">
+          <span>Estimated Build Window</span>
+          <strong>9 to 15 Months</strong>
+          <p>Assumes a real team, not a solo implementation with deferred hardening.</p>
+        </article>
+      </div>
+
+      <div class="two-up">
+        <div class="mini-panel">
+          <h3>Annual Operating Cost After Launch</h3>
+          <p><strong class="money">$860K to $2.34M</strong> annually, with a practical base run-rate near <strong class="money">$1.42M</strong>.</p>
+          <ul>
+            <li>Engineering maintenance and roadmap velocity</li>
+            <li>Cloud, vendor APIs, and monitoring</li>
+            <li>Support, QA, onboarding, and release ops</li>
+            <li>Product operations, customer success, and pre-sales support</li>
+          </ul>
+        </div>
+        <div class="mini-panel">
+          <h3>Custom Enterprise Delivery Angle</h3>
+          <p>A one-client full implementation could reasonably quote in the <strong class="money">$2.2M to $4.8M</strong> range, plus <strong class="money">$180K to $720K</strong> in annual support.</p>
+          <ul>
+            <li>Implementation price is not the same as platform asset value</li>
+            <li>Reusable IP value rises if the same core product can be deployed repeatedly</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Commercialization Assumptions</h2>
+      <p class="section-intro">
+        The strongest monetization path is to sell this as a vertical operations platform for marine dealership and marina-linked revenue workflows,
+        not as a standalone diagram tool. The value comes from operational embed, reporting, and cross-department decision control.
+      </p>
+
+      <div class="three-up">
+        <article class="mini-panel">
+          <h3>Primary Revenue Sources</h3>
+          <ul>
+            <li>Annual software subscription by dealership group or operating entity</li>
+            <li>Implementation and onboarding fees</li>
+            <li>Integration and workflow configuration work</li>
+            <li>Premium reporting, analytics, and executive control packages</li>
+          </ul>
+        </article>
+        <article class="mini-panel">
+          <h3>Commercial Price Anchors</h3>
+          <ul>
+            <li>Setup / onboarding: $75K to $250K</li>
+            <li>Smaller annual contract: $60K to $120K</li>
+            <li>Mid-market multi-site annual contract: $120K to $250K</li>
+            <li>Strategic enterprise annual contract: $250K to $500K+</li>
+          </ul>
+        </article>
+        <article class="mini-panel">
+          <h3>Highest-Value Operational Wedges</h3>
+          <ul>
+            <li>Deal flow and funding control</li>
+            <li>Service capacity and quality control</li>
+            <li>Parts commerce and fulfillment visibility</li>
+            <li>Marina yield and waterfront revenue</li>
+            <li>Owner growth, renewal, referral, and upgrade triggers</li>
+          </ul>
+        </article>
+      </div>
+
+      <div class="formula">
+        Commercial Value = Exit ARR × Multiple, with pre-scale valuation anchored by strategic asset value until revenue scale becomes dominant
+      </div>
+    </section>
+
+    <section class="panel page-break">
+      <h2>Five-Year Revenue Forecast Model</h2>
+      <p class="section-intro">
+        The forecast starts at the point where the platform is fully built and commercially deployable. Year 0 is the production-ready strategic asset stage,
+        which this report values at roughly <strong>$3.5M to $6.5M</strong> before strong ARR exists. The forecast below then shows three commercialization paths.
+      </p>
+
+      <div class="two-up">
+        <div class="callout">
+          <h3>Forecast Logic</h3>
+          <p>
+            Each scenario models active customer count, blended ARR per customer, exit ARR, additional setup/services revenue,
+            and an indicative enterprise value range. Early years continue to reflect the strategic asset floor because revenue multiples alone
+            tend to understate value before the platform is fully commercialized.
+          </p>
+        </div>
+        <div class="callout">
+          <h3>Scenario Summary</h3>
+          <p>
+            Conservative assumes slower adoption and lighter contract values. Base assumes a credible niche rollout with operational stickiness.
+            Upside assumes stronger multi-site adoption, broader operator usage, and expanding module depth across marina, service, and financial control.
+          </p>
+        </div>
+      </div>
+
+      <div class="forecast-card">
+        <h3>Pre-Scale Value Floor</h3>
+        <span class="scenario-tag base">Year 0: Production Ready, Pre-Scale</span>
+        <table>
+          <thead>
+            <tr>
+              <th>Stage</th>
+              <th>Value Range</th>
+              <th>Interpretation</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Production-ready strategic asset</td>
+              <td class="money">$3.5M to $6.5M</td>
+              <td class="muted">The platform is deployable and credible, but still lacks enough ARR to be judged primarily on recurring revenue multiples.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="three-up">
+        <article class="forecast-card">
+          <h3>Conservative Scenario</h3>
+          <span class="scenario-tag conservative">Slow Adoption, Smaller Accounts</span>
+          <div class="band band-low"><span></span></div>
+          <table>
+            <thead>
+              <tr>
+                <th>Year</th>
+                <th>Active Customers</th>
+                <th>Avg ARR / Customer</th>
+                <th>Exit ARR</th>
+                <th>Setup + Services</th>
+                <th>Total Revenue</th>
+                <th>Indicative Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Y1</td>
+                <td>3</td>
+                <td class="money">$100K</td>
+                <td class="money">$0.30M</td>
+                <td class="money">$0.24M</td>
+                <td class="money">$0.54M</td>
+                <td class="money">$3.5M to $4.5M</td>
+              </tr>
+              <tr>
+                <td>Y2</td>
+                <td>5</td>
+                <td class="money">$110K</td>
+                <td class="money">$0.55M</td>
+                <td class="money">$0.30M</td>
+                <td class="money">$0.85M</td>
+                <td class="money">$3.8M to $5.0M</td>
+              </tr>
+              <tr>
+                <td>Y3</td>
+                <td>7</td>
+                <td class="money">$125K</td>
+                <td class="money">$0.88M</td>
+                <td class="money">$0.35M</td>
+                <td class="money">$1.23M</td>
+                <td class="money">$4.0M to $6.0M</td>
+              </tr>
+              <tr>
+                <td>Y4</td>
+                <td>9</td>
+                <td class="money">$135K</td>
+                <td class="money">$1.22M</td>
+                <td class="money">$0.42M</td>
+                <td class="money">$1.64M</td>
+                <td class="money">$4.9M to $7.3M</td>
+              </tr>
+              <tr>
+                <td>Y5</td>
+                <td>12</td>
+                <td class="money">$150K</td>
+                <td class="money">$1.80M</td>
+                <td class="money">$0.50M</td>
+                <td class="money">$2.30M</td>
+                <td class="money">$7.2M to $9.9M</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="note">This path assumes adoption is real but measured, with smaller rooftop groups and longer sales cycles.</p>
+        </article>
+
+        <article class="forecast-card">
+          <h3>Base Scenario</h3>
+          <span class="scenario-tag base">Credible Niche Platform Rollout</span>
+          <div class="band band-mid"><span></span></div>
+          <table>
+            <thead>
+              <tr>
+                <th>Year</th>
+                <th>Active Customers</th>
+                <th>Avg ARR / Customer</th>
+                <th>Exit ARR</th>
+                <th>Setup + Services</th>
+                <th>Total Revenue</th>
+                <th>Indicative Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Y1</td>
+                <td>5</td>
+                <td class="money">$130K</td>
+                <td class="money">$0.65M</td>
+                <td class="money">$0.50M</td>
+                <td class="money">$1.15M</td>
+                <td class="money">$4.0M to $6.0M</td>
+              </tr>
+              <tr>
+                <td>Y2</td>
+                <td>8</td>
+                <td class="money">$150K</td>
+                <td class="money">$1.20M</td>
+                <td class="money">$0.55M</td>
+                <td class="money">$1.75M</td>
+                <td class="money">$5.0M to $7.5M</td>
+              </tr>
+              <tr>
+                <td>Y3</td>
+                <td>12</td>
+                <td class="money">$175K</td>
+                <td class="money">$2.10M</td>
+                <td class="money">$0.65M</td>
+                <td class="money">$2.75M</td>
+                <td class="money">$8.4M to $11.6M</td>
+              </tr>
+              <tr>
+                <td>Y4</td>
+                <td>16</td>
+                <td class="money">$200K</td>
+                <td class="money">$3.20M</td>
+                <td class="money">$0.75M</td>
+                <td class="money">$3.95M</td>
+                <td class="money">$12.8M to $17.6M</td>
+              </tr>
+              <tr>
+                <td>Y5</td>
+                <td>20</td>
+                <td class="money">$230K</td>
+                <td class="money">$4.60M</td>
+                <td class="money">$0.90M</td>
+                <td class="money">$5.50M</td>
+                <td class="money">$20.7M to $25.3M</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="note">This is the cleanest planning case for a strong but realistic marine vertical software company.</p>
+        </article>
+
+        <article class="forecast-card">
+          <h3>Upside Scenario</h3>
+          <span class="scenario-tag upside">Stronger Multi-Site Penetration</span>
+          <div class="band band-high"><span></span></div>
+          <table>
+            <thead>
+              <tr>
+                <th>Year</th>
+                <th>Active Customers</th>
+                <th>Avg ARR / Customer</th>
+                <th>Exit ARR</th>
+                <th>Setup + Services</th>
+                <th>Total Revenue</th>
+                <th>Indicative Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Y1</td>
+                <td>6</td>
+                <td class="money">$150K</td>
+                <td class="money">$0.90M</td>
+                <td class="money">$0.75M</td>
+                <td class="money">$1.65M</td>
+                <td class="money">$4.5M to $7.0M</td>
+              </tr>
+              <tr>
+                <td>Y2</td>
+                <td>10</td>
+                <td class="money">$185K</td>
+                <td class="money">$1.85M</td>
+                <td class="money">$0.90M</td>
+                <td class="money">$2.75M</td>
+                <td class="money">$7.4M to $10.2M</td>
+              </tr>
+              <tr>
+                <td>Y3</td>
+                <td>15</td>
+                <td class="money">$210K</td>
+                <td class="money">$3.15M</td>
+                <td class="money">$1.05M</td>
+                <td class="money">$4.20M</td>
+                <td class="money">$14.2M to $17.3M</td>
+              </tr>
+              <tr>
+                <td>Y4</td>
+                <td>22</td>
+                <td class="money">$230K</td>
+                <td class="money">$5.06M</td>
+                <td class="money">$1.25M</td>
+                <td class="money">$6.31M</td>
+                <td class="money">$22.8M to $27.8M</td>
+              </tr>
+              <tr>
+                <td>Y5</td>
+                <td>30</td>
+                <td class="money">$260K</td>
+                <td class="money">$7.80M</td>
+                <td class="money">$1.50M</td>
+                <td class="money">$9.30M</td>
+                <td class="money">$35.1M to $42.9M</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="note">This path requires category traction, strong retention, and broader expansion inside multi-location operator groups.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Scenario Drivers and Operating Assumptions</h2>
+      <p class="section-intro">
+        The forecast ranges above are not arbitrary. They depend on customer mix, retention, implementation burden, and how embedded the platform becomes inside the operator workflow.
+      </p>
+
+      <div class="three-up">
+        <article class="mini-panel">
+          <h3>Conservative Driver Set</h3>
+          <ul>
+            <li>Smaller accounts or single-point operators</li>
+            <li>Longer sales cycles and narrower rollout scope</li>
+            <li>More services-heavy implementations and lower ARR density</li>
+            <li>Gross retention roughly 88% to 90%</li>
+            <li>Recurring-value proof takes longer to establish</li>
+          </ul>
+        </article>
+        <article class="mini-panel">
+          <h3>Base Driver Set</h3>
+          <ul>
+            <li>2 to 4 rooftop or operating-unit deployments</li>
+            <li>Recurring adoption across finance, service, marina, and retention use cases</li>
+            <li>Moderate implementation revenue with rising software mix</li>
+            <li>Gross retention roughly 90% to 93%</li>
+            <li>Operator dashboards and workflow controls drive stickiness</li>
+          </ul>
+        </article>
+        <article class="mini-panel">
+          <h3>Upside Driver Set</h3>
+          <ul>
+            <li>Multi-site groups expand seat, workflow, and reporting footprint</li>
+            <li>Product becomes part of daily operations, not just oversight</li>
+            <li>Expansion revenue and premium modules raise contract value</li>
+            <li>Gross retention roughly 93% to 95%</li>
+            <li>Platform starts looking like category infrastructure within its niche</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel page-break">
+      <h2>Strategic Buyer and Investor Lens</h2>
+      <p class="section-intro">
+        Different buyers will value this asset differently. Strategic buyers care about time-to-market, IP depth, and embedded workflow advantage.
+        Financial buyers care more about repeatability, margins, retention, and concentration risk.
+      </p>
+
+      <div class="two-up">
+        <div class="mini-panel">
+          <h3>Potential Strategic Buyer Types</h3>
+          <ul>
+            <li>Marine dealer software vendors looking to expand into workflow and analytics</li>
+            <li>Marina or waterfront operations software providers seeking dealership adjacency</li>
+            <li>Dealer-management or ERP players wanting a modern operating overlay</li>
+            <li>Private-equity-backed platform consolidators building marine retail technology suites</li>
+          </ul>
+        </div>
+        <div class="mini-panel">
+          <h3>What Raises Strategic Price</h3>
+          <ul>
+            <li>Unique domain model that would take time to rebuild</li>
+            <li>Demonstrated operational ROI in revenue, service throughput, or financial control</li>
+            <li>Clean integration architecture and deployable connectors</li>
+            <li>Referenceable customers and low churn in a specialized market</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="two-up">
+        <div class="callout">
+          <h3>Why the Current Asset Already Commands Real Value</h3>
+          <p>
+            The project already contains more than mockup value because it encodes the operating model itself: demand, sales, F&amp;I, service,
+            parts, marina revenue, retention, analytics, governance, and third-party systems are already structured in one product concept.
+          </p>
+        </div>
+        <div class="callout">
+          <h3>Why the Valuation Still Gets Discounted</h3>
+          <p>
+            No visible live backend, no active customer contracts, no measured ARR, and no proven enterprise deployment repeatability.
+            The market pays far more for demonstrated stickiness than for concept quality alone, even when the concept is strong.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="footer-call">
+      <h2>Final Opinion</h2>
+      <p>
+        The cleanest way to talk about this project is to separate build cost, strategic asset value, and scaled commercial value.
+        As a production-ready platform, it is best framed as a <strong>$3.5M to $6.5M</strong> strategic asset with a realistic build requirement near
+        <strong>$3.07M</strong>. With real paying customers and repeatable deployment, it can move into the <strong>$8M to $18M</strong> band,
+        and if it becomes a sticky marine-operations category platform, the five-year upside can reasonably push into the <strong>$20M to $45M</strong> range.
+      </p>
+      <ul>
+        <li>Best build-cost planning number: $2.8M to $3.3M</li>
+        <li>Best production-ready strategic value band: $3.5M to $6.5M</li>
+        <li>Best early-traction commercial value band: $8M to $18M</li>
+        <li>Best mature niche-platform upside band: $20M to $45M</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

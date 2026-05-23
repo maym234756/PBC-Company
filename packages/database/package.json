@@ -1,0 +1,32 @@
+{
+  "name": "@marine-cloud/database",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "npm run db:generate && tsc -p tsconfig.json",
+    "db:generate": "prisma generate --config prisma.config.ts",
+    "db:push": "prisma db push --config prisma.config.ts",
+    "db:seed": "npm run db:generate && tsx prisma/seed.ts",
+    "db:studio": "prisma studio --config prisma.config.ts"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@prisma/adapter-better-sqlite3": "^7.8.0",
+    "@prisma/client": "^7.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "better-sqlite3": "^12.4.6",
+    "prisma": "^7.8.0",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3"
+  }
+}

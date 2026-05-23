@@ -1,0 +1,2689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Boat Dealership Flow Builder</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #dfe7eb;
+      --panel: rgba(244, 248, 250, 0.84);
+      --ink: #122833;
+      --muted: #5d707a;
+      --line: rgba(86, 110, 120, 0.18);
+      --accent: #0b5d73;
+      --accent-2: #0f766e;
+      --accent-soft: #d8ecef;
+      --warm: #c68a1d;
+      --danger: #b42318;
+      --danger-soft: #fde7e5;
+      --shadow: 0 24px 60px rgba(18, 40, 51, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      font-family: "Aptos", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(11, 93, 115, 0.18), transparent 24%),
+        radial-gradient(circle at top right, rgba(198, 138, 29, 0.14), transparent 18%),
+        linear-gradient(180deg, #f2f6f8 0%, var(--bg) 100%);
+    }
+
+    body {
+      padding: 18px;
+    }
+
+    .app {
+      max-width: 1920px;
+      min-height: calc(100vh - 36px);
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .sidebar,
+    .stage-shell {
+      background: linear-gradient(180deg, rgba(248, 251, 252, 0.9), rgba(237, 244, 247, 0.82));
+      border: 1px solid rgba(255, 255, 255, 0.9);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      -webkit-backdrop-filter: blur(16px);
+      backdrop-filter: blur(16px);
+    }
+
+    .sidebar {
+      padding: 18px;
+      position: sticky;
+      top: 18px;
+      display: grid;
+      align-content: start;
+      gap: 14px;
+      max-height: calc(100vh - 36px);
+      overflow: auto;
+    }
+
+    .stage-shell {
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      min-height: calc(100vh - 36px);
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(0, 95, 115, 0.08);
+      color: var(--accent);
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    .section {
+      display: grid;
+      gap: 12px;
+    }
+
+    .section h2 {
+      font-size: 1rem;
+    }
+
+    .section h3 {
+      font-size: 0.95rem;
+    }
+
+    .hero h1 {
+      margin-top: 10px;
+      font-size: clamp(1.7rem, 2vw, 2.4rem);
+      line-height: 1.05;
+    }
+
+    .sidebar .section,
+    .sidebar .footer-note {
+      padding: 14px 16px;
+      border-radius: 22px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(238, 245, 247, 0.94));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.56);
+    }
+
+    .sidebar .hero {
+      padding: 2px 2px 8px;
+      border: none;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .lead,
+    .section-copy,
+    .builder-note,
+    .footer-note {
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 0.94rem;
+    }
+
+    .toolbar,
+    .stat-row,
+    .chip-row,
+    .related-list,
+    .group-list,
+    .search-results,
+    .button-grid,
+    .form-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    button,
+    .chip,
+    .metric,
+    .meta-pill {
+      font: inherit;
+      border-radius: 999px;
+      border: 1px solid transparent;
+    }
+
+    button {
+      cursor: pointer;
+      padding: 10px 14px;
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      transition: transform 120ms ease, filter 120ms ease, border-color 120ms ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.03);
+    }
+
+    button.secondary,
+    .group-button,
+    .search-result,
+    .related-button,
+    .clear-button,
+    .group-add-button,
+    .danger-button {
+      color: var(--ink);
+      background: #fff;
+      border-color: var(--line);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+      transform: none;
+      filter: none;
+    }
+
+    .danger-button {
+      color: var(--danger);
+      background: var(--danger-soft);
+      border-color: rgba(180, 35, 24, 0.12);
+    }
+
+    .metric {
+      padding: 8px 12px;
+      background: rgba(0, 95, 115, 0.08);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .chip {
+      padding: 7px 11px;
+      background: rgba(15, 118, 110, 0.08);
+      color: var(--accent-2);
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .chip.active,
+    .group-button.active,
+    .search-result.active,
+    .related-button.active,
+    .group-add-button.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: rgba(0, 95, 115, 0.18);
+    }
+
+    .search-wrap input,
+    .editor-form input,
+    .editor-form select,
+    .editor-form textarea {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+    }
+
+    .editor-form textarea {
+      min-height: 96px;
+      resize: vertical;
+    }
+
+    .editor-panel,
+    .inspector,
+    .group-block,
+    .rail-card {
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 16px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(241, 248, 249, 0.92));
+      display: grid;
+      gap: 14px;
+    }
+
+    .editor-panel {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(234, 246, 245, 0.92));
+    }
+
+    .rail-card,
+    .inspector {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(242, 247, 249, 0.94));
+      box-shadow: 0 12px 30px rgba(18, 40, 51, 0.06);
+    }
+
+    .builder-status {
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(0, 95, 115, 0.08);
+      color: var(--accent);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    .editor-form {
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px solid rgba(0, 95, 115, 0.12);
+      background: rgba(255, 255, 255, 0.92);
+    }
+
+    .editor-form[hidden] {
+      display: none;
+    }
+
+    .field-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .field.span-2 {
+      grid-column: 1 / -1;
+    }
+
+    label {
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .search-results {
+      max-height: 180px;
+      overflow: auto;
+    }
+
+    .group-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .group-block {
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.82);
+    }
+
+    .group-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 0.92rem;
+      font-weight: 700;
+    }
+
+    .group-title-main {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .group-count {
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .group-button,
+    .search-result,
+    .related-button,
+    .group-add-button {
+      padding: 8px 12px;
+      font-size: 0.9rem;
+      border-radius: 12px;
+      text-align: left;
+    }
+
+    .inspector-title {
+      display: grid;
+      gap: 8px;
+    }
+
+    .inspector-title h2 {
+      font-size: 1.3rem;
+      line-height: 1.1;
+    }
+
+    .inspector-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .meta-pill {
+      padding: 6px 10px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      background: rgba(245, 158, 11, 0.12);
+      color: #8a5b00;
+    }
+
+    .related-columns {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+    }
+
+    .workspace-grid {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+      align-items: stretch;
+    }
+
+    .viewer-shell {
+      min-height: 0;
+      padding: 20px;
+      border-right: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(230, 238, 242, 0.38), rgba(220, 230, 236, 0.18));
+    }
+
+    .context-rail {
+      min-height: 0;
+      padding: 20px;
+      display: grid;
+      align-content: start;
+      gap: 16px;
+      overflow: auto;
+      background: linear-gradient(180deg, rgba(247, 250, 251, 0.78), rgba(233, 240, 244, 0.94));
+    }
+
+    .context-rail .group-list {
+      max-height: 40vh;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .stage-topbar {
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: space-between;
+      align-items: center;
+      background: linear-gradient(180deg, rgba(248, 251, 252, 0.96), rgba(239, 245, 247, 0.92));
+    }
+
+    .stage-topbar .title {
+      display: grid;
+      gap: 6px;
+    }
+
+    .stage-topbar .title h2 {
+      font-size: 1.18rem;
+    }
+
+    .stage-topbar .title p {
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.5;
+      max-width: 800px;
+    }
+
+    .viewer {
+      position: relative;
+      overflow: hidden;
+      border-radius: 26px;
+      border: 1px solid rgba(11, 93, 115, 0.16);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+      background:
+        linear-gradient(rgba(11, 93, 115, 0.12) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(11, 93, 115, 0.12) 1px, transparent 1px),
+        radial-gradient(circle at top, rgba(255, 255, 255, 0.55), transparent 36%),
+        linear-gradient(180deg, #e1eaef 0%, #cbd9e1 100%);
+      background-size: 40px 40px, 40px 40px, 100% 100%, 100% 100%;
+      min-height: calc(100vh - 200px);
+      cursor: grab;
+      touch-action: none;
+    }
+
+    .viewer:active,
+    .viewer.is-panning {
+      cursor: grabbing;
+    }
+
+    .diagram-wrap {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 32px;
+    }
+
+    #diagram {
+      display: inline-block;
+      transform-origin: center center;
+      will-change: transform;
+    }
+
+    #diagram svg {
+      display: block;
+      overflow: visible;
+      max-width: none;
+      height: auto;
+    }
+
+    #diagram .node {
+      cursor: grab;
+      touch-action: none;
+      transition: opacity 140ms ease, filter 140ms ease;
+    }
+
+    #diagram .cluster {
+      pointer-events: none;
+    }
+
+    #diagram .cluster rect {
+      display: none;
+    }
+
+    #diagram .cluster rect,
+    #diagram .cluster .cluster-label {
+      pointer-events: none;
+      transition: opacity 140ms ease, filter 140ms ease;
+    }
+
+    #diagram .node rect,
+    #diagram .node circle,
+    #diagram .node ellipse,
+    #diagram .node polygon,
+    #diagram .node path {
+      transition: fill 140ms ease, stroke 140ms ease, stroke-width 140ms ease, filter 140ms ease;
+    }
+
+    #diagram .node.is-muted {
+      opacity: 0.18;
+    }
+
+    #diagram .node.is-related {
+      opacity: 1;
+    }
+
+    #diagram .node.is-related rect,
+    #diagram .node.is-related circle,
+    #diagram .node.is-related ellipse,
+    #diagram .node.is-related polygon,
+    #diagram .node.is-related path {
+      stroke: #0f766e;
+      stroke-width: 2px;
+      fill: #e8faf8;
+    }
+
+    #diagram .node.is-active {
+      opacity: 1;
+      filter: drop-shadow(0 10px 24px rgba(0, 95, 115, 0.24));
+    }
+
+    #diagram .node.is-active rect,
+    #diagram .node.is-active circle,
+    #diagram .node.is-active ellipse,
+    #diagram .node.is-active polygon,
+    #diagram .node.is-active path {
+      stroke: #005f73;
+      stroke-width: 3px;
+      fill: #d6f1f0;
+    }
+
+    #diagram .node.is-dragging,
+    #diagram .cluster.is-dragging {
+      cursor: grabbing;
+    }
+
+    #diagram [data-edge='true'],
+    #diagram .edgeLabel {
+      transition: opacity 140ms ease;
+    }
+
+    #diagram [data-edge='true'].is-muted,
+    #diagram .edgeLabel.is-muted {
+      opacity: 0.1;
+    }
+
+    #diagram [data-edge='true'].is-related,
+    #diagram .edgeLabel.is-related {
+      opacity: 1;
+    }
+
+    #diagram [data-edge='true'].is-related {
+      stroke: #0f766e;
+      stroke-width: 2.2px;
+    }
+
+    @media print {
+      body {
+        padding: 0;
+        background: #fff;
+      }
+
+      .app {
+        display: block;
+        max-width: none;
+      }
+
+      .sidebar,
+      .context-rail {
+        display: none;
+      }
+
+      .stage-shell {
+        min-height: 0;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+        background: #fff;
+      }
+
+      .workspace-grid {
+        display: block;
+      }
+
+      .viewer-shell {
+        padding: 0;
+        border: none;
+        background: #fff;
+      }
+
+      .stage-topbar {
+        border-bottom: none;
+        padding: 0 0 12px;
+        background: #fff;
+      }
+
+      .button-grid button {
+        display: none;
+      }
+
+      .viewer {
+        min-height: 0;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+        background: #fff;
+        overflow: visible;
+      }
+
+      .diagram-wrap {
+        position: static;
+        display: block;
+        padding: 0;
+      }
+
+      #diagram {
+        transform: none !important;
+      }
+    }
+
+    @media (max-width: 1260px) {
+      .app {
+        grid-template-columns: 1fr;
+        min-height: 0;
+      }
+
+      .sidebar {
+        position: static;
+        max-height: none;
+      }
+
+      .stage-shell {
+        min-height: 0;
+      }
+
+      .workspace-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .viewer-shell {
+        border-right: none;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .context-rail {
+        overflow: visible;
+      }
+    }
+
+    @media (max-width: 800px) {
+      body {
+        padding: 12px;
+      }
+
+      .sidebar,
+      .stage-shell {
+        border-radius: 22px;
+      }
+
+      .stage-topbar,
+      .sidebar,
+      .viewer-shell,
+      .context-rail {
+        padding: 16px;
+      }
+
+      .viewer {
+        min-height: 58vh;
+        border-radius: 22px;
+      }
+
+      .field-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/panzoom@9.4.3/dist/panzoom.min.js"></script>
+</head>
+<body>
+  <main class="app">
+    <aside class="sidebar" aria-label="Architect controls">
+      <section class="section hero">
+        <span class="eyebrow">Architect Workbench</span>
+        <h1>Boat Dealership Flow Builder</h1>
+        <p class="lead">
+          The canvas now leads like a live architecture desk: core model in front, controls docked to the side, and detail panels kept contextual instead of widget-first.
+        </p>
+      </section>
+
+      <section class="editor-panel" aria-label="Builder tools">
+        <div class="section">
+          <h2>Build New Flows</h2>
+          <p class="builder-note">
+            Add sections and handoffs from this rail while the main canvas stays centered. Changes persist in your browser and can be copied back out as Mermaid.
+          </p>
+        </div>
+
+        <div class="button-grid">
+          <button id="openNodeBtn" type="button">+ Add Section</button>
+          <button id="openEdgeBtn" type="button" class="secondary">+ Add Flow</button>
+          <button id="copyMermaidBtn" type="button" class="secondary">Copy Mermaid</button>
+          <button id="downloadMmdBtn" type="button" class="secondary">Download .mmd</button>
+          <button id="downloadJsonBtn" type="button" class="secondary">Download JSON</button>
+          <button id="resetBuilderBtn" type="button" class="danger-button">Reset Builder</button>
+        </div>
+
+        <div id="builderStatus" class="builder-status">
+          Select a node or group, then use a `+` button to branch the map in that area.
+        </div>
+
+        <form id="nodeForm" class="editor-form" hidden>
+          <h3>Add Section</h3>
+          <div class="field-grid">
+            <div class="field">
+              <label for="nodeGroupSelect">Existing Group</label>
+              <select id="nodeGroupSelect"></select>
+            </div>
+            <div class="field">
+              <label for="newGroupNameInput">Or New Group Name</label>
+              <input id="newGroupNameInput" type="text" placeholder="Optional new section group" />
+            </div>
+            <div class="field span-2">
+              <label for="nodeLabelInput">Section Label</label>
+              <input id="nodeLabelInput" type="text" placeholder="Example: Membership Program" required />
+            </div>
+            <div class="field">
+              <label for="nodeParentSelect">Attach To Node</label>
+              <select id="nodeParentSelect"></select>
+            </div>
+            <div class="field">
+              <label for="nodeDirectionSelect">Flow Direction</label>
+              <select id="nodeDirectionSelect">
+                <option value="anchor-to-new">Selected node -> new section</option>
+                <option value="new-to-anchor">New section -> selected node</option>
+              </select>
+            </div>
+            <div class="field span-2">
+              <label for="nodeEdgeLabelInput">Flow Label</label>
+              <input id="nodeEdgeLabelInput" type="text" placeholder="Optional handoff label" />
+            </div>
+            <div class="field span-2">
+              <label for="nodeDescriptionInput">Description</label>
+              <textarea id="nodeDescriptionInput" placeholder="Optional description for the inspector panel"></textarea>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit">Add Section</button>
+            <button id="cancelNodeFormBtn" type="button" class="secondary">Cancel</button>
+          </div>
+        </form>
+
+        <form id="edgeForm" class="editor-form" hidden>
+          <h3>Add Flow</h3>
+          <div class="field-grid">
+            <div class="field">
+              <label for="edgeSourceSelect">Source Node</label>
+              <select id="edgeSourceSelect"></select>
+            </div>
+            <div class="field">
+              <label for="edgeTargetSelect">Target Node</label>
+              <select id="edgeTargetSelect"></select>
+            </div>
+            <div class="field span-2">
+              <label for="edgeLabelInput">Flow Label</label>
+              <input id="edgeLabelInput" type="text" placeholder="Optional handoff label" />
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit">Add Flow</button>
+            <button id="cancelEdgeFormBtn" type="button" class="secondary">Cancel</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="section search-wrap">
+        <h2>Search Nodes</h2>
+        <input id="searchInput" type="search" placeholder="Search departments, systems, journeys, sites..." aria-label="Search nodes" />
+        <div id="searchResults" class="search-results" aria-live="polite"></div>
+      </section>
+
+      <section class="section footer-note">
+        The builder stays browser-native on desktop, tablet, and mobile. Your additions are stored locally for this page, and you can copy the Mermaid source or download the current map as `.mmd` or `.json`.
+      </section>
+    </aside>
+
+    <section class="stage-shell">
+      <header class="stage-topbar">
+        <div class="title">
+          <span class="eyebrow">Live Architect View</span>
+          <h2>Interactive Architecture Canvas</h2>
+          <p>
+            Drag to pan, zoom with the wheel or trackpad, click a node to inspect it, and use the context dock for flow detail without turning the page into a widget board.
+          </p>
+        </div>
+        <div class="button-grid">
+          <div class="metric" id="stageMetric">Focused on: Unified Cloud Website Platform</div>
+          <button id="fitBtn" type="button" class="secondary">Fit</button>
+          <button id="resetBtn" type="button" class="secondary">Reset View</button>
+          <button id="zoomInBtn" type="button" class="secondary">Zoom In</button>
+          <button id="zoomOutBtn" type="button" class="secondary">Zoom Out</button>
+        </div>
+      </header>
+      <div class="workspace-grid">
+        <div class="viewer-shell">
+          <div class="viewer" id="viewer">
+            <div class="diagram-wrap">
+              <div id="diagram" aria-live="polite"></div>
+            </div>
+          </div>
+        </div>
+        <aside class="context-rail" aria-label="Architecture context">
+          <section class="rail-card overview-card">
+            <h2>System Snapshot</h2>
+            <div class="stat-row" id="overviewStats"></div>
+            <div class="chip-row" id="groupChips"></div>
+          </section>
+
+          <section class="inspector" aria-live="polite">
+            <div class="inspector-title">
+              <h2 id="selectedTitle">Unified Cloud Website Platform</h2>
+              <div class="inspector-meta">
+                <span class="meta-pill" id="selectedGroup">Brand and Site Experience Layer</span>
+                <span class="meta-pill" id="selectedStats">0 inbound • 0 outbound</span>
+              </div>
+            </div>
+            <p class="section-copy" id="selectedDescription"></p>
+            <div class="button-grid">
+              <button id="addChildBtn" type="button">+ Add Child Flow</button>
+              <button id="connectSelectedBtn" type="button" class="secondary">+ Link Existing Node</button>
+              <button id="clearFocusBtn" type="button" class="secondary">Clear Focus</button>
+            </div>
+            <div class="related-columns">
+              <section class="section">
+                <h3>Feeds Into</h3>
+                <div id="outgoingList" class="related-list"></div>
+              </section>
+              <section class="section">
+                <h3>Receives From</h3>
+                <div id="incomingList" class="related-list"></div>
+              </section>
+            </div>
+          </section>
+
+          <section class="rail-card browse-card">
+            <h2>Group Index</h2>
+            <div id="groupList" class="group-list"></div>
+          </section>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+
+    const initialGraphDefinition = String.raw`flowchart TB
+  subgraph CH[Customer Access Channels]
+    Desktop[Desktop Web]
+    Mobile[Mobile Web]
+    Tablet[Tablet Web]
+    SalesRep[In-Store Sales Team]
+    CallCenter[BDC / Customer Care]
+    Events[Boat Shows / Events]
+    Referral[Referrals / OEM Leads]
+  end
+
+  subgraph BRANDS[Brand and Site Experience Layer]
+    PBC[Premier Boating Centers Website]
+    OMG[Ocean Marine Group Website]
+    Unified[Unified Cloud Website Platform]
+    Portal[Customer Portal / Owner Account]
+    CMS[CMS / Content Management]
+    Search[Inventory Search / Filters / Compare]
+    Specials[Promotions / Service Specials / Parts Specials]
+    Scheduler[Sales Appointment and Service Scheduling]
+    Ecommerce[Parts and Accessories Catalog / Checkout]
+    FinanceLead[Finance Pre-Qual / Credit App]
+    TradeTool[Trade-In / Consignment / Brokerage Intake]
+    ReviewHub[Reviews / Reputation / Testimonials]
+    EventsHub[Boat Shows / Events / Campaign Landing Pages]
+  end
+
+  subgraph JOURNEYS[Customer Journey Flows]
+    Awareness[Marketing Creates Demand]
+    LeadCapture[Lead Capture / Call / Form / Chat / SMS]
+    Qualification[BDC Lead Qualification]
+    Appointment[Appointment Set / Confirmed]
+    SeaTrial[Demo / Sea Trial]
+    DealStruct[Deal Structure / Trade / Accessories]
+    FIProcess[F&I Approval / Products / Contracts]
+    DeliveryPrep[PDI / Rigging / Detail / QC]
+    Delivery[Boat Delivery / Orientation / Training]
+    Ownership[Ownership Lifecycle]
+    ServiceRetention[Service / Parts / Storage / Upgrade Retention]
+  end
+
+  subgraph APP[Cloud Website Application Layer]
+    WebApp[Responsive Frontend App]
+    API[API Gateway / Application Services]
+    Auth[Authentication / Identity / Customer Accounts]
+    CRMLogic[CRM / Lead Orchestration]
+    InventoryEngine[Inventory and Listing Engine]
+    ServiceEngine[Service Scheduling Engine]
+    PartsEngine[Parts and Accessories Commerce Engine]
+    FinanceEngine[Finance Lead and Lender Routing]
+    ContentEngine[Content / Promotions / SEO Pages]
+    Notification[Email / SMS / Chat / Notifications]
+    Analytics[Analytics / Attribution / BI Tracking]
+  end
+
+  subgraph DEPTS[Dealership Operational Departments]
+    Leadership[Ownership / GM / Operations]
+    Sales[Sales Department]
+    FI[F&I Department]
+    Service[Service Department]
+    Parts[Parts Department]
+    Accounting[Accounting / Office / Admin]
+    BDC[BDC / Customer Care]
+    Marketing[Marketing]
+    HR[HR]
+    Payroll[Payroll]
+    Compliance[Compliance / Title / Registration / Legal]
+    Inventory[Inventory Management]
+    Yard[Facilities / Yard / Marina / Logistics]
+    IT[IT / Systems / Data]
+  end
+
+  subgraph SALESOPS[Sales Functions]
+    NewSales[New Boat Sales]
+    UsedSales[Used Boat Sales]
+    Brokerage[Brokerage / Consignment]
+    TradeAcq[Trade-In Acquisition]
+    ProductSpec[Delivery / Product Specialist]
+  end
+
+  subgraph SERVICEOPS[Service Functions]
+    Warranty[Warranty Repairs]
+    CustomerPay[Customer-Pay Repairs]
+    Rigging[Rigging / PDI / Delivery Prep]
+    Seasonal[Winterization / Spring Commissioning]
+    Electronics[Electronics / Installations]
+    Detail[Detail / Reconditioning]
+    MobileSvc[Mobile Service]
+    Storage[Storage / Launch / Retrieval]
+  end
+
+  subgraph PARTSOPS[Parts and Accessories Functions]
+    OEMParts[OEM Parts]
+    Accessory[Accessories / Safety / Electronics]
+    Counter[Retail Counter Sales]
+    SpecialOrder[Special Orders]
+    OnlineParts[Online Parts Sales]
+  end
+
+  subgraph BACKOFFICE[Financial and Control Functions]
+    DealAccounting[Deal Accounting]
+    Floorplan[Floorplan Accounting]
+    AP[Accounts Payable]
+    AR[Accounts Receivable]
+    WarrantyRec[Warranty Receivables]
+    TaxTitle[Tax / Title / Registration]
+    CashFlow[Cash Flow / Reconciliation / Reporting]
+  end
+
+  subgraph EXT[External Systems and Data Sources]
+    DMS[DMS]
+    CRM[CRM]
+    ERP[Accounting / ERP]
+    PayrollSys[Payroll System]
+    OEM[OEM / Manufacturer Portals]
+    Lenders[Banks / Credit Unions / Marine Lenders]
+    ListingSites[Boat Trader / YachtWorld / OEM Listings]
+    Payment[Payment Gateway]
+    DocSign[E-Sign / Document Management]
+    Phone[Phone / Text / Chat Platform]
+    Maps[Marina / Store Locator / Maps]
+    ReviewsAPI[Google / Review Platforms]
+  end
+
+  subgraph DATA[Data, Reporting, KPI, Governance]
+    CDP[Customer plus Inventory plus RO Unified Data]
+    KPI[KPI Dashboards]
+    SalesKPI[Sales KPIs]
+    FIKPI[F&I KPIs]
+    ServiceKPI[Service KPIs]
+    PartsKPI[Parts KPIs]
+    BDCKPI[BDC KPIs]
+    AccountingKPI[Accounting KPIs]
+    HRKPI[HR / Payroll KPIs]
+    Alerting[Aging / Follow-Up / Compliance Alerts]
+  end
+
+  Desktop --> PBC
+  Desktop --> OMG
+  Mobile --> PBC
+  Mobile --> OMG
+  Tablet --> PBC
+  Tablet --> OMG
+  SalesRep --> Unified
+  CallCenter --> Unified
+  Events --> Unified
+  Referral --> Unified
+
+  PBC --> Unified
+  OMG --> Unified
+
+  Unified --> WebApp
+  Unified --> Portal
+  Unified --> CMS
+  Unified --> Search
+  Unified --> Specials
+  Unified --> Scheduler
+  Unified --> Ecommerce
+  Unified --> FinanceLead
+  Unified --> TradeTool
+  Unified --> ReviewHub
+  Unified --> EventsHub
+
+  CMS --> Awareness
+  EventsHub --> Awareness
+  Specials --> Awareness
+  Search --> LeadCapture
+  TradeTool --> LeadCapture
+  FinanceLead --> LeadCapture
+  Scheduler --> LeadCapture
+  Portal --> Ownership
+  Ecommerce --> Ownership
+  ReviewHub --> Awareness
+
+  Awareness --> LeadCapture
+  LeadCapture --> Qualification
+  Qualification --> Appointment
+  Appointment --> SeaTrial
+  SeaTrial --> DealStruct
+  DealStruct --> FIProcess
+  FIProcess --> DeliveryPrep
+  DeliveryPrep --> Delivery
+  Delivery --> Ownership
+  Ownership --> ServiceRetention
+
+  WebApp --> API
+  Portal --> Auth
+  Search --> InventoryEngine
+  Scheduler --> ServiceEngine
+  Ecommerce --> PartsEngine
+  FinanceLead --> FinanceEngine
+  CMS --> ContentEngine
+  Unified --> Notification
+  Unified --> Analytics
+  API --> CRMLogic
+  API --> InventoryEngine
+  API --> ServiceEngine
+  API --> PartsEngine
+  API --> FinanceEngine
+  API --> ContentEngine
+
+  Leadership --> Sales
+  Leadership --> FI
+  Leadership --> Service
+  Leadership --> Parts
+  Leadership --> Accounting
+  Leadership --> BDC
+  Leadership --> Marketing
+  Leadership --> HR
+  Leadership --> Payroll
+  Leadership --> Compliance
+  Leadership --> Inventory
+  Leadership --> Yard
+  Leadership --> IT
+
+  Sales --> NewSales
+  Sales --> UsedSales
+  Sales --> Brokerage
+  Sales --> TradeAcq
+  Sales --> ProductSpec
+
+  Service --> Warranty
+  Service --> CustomerPay
+  Service --> Rigging
+  Service --> Seasonal
+  Service --> Electronics
+  Service --> Detail
+  Service --> MobileSvc
+  Service --> Storage
+
+  Parts --> OEMParts
+  Parts --> Accessory
+  Parts --> Counter
+  Parts --> SpecialOrder
+  Parts --> OnlineParts
+
+  Accounting --> DealAccounting
+  Accounting --> Floorplan
+  Accounting --> AP
+  Accounting --> AR
+  Accounting --> WarrantyRec
+  Accounting --> TaxTitle
+  Accounting --> CashFlow
+
+  Qualification --> BDC
+  Appointment --> Sales
+  SeaTrial --> Sales
+  DealStruct --> Sales
+  FIProcess --> FI
+  DeliveryPrep --> Service
+  DeliveryPrep --> Parts
+  Delivery --> ProductSpec
+  ServiceRetention --> Service
+  ServiceRetention --> Parts
+  ServiceRetention --> BDC
+  ServiceRetention --> Marketing
+
+  Sales -->|Customer info / deal structure / trade / accessories| FI
+  FI -->|Approvals / funding requirements / docs needed| Sales
+  Sales -->|Sold unit / promises / delivery deadline / install list| Service
+  Service -->|Readiness / issues / completion ETA| Sales
+  Service -->|RO / needed parts / urgency / warranty status| Parts
+  Parts -->|Availability / ETA / cost / alternatives| Service
+  FI -->|Signed contracts / lender approval / products / stips| Accounting
+  Accounting -->|Funding status / missing docs / commission eligibility| FI
+  Accounting --> Payroll
+  BDC --> Sales
+  BDC --> Service
+  Sales --> BDC
+  Service --> BDC
+  Accounting --> Compliance
+  Compliance --> Accounting
+
+  CRMLogic --> BDC
+  CRMLogic --> Sales
+  CRMLogic --> Marketing
+  FinanceEngine --> FI
+  InventoryEngine --> Inventory
+  InventoryEngine --> Sales
+  InventoryEngine --> Marketing
+  ServiceEngine --> Service
+  ServiceEngine --> BDC
+  PartsEngine --> Parts
+  PartsEngine --> Service
+  ContentEngine --> Marketing
+  Notification --> BDC
+  Notification --> Service
+  Notification --> Marketing
+
+  API --> DMS
+  API --> CRM
+  API --> ERP
+  API --> PayrollSys
+  API --> OEM
+  API --> Lenders
+  API --> ListingSites
+  API --> Payment
+  API --> DocSign
+  API --> Phone
+  API --> Maps
+  API --> ReviewsAPI
+
+  DMS --> CDP
+  CRM --> CDP
+  ERP --> CDP
+  PayrollSys --> CDP
+  OEM --> CDP
+  Lenders --> CDP
+
+  OEM -->|New inventory / specs / pricing / incentives| InventoryEngine
+  DMS -->|Used inventory / deals / ROs / customer records| API
+  CRM -->|Leads / follow-up / source tracking| CRMLogic
+  ListingSites -->|Inbound listing traffic / outbound syndication| InventoryEngine
+  Inventory -->|Boat details / HIN / aging / availability| InventoryEngine
+  Sales -->|Trade appraisals / brokerage / consignment| InventoryEngine
+  Service -->|Service menu / seasonal offers / repair status| ServiceEngine
+  Parts -->|Parts catalog / accessory packages / specials| PartsEngine
+  Marketing -->|Campaigns / offers / pages / events| ContentEngine
+
+  Inventory -->|Boat selected| Sales
+  Sales -->|Penciled deal| FI
+  FI -->|Funded / approved| Accounting
+  Accounting -->|Booked deal / posted gross / payoff| Sales
+  Accounting -->|Booked deal / commissionable amounts| Payroll
+  Service -->|PDI / rigging / QC| ProductSpec
+  Parts -->|Accessories / install items| ProductSpec
+  ProductSpec -->|Orientation / walkthrough / training| Delivery
+
+  Ownership --> Scheduler
+  Ownership --> Ecommerce
+  Ownership --> Specials
+  Ownership --> Portal
+  Scheduler --> Service
+  Ecommerce --> Parts
+  Specials --> Marketing
+  BDC -->|Break-in / annual / winterization / upgrade reminders| Ownership
+  Service -->|RO history / service recommendations| CRMLogic
+  Parts -->|Accessory upsell / replacement cycle| CRMLogic
+  Marketing -->|Email / SMS / campaigns / events| Notification
+
+  HR --> Payroll
+  HR --> Leadership
+  Payroll --> Accounting
+  HR --> Sales
+  HR --> Service
+  HR --> Parts
+  HR --> BDC
+  HR --> FI
+  Yard --> Sales
+  Yard --> Service
+  Yard --> Inventory
+  IT --> Unified
+  IT --> API
+  IT --> CDP
+
+  Analytics --> CDP
+  Notification --> CDP
+  Sales --> SalesKPI
+  FI --> FIKPI
+  Service --> ServiceKPI
+  Parts --> PartsKPI
+  BDC --> BDCKPI
+  Accounting --> AccountingKPI
+  HR --> HRKPI
+  Payroll --> HRKPI
+
+  SalesKPI --> KPI
+  FIKPI --> KPI
+  ServiceKPI --> KPI
+  PartsKPI --> KPI
+  BDCKPI --> KPI
+  AccountingKPI --> KPI
+  HRKPI --> KPI
+
+  KPI --> Leadership
+  CDP --> KPI
+  CDP --> Alerting
+  Alerting --> Leadership
+  Alerting --> Sales
+  Alerting --> Service
+  Alerting --> BDC
+  Alerting --> Accounting
+  Alerting --> Compliance
+
+  Service -->|Labor gross| Accounting
+  Parts -->|Parts gross| Accounting
+  Storage -->|Storage revenue| Accounting
+  Sales -->|Vehicle gross| Accounting
+  FI -->|F&I gross| Accounting
+  Accounting -->|Net profit / cash flow / absorption| Leadership`;
+
+    const curatedDescriptions = {
+      Unified: 'The central platform unifies Premier Boating Centers, Ocean Marine Group, inventory, service, parts, promotions, finance intake, and customer ownership tools into one responsive website experience.',
+      PBC: 'Premier Boating Centers acts as a branded entry point into the shared digital platform and inventory ecosystem.',
+      OMG: 'Ocean Marine Group acts as a branded entry point into the same cloud platform, sharing core systems while preserving brand identity.',
+      Search: 'Inventory search is the main demand-capture tool for finding boats, comparing options, and converting traffic into leads.',
+      Specials: 'Promotions distribute seasonal service offers, parts specials, and inventory campaigns across the website and marketing engine.',
+      Scheduler: 'Scheduling bridges the website to BDC and Service so customers can request appointments, demos, and service visits online.',
+      Ecommerce: 'The parts and accessories commerce layer turns ownership support into digital revenue through retail catalog, checkout, and accessory bundles.',
+      FinanceLead: 'Finance intake lets buyers pre-qualify or submit credit information before the in-store F&I process begins.',
+      Sales: 'Sales turns demand into signed deals, coordinates trade-ins and accessory packages, and hands structured deals into F&I and Service.',
+      FI: 'F&I monetizes each sale through financing, protection products, contracts, lender approvals, and funding packages.',
+      Service: 'Service protects retention with repairs, rigging, PDI, seasonal work, warranty claims, and owner support after delivery.',
+      Parts: 'Parts supports both service operations and direct customer sales through stock, accessories, online catalog, and special orders.',
+      Accounting: 'Accounting controls the money by booking deals, reconciling inventory and floorplan, posting gross, handling tax/title, and reporting profitability.',
+      BDC: 'BDC manages response speed, lead qualification, appointment setting, confirmation, follow-up, and retention touchpoints.',
+      Marketing: 'Marketing drives traffic, campaigns, SEO, listings, boat shows, reputation, seasonal service demand, and branded storytelling.',
+      Inventory: 'Inventory management controls ordering, receiving, pricing, aging, recon costs, syndication, and floorplan exposure.',
+      CRMLogic: 'CRM orchestration routes inbound demand into follow-up workflows, appointments, retention campaigns, and reporting attribution.',
+      InventoryEngine: 'The inventory engine publishes boats for sale, tracks listings, and syndicates unit data across branded websites and listing partners.',
+      ServiceEngine: 'The service engine exposes service menus, appointment intake, status flows, and follow-up triggers.',
+      PartsEngine: 'The parts engine supports accessory merchandising, parts catalog management, and e-commerce flows.',
+      KPI: 'KPI dashboards give leadership a single operating view across departments, funnels, productivity, and financial stability.',
+      CDP: 'Unified data combines customer, unit, repair order, finance, payroll, and marketing records into one reporting layer.',
+      Ownership: 'Ownership is where the customer relationship turns into repeat service, parts, storage, events, and future upgrade opportunities.',
+      ServiceRetention: 'This retention loop is the long-term revenue engine beyond the original sale, tying service, parts, storage, reminders, and upsell timing together.'
+    };
+
+    const STORAGE_KEYS = {
+      graph: 'dealership-flow-builder-source-v1',
+      descriptions: 'dealership-flow-builder-descriptions-v1',
+      positions: 'dealership-flow-builder-positions-v1',
+      viewport: 'dealership-flow-builder-viewport-v1'
+    };
+
+    const viewer = document.getElementById('viewer');
+    const diagram = document.getElementById('diagram');
+    const searchInput = document.getElementById('searchInput');
+    const searchResults = document.getElementById('searchResults');
+    const groupList = document.getElementById('groupList');
+    const groupChips = document.getElementById('groupChips');
+    const overviewStats = document.getElementById('overviewStats');
+    const selectedTitle = document.getElementById('selectedTitle');
+    const selectedGroup = document.getElementById('selectedGroup');
+    const selectedStats = document.getElementById('selectedStats');
+    const selectedDescription = document.getElementById('selectedDescription');
+    const outgoingList = document.getElementById('outgoingList');
+    const incomingList = document.getElementById('incomingList');
+    const stageMetric = document.getElementById('stageMetric');
+    const builderStatus = document.getElementById('builderStatus');
+
+    const fitBtn = document.getElementById('fitBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const zoomInBtn = document.getElementById('zoomInBtn');
+    const zoomOutBtn = document.getElementById('zoomOutBtn');
+    const clearFocusBtn = document.getElementById('clearFocusBtn');
+    const openNodeBtn = document.getElementById('openNodeBtn');
+    const openEdgeBtn = document.getElementById('openEdgeBtn');
+    const copyMermaidBtn = document.getElementById('copyMermaidBtn');
+    const downloadMmdBtn = document.getElementById('downloadMmdBtn');
+    const downloadJsonBtn = document.getElementById('downloadJsonBtn');
+    const resetBuilderBtn = document.getElementById('resetBuilderBtn');
+    const addChildBtn = document.getElementById('addChildBtn');
+    const connectSelectedBtn = document.getElementById('connectSelectedBtn');
+
+    const nodeForm = document.getElementById('nodeForm');
+    const nodeGroupSelect = document.getElementById('nodeGroupSelect');
+    const newGroupNameInput = document.getElementById('newGroupNameInput');
+    const nodeLabelInput = document.getElementById('nodeLabelInput');
+    const nodeParentSelect = document.getElementById('nodeParentSelect');
+    const nodeDirectionSelect = document.getElementById('nodeDirectionSelect');
+    const nodeEdgeLabelInput = document.getElementById('nodeEdgeLabelInput');
+    const nodeDescriptionInput = document.getElementById('nodeDescriptionInput');
+    const cancelNodeFormBtn = document.getElementById('cancelNodeFormBtn');
+
+    const edgeForm = document.getElementById('edgeForm');
+    const edgeSourceSelect = document.getElementById('edgeSourceSelect');
+    const edgeTargetSelect = document.getElementById('edgeTargetSelect');
+    const edgeLabelInput = document.getElementById('edgeLabelInput');
+    const cancelEdgeFormBtn = document.getElementById('cancelEdgeFormBtn');
+
+    const appState = {
+      graphSource: '',
+      nodes: new Map(),
+      groups: [],
+      edges: [],
+      adjacencyOut: new Map(),
+      adjacencyIn: new Map(),
+      nodeElements: new Map(),
+      nodeLayout: new Map(),
+      clusterElements: new Map(),
+      edgeElements: [],
+      customDescriptions: new Map(),
+      manualPositions: new Map(),
+      viewState: null,
+      selectedKey: null,
+      activeGroupId: null,
+      panzoom: null,
+      svgElement: null,
+      dragState: null,
+      rendered: false,
+      controlsBound: false,
+      wheelBound: false
+    };
+
+    function safeLoad(key, fallback) {
+      try {
+        const raw = window.localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+      } catch {
+        return fallback;
+      }
+    }
+
+    function safeSave(key, value) {
+      try {
+        window.localStorage.setItem(key, JSON.stringify(value));
+      } catch {
+        // Ignore storage failures in browser-restricted environments.
+      }
+    }
+
+    function loadGraphSource() {
+      const saved = safeLoad(STORAGE_KEYS.graph, null);
+      return typeof saved === 'string' && saved.trim() ? saved : initialGraphDefinition;
+    }
+
+    function loadCustomDescriptions() {
+      const saved = safeLoad(STORAGE_KEYS.descriptions, {});
+      return new Map(Object.entries(saved));
+    }
+
+    function loadManualPositions() {
+      const saved = safeLoad(STORAGE_KEYS.positions, {});
+      return new Map(Object.entries(saved));
+    }
+
+    function loadViewState() {
+      const saved = safeLoad(STORAGE_KEYS.viewport, null);
+      if (!saved || typeof saved !== 'object') {
+        return null;
+      }
+
+      const x = Number(saved.x);
+      const y = Number(saved.y);
+      const scale = Number(saved.scale);
+      if (![x, y, scale].every(Number.isFinite)) {
+        return null;
+      }
+
+      return { x, y, scale };
+    }
+
+    function captureViewState() {
+      const transform = appState.panzoom?.getTransform?.();
+      if (!transform) {
+        return appState.viewState;
+      }
+
+      const x = Number(transform.x);
+      const y = Number(transform.y);
+      const scale = Number(transform.scale);
+      if (![x, y, scale].every(Number.isFinite)) {
+        return appState.viewState;
+      }
+
+      appState.viewState = { x, y, scale };
+      return appState.viewState;
+    }
+
+    function saveViewState() {
+      captureViewState();
+      safeSave(STORAGE_KEYS.viewport, appState.viewState);
+    }
+
+    function applyViewState(viewState) {
+      if (!appState.panzoom || !viewState) {
+        return false;
+      }
+
+      const x = Number(viewState.x);
+      const y = Number(viewState.y);
+      const scale = Number(viewState.scale);
+      if (![x, y, scale].every(Number.isFinite)) {
+        return false;
+      }
+
+      appState.panzoom.zoomAbs(0, 0, scale);
+      appState.panzoom.moveTo(x, y);
+      appState.viewState = { x, y, scale };
+      return true;
+    }
+
+    function saveState() {
+      captureViewState();
+      safeSave(STORAGE_KEYS.graph, appState.graphSource);
+      safeSave(STORAGE_KEYS.descriptions, Object.fromEntries(appState.customDescriptions.entries()));
+      safeSave(STORAGE_KEYS.positions, Object.fromEntries(appState.manualPositions.entries()));
+      safeSave(STORAGE_KEYS.viewport, appState.viewState);
+    }
+
+    function parseGraph(definition) {
+      const lines = definition.split('\n');
+      const nodes = new Map();
+      const groups = [];
+      const groupMap = new Map();
+      const edges = [];
+      let currentGroup = null;
+
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line) {
+          continue;
+        }
+
+        const subgraphMatch = line.match(/^subgraph\s+([A-Za-z0-9_]+)\[(.+)\]$/);
+        if (subgraphMatch) {
+          currentGroup = { id: subgraphMatch[1], name: subgraphMatch[2] };
+          if (!groupMap.has(currentGroup.id)) {
+            const entry = { id: currentGroup.id, name: currentGroup.name, nodes: [] };
+            groupMap.set(currentGroup.id, entry);
+            groups.push(entry);
+          }
+          continue;
+        }
+
+        if (line === 'end') {
+          currentGroup = null;
+          continue;
+        }
+
+        const labeledEdgeMatch = line.match(/^([A-Za-z0-9_]+)\s+-->\|([^|]*)\|\s*([A-Za-z0-9_]+)$/);
+        if (labeledEdgeMatch) {
+          edges.push({ source: labeledEdgeMatch[1], target: labeledEdgeMatch[3], label: labeledEdgeMatch[2].trim() });
+          continue;
+        }
+
+        const plainEdgeMatch = line.match(/^([A-Za-z0-9_]+)\s+-->\s*([A-Za-z0-9_]+)$/);
+        if (plainEdgeMatch) {
+          edges.push({ source: plainEdgeMatch[1], target: plainEdgeMatch[2], label: '' });
+          continue;
+        }
+
+        const nodeMatch = line.match(/^([A-Za-z0-9_]+)\[(.+)\]$/);
+        if (nodeMatch && currentGroup) {
+          const key = nodeMatch[1];
+          const label = nodeMatch[2];
+          if (!nodes.has(key)) {
+            nodes.set(key, {
+              key,
+              label,
+              groupId: currentGroup.id,
+              groupName: currentGroup.name
+            });
+            groupMap.get(currentGroup.id).nodes.push(key);
+          }
+        }
+      }
+
+      return { nodes, groups, edges };
+    }
+
+    function serializeGraph() {
+      const lines = ['flowchart TB'];
+
+      for (const group of appState.groups) {
+        lines.push(`  subgraph ${group.id}[${group.name}]`);
+        for (const key of group.nodes) {
+          const node = appState.nodes.get(key);
+          if (node) {
+            lines.push(`    ${node.key}[${node.label}]`);
+          }
+        }
+        lines.push('  end');
+        lines.push('');
+      }
+
+      for (const edge of appState.edges) {
+        if (edge.label) {
+          lines.push(`  ${edge.source} -->|${edge.label}| ${edge.target}`);
+        } else {
+          lines.push(`  ${edge.source} --> ${edge.target}`);
+        }
+      }
+
+      return lines.join('\n');
+    }
+
+    function buildAdjacency() {
+      const adjacencyOut = new Map();
+      const adjacencyIn = new Map();
+
+      for (const key of appState.nodes.keys()) {
+        adjacencyOut.set(key, []);
+        adjacencyIn.set(key, []);
+      }
+
+      for (const edge of appState.edges) {
+        adjacencyOut.get(edge.source)?.push(edge);
+        adjacencyIn.get(edge.target)?.push(edge);
+      }
+
+      appState.adjacencyOut = adjacencyOut;
+      appState.adjacencyIn = adjacencyIn;
+    }
+
+    function createUniqueIdentifier(label, existingKeys, prefix) {
+      const normalized = label
+        .replace(/&/g, 'And')
+        .replace(/[^A-Za-z0-9]+/g, ' ')
+        .trim()
+        .split(/\s+/)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+        .join('');
+
+      let candidate = normalized || prefix;
+      if (!/^[A-Za-z_]/.test(candidate)) {
+        candidate = `${prefix}${candidate}`;
+      }
+
+      const existing = new Set(existingKeys);
+      if (!existing.has(candidate)) {
+        return candidate;
+      }
+
+      let index = 2;
+      while (existing.has(`${candidate}${index}`)) {
+        index += 1;
+      }
+      return `${candidate}${index}`;
+    }
+
+    function getGroupDisplayName(groupId) {
+      return appState.groups.find((group) => group.id === groupId)?.name || '';
+    }
+
+    function findGroupByName(name) {
+      const target = name.trim().toLowerCase();
+      return appState.groups.find((group) => group.name.trim().toLowerCase() === target) || null;
+    }
+
+    function setBuilderMessage(message) {
+      builderStatus.textContent = message;
+    }
+
+    function getNodeDescription(key) {
+      if (appState.customDescriptions.has(key)) {
+        return appState.customDescriptions.get(key);
+      }
+      if (curatedDescriptions[key]) {
+        return curatedDescriptions[key];
+      }
+      const node = appState.nodes.get(key);
+      if (!node) {
+        return '';
+      }
+      const outgoing = appState.adjacencyOut.get(key)?.length ?? 0;
+      const incoming = appState.adjacencyIn.get(key)?.length ?? 0;
+      return `${node.label} belongs to ${node.groupName}. It has ${incoming} inbound connection${incoming === 1 ? '' : 's'} and ${outgoing} outbound connection${outgoing === 1 ? '' : 's'} in the operating model.`;
+    }
+
+    function renderOverview() {
+      overviewStats.innerHTML = [
+        `<span class="metric">${appState.nodes.size} nodes</span>`,
+        `<span class="metric">${appState.edges.length} handoffs</span>`,
+        `<span class="metric">${appState.groups.length} groups</span>`
+      ].join('');
+
+      groupChips.innerHTML = appState.groups
+        .map((group) => `<button type="button" class="group-button chip" data-group-id="${group.id}">${group.name}</button>`)
+        .join('');
+
+      groupList.innerHTML = appState.groups
+        .map((group) => {
+          const buttons = group.nodes
+            .map((key) => {
+              const node = appState.nodes.get(key);
+              return `<button type="button" class="group-button" data-node="${key}">${node.label}</button>`;
+            })
+            .join('');
+
+          return `
+            <section class="group-block">
+              <div class="group-title">
+                <div class="group-title-main">
+                  <span>${group.name}</span>
+                  <span class="group-count">${group.nodes.length} nodes</span>
+                </div>
+                <button type="button" class="group-add-button" data-add-to-group="${group.id}">+ Section</button>
+              </div>
+              <div class="toolbar">${buttons}</div>
+            </section>
+          `;
+        })
+        .join('');
+    }
+
+    function renderSearchResults(filterValue = '') {
+      const query = filterValue.trim().toLowerCase();
+      const nodes = [...appState.nodes.values()]
+        .filter((node) => !query || node.label.toLowerCase().includes(query) || node.groupName.toLowerCase().includes(query))
+        .slice(0, 24);
+
+      searchResults.innerHTML = nodes
+        .map((node) => `<button type="button" class="search-result" data-node="${node.key}">${node.label}</button>`)
+        .join('');
+    }
+
+    function refreshBuilderControls() {
+      const groupOptions = appState.groups
+        .map((group) => `<option value="${group.id}">${group.name}</option>`)
+        .join('');
+      nodeGroupSelect.innerHTML = groupOptions;
+
+      const nodeOptions = [...appState.nodes.values()]
+        .sort((left, right) => left.label.localeCompare(right.label))
+        .map((node) => `<option value="${node.key}">${node.label}</option>`)
+        .join('');
+
+      nodeParentSelect.innerHTML = `<option value="">No automatic link</option>${nodeOptions}`;
+      edgeSourceSelect.innerHTML = nodeOptions;
+      edgeTargetSelect.innerHTML = nodeOptions;
+
+      const hasSelection = Boolean(appState.selectedKey && appState.nodes.has(appState.selectedKey));
+      addChildBtn.disabled = !hasSelection;
+      connectSelectedBtn.disabled = !hasSelection;
+    }
+
+    function openNodeForm({ groupId = '', anchorKey = '', direction = 'anchor-to-new' } = {}) {
+      edgeForm.hidden = true;
+      nodeForm.hidden = false;
+      refreshBuilderControls();
+
+      const selectedNode = anchorKey ? appState.nodes.get(anchorKey) : appState.selectedKey ? appState.nodes.get(appState.selectedKey) : null;
+      const effectiveGroupId = groupId || selectedNode?.groupId || appState.groups[0]?.id || '';
+
+      nodeGroupSelect.value = effectiveGroupId;
+      newGroupNameInput.value = '';
+      nodeLabelInput.value = '';
+      nodeParentSelect.value = anchorKey || appState.selectedKey || '';
+      nodeDirectionSelect.value = direction;
+      nodeEdgeLabelInput.value = '';
+      nodeDescriptionInput.value = '';
+      nodeLabelInput.focus();
+
+      if (anchorKey || appState.selectedKey) {
+        const anchorNode = appState.nodes.get(anchorKey || appState.selectedKey);
+        setBuilderMessage(`Adding a new section off ${anchorNode.label}.`);
+      } else if (effectiveGroupId) {
+        setBuilderMessage(`Adding a new section inside ${getGroupDisplayName(effectiveGroupId)}.`);
+      } else {
+        setBuilderMessage('Adding a new section to the map.');
+      }
+    }
+
+    function openEdgeForm({ sourceKey = '', targetKey = '' } = {}) {
+      nodeForm.hidden = true;
+      edgeForm.hidden = false;
+      refreshBuilderControls();
+      edgeSourceSelect.value = sourceKey || appState.selectedKey || edgeSourceSelect.options[0]?.value || '';
+      edgeTargetSelect.value = targetKey || edgeTargetSelect.options[0]?.value || '';
+      edgeLabelInput.value = '';
+      setBuilderMessage(sourceKey || appState.selectedKey ? `Creating a new flow from ${appState.nodes.get(sourceKey || appState.selectedKey).label}.` : 'Creating a new flow between existing nodes.');
+      edgeSourceSelect.focus();
+    }
+
+    function closeBuilderForms() {
+      nodeForm.hidden = true;
+      edgeForm.hidden = true;
+      setBuilderMessage('Select a node or group, then use a `+` button to branch the map in that area.');
+    }
+
+    function updateInspector(key) {
+      const node = appState.nodes.get(key);
+      if (!node) {
+        return;
+      }
+
+      const outgoing = appState.adjacencyOut.get(key) ?? [];
+      const incoming = appState.adjacencyIn.get(key) ?? [];
+
+      selectedTitle.textContent = node.label;
+      selectedGroup.textContent = node.groupName;
+      selectedStats.textContent = `${incoming.length} inbound • ${outgoing.length} outbound`;
+      selectedDescription.textContent = getNodeDescription(key);
+      stageMetric.textContent = `Focused on: ${node.label}`;
+
+      outgoingList.innerHTML = outgoing.length
+        ? outgoing.map((edge) => {
+            const targetNode = appState.nodes.get(edge.target);
+            const label = edge.label ? `${targetNode.label} • ${edge.label}` : targetNode.label;
+            return `<button type="button" class="related-button" data-node="${edge.target}">${label}</button>`;
+          }).join('')
+        : '<span class="chip">No direct outbound handoffs</span>';
+
+      incomingList.innerHTML = incoming.length
+        ? incoming.map((edge) => {
+            const sourceNode = appState.nodes.get(edge.source);
+            const label = edge.label ? `${sourceNode.label} • ${edge.label}` : sourceNode.label;
+            return `<button type="button" class="related-button" data-node="${edge.source}">${label}</button>`;
+          }).join('')
+        : '<span class="chip">No direct inbound handoffs</span>';
+
+      document.querySelectorAll('[data-node]').forEach((element) => {
+        element.classList.toggle('active', element.getAttribute('data-node') === key);
+      });
+    }
+
+    function parseNodeKeyFromSvgId(svgId) {
+      const match = svgId.match(/flowchart-(.+)-\d+$/);
+      return match ? match[1] : null;
+    }
+
+    function parseEdgeKey(raw) {
+      const edgeMatch = raw.match(/L_([^_]+)_([^_]+)_\d+/);
+      if (!edgeMatch) {
+        return null;
+      }
+      return { source: edgeMatch[1], target: edgeMatch[2] };
+    }
+
+    function parseTranslate(transformValue) {
+      const match = (transformValue || '').match(/translate\(([^,]+),\s*([^)]+)\)/);
+      if (!match) {
+        return { x: 0, y: 0 };
+      }
+
+      return {
+        x: Number.parseFloat(match[1]),
+        y: Number.parseFloat(match[2])
+      };
+    }
+
+    function setTranslate(element, x, y) {
+      element.setAttribute('transform', `translate(${x}, ${y})`);
+    }
+
+    function getNodeBounds(layout) {
+      if (!layout) {
+        return null;
+      }
+
+      return {
+        left: layout.x - layout.width / 2,
+        right: layout.x + layout.width / 2,
+        top: layout.y - layout.height / 2,
+        bottom: layout.y + layout.height / 2
+      };
+    }
+
+    function setNodePosition(key, x, y) {
+      const layout = appState.nodeLayout.get(key);
+      const element = appState.nodeElements.get(key);
+      if (!layout || !element) {
+        return;
+      }
+
+      layout.x = x;
+      layout.y = y;
+      setTranslate(element, x, y);
+      appState.manualPositions.set(key, { x, y });
+    }
+
+    function calculateAnchorPoint(layout, targetPoint) {
+      if (!layout) {
+        return { x: targetPoint.x, y: targetPoint.y };
+      }
+
+      const deltaX = targetPoint.x - layout.x;
+      const deltaY = targetPoint.y - layout.y;
+      if (!deltaX && !deltaY) {
+        return { x: layout.x, y: layout.y };
+      }
+
+      const halfWidth = Math.max(layout.width / 2, 1);
+      const halfHeight = Math.max(layout.height / 2, 1);
+      const scale = Math.max(Math.abs(deltaX) / halfWidth, Math.abs(deltaY) / halfHeight, 1);
+
+      return {
+        x: layout.x + deltaX / scale,
+        y: layout.y + deltaY / scale
+      };
+    }
+
+    function getCubicMidpoint(startPoint, controlPointA, controlPointB, endPoint) {
+      return {
+        x: (startPoint.x + 3 * controlPointA.x + 3 * controlPointB.x + endPoint.x) / 8,
+        y: (startPoint.y + 3 * controlPointA.y + 3 * controlPointB.y + endPoint.y) / 8
+      };
+    }
+
+    function buildEdgeCurve(sourceLayout, targetLayout) {
+      const sourceCenter = { x: sourceLayout.x, y: sourceLayout.y };
+      const targetCenter = { x: targetLayout.x, y: targetLayout.y };
+      const startPoint = calculateAnchorPoint(sourceLayout, targetCenter);
+      const endPoint = calculateAnchorPoint(targetLayout, sourceCenter);
+      const deltaX = endPoint.x - startPoint.x;
+      const deltaY = endPoint.y - startPoint.y;
+
+      let controlPointA;
+      let controlPointB;
+
+      if (Math.abs(deltaX) >= Math.abs(deltaY)) {
+        const curveOffset = deltaX * 0.35;
+        controlPointA = { x: startPoint.x + curveOffset, y: startPoint.y };
+        controlPointB = { x: endPoint.x - curveOffset, y: endPoint.y };
+      } else {
+        const curveOffset = deltaY * 0.35;
+        controlPointA = { x: startPoint.x, y: startPoint.y + curveOffset };
+        controlPointB = { x: endPoint.x, y: endPoint.y - curveOffset };
+      }
+
+      return {
+        pathData: `M${startPoint.x},${startPoint.y} C${controlPointA.x},${controlPointA.y} ${controlPointB.x},${controlPointB.y} ${endPoint.x},${endPoint.y}`,
+        labelPoint: getCubicMidpoint(startPoint, controlPointA, controlPointB, endPoint)
+      };
+    }
+
+    function updateEdgeGeometry(edgeEntry) {
+      const sourceLayout = appState.nodeLayout.get(edgeEntry.source);
+      const targetLayout = appState.nodeLayout.get(edgeEntry.target);
+      if (!sourceLayout || !targetLayout || !edgeEntry.path) {
+        return;
+      }
+
+      const geometry = buildEdgeCurve(sourceLayout, targetLayout);
+      edgeEntry.path.setAttribute('d', geometry.pathData);
+      if (edgeEntry.label) {
+        setTranslate(edgeEntry.label, geometry.labelPoint.x, geometry.labelPoint.y);
+      }
+    }
+
+    function updateEdgesForNodeKeys(nodeKeys) {
+      const impactedKeys = new Set(nodeKeys);
+      for (const edgeEntry of appState.edgeElements) {
+        if (impactedKeys.has(edgeEntry.source) || impactedKeys.has(edgeEntry.target)) {
+          updateEdgeGeometry(edgeEntry);
+        }
+      }
+    }
+
+    function updateAllEdges() {
+      for (const edgeEntry of appState.edgeElements) {
+        updateEdgeGeometry(edgeEntry);
+      }
+    }
+
+    function updateClusterGeometry(groupId) {
+      const clusterEntry = appState.clusterElements.get(groupId);
+      const group = appState.groups.find((entry) => entry.id === groupId);
+      if (!clusterEntry || !group || !group.nodes.length) {
+        return;
+      }
+
+      const bounds = group.nodes
+        .map((key) => getNodeBounds(appState.nodeLayout.get(key)))
+        .filter(Boolean);
+      if (!bounds.length) {
+        return;
+      }
+
+      const minLeft = Math.min(...bounds.map((bound) => bound.left));
+      const maxRight = Math.max(...bounds.map((bound) => bound.right));
+      const minTop = Math.min(...bounds.map((bound) => bound.top));
+      const maxBottom = Math.max(...bounds.map((bound) => bound.bottom));
+      const rectX = minLeft - clusterEntry.padding.left;
+      const rectY = minTop - clusterEntry.padding.top;
+      const rectWidth = maxRight - minLeft + clusterEntry.padding.left + clusterEntry.padding.right;
+      const rectHeight = maxBottom - minTop + clusterEntry.padding.top + clusterEntry.padding.bottom;
+
+      clusterEntry.rect.setAttribute('x', rectX);
+      clusterEntry.rect.setAttribute('y', rectY);
+      clusterEntry.rect.setAttribute('width', rectWidth);
+      clusterEntry.rect.setAttribute('height', rectHeight);
+      setTranslate(clusterEntry.label, rectX + rectWidth / 2 - clusterEntry.labelWidth / 2, rectY);
+    }
+
+    function updateClustersForNodeKeys(nodeKeys) {
+      const groupIds = new Set(
+        [...nodeKeys]
+          .map((key) => appState.nodes.get(key)?.groupId)
+          .filter(Boolean)
+      );
+
+      for (const groupId of groupIds) {
+        updateClusterGeometry(groupId);
+      }
+    }
+
+    function updateAllClusters() {
+      for (const group of appState.groups) {
+        updateClusterGeometry(group.id);
+      }
+    }
+
+    function getCurrentScale() {
+      return appState.panzoom?.getTransform?.().scale ?? 1;
+    }
+
+    function beginNodeDrag(event, key) {
+      if (event.button !== undefined && event.button !== 0) {
+        return;
+      }
+
+      const layout = appState.nodeLayout.get(key);
+      const element = appState.nodeElements.get(key);
+      if (!layout || !element) {
+        return;
+      }
+
+      focusNode(key, { center: false });
+      appState.dragState = {
+        type: 'node',
+        key,
+        pointerId: event.pointerId,
+        moved: false,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        startPositions: new Map([[key, { x: layout.x, y: layout.y }]])
+      };
+
+      element.classList.add('is-dragging');
+      element.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    function beginGroupDrag(event, groupId) {
+      if (event.button !== undefined && event.button !== 0) {
+        return;
+      }
+
+      const group = appState.groups.find((entry) => entry.id === groupId);
+      const clusterEntry = appState.clusterElements.get(groupId);
+      if (!group || !clusterEntry) {
+        return;
+      }
+
+      const startPositions = new Map(
+        group.nodes
+          .map((key) => {
+            const layout = appState.nodeLayout.get(key);
+            return layout ? [key, { x: layout.x, y: layout.y }] : null;
+          })
+          .filter(Boolean)
+      );
+
+      if (!startPositions.size) {
+        return;
+      }
+
+      appState.dragState = {
+        type: 'group',
+        key: groupId,
+        pointerId: event.pointerId,
+        moved: false,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        startPositions
+      };
+
+      clusterEntry.element.classList.add('is-dragging');
+      clusterEntry.element.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    function beginCanvasPan(event) {
+      if (event.button !== undefined && event.button !== 0) {
+        return;
+      }
+      if (!appState.panzoom || event.target?.closest?.('.node')) {
+        return;
+      }
+
+      const transform = appState.panzoom.getTransform?.();
+      if (!transform) {
+        return;
+      }
+
+      appState.dragState = {
+        type: 'canvas',
+        pointerId: event.pointerId,
+        moved: false,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        startView: {
+          x: transform.x,
+          y: transform.y,
+          scale: transform.scale
+        }
+      };
+
+      viewer.classList.add('is-panning');
+      viewer.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    }
+
+    function handleGlobalPointerMove(event) {
+      const dragState = appState.dragState;
+      if (!dragState || dragState.pointerId !== event.pointerId) {
+        return;
+      }
+
+      const scale = getCurrentScale();
+      const deltaX = (event.clientX - dragState.startClientX) / scale;
+      const deltaY = (event.clientY - dragState.startClientY) / scale;
+      if (!dragState.moved && (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1)) {
+        dragState.moved = true;
+      }
+
+      if (dragState.type === 'canvas') {
+        appState.panzoom?.moveTo(
+          dragState.startView.x + (event.clientX - dragState.startClientX),
+          dragState.startView.y + (event.clientY - dragState.startClientY)
+        );
+        captureViewState();
+      } else if (dragState.type === 'node') {
+        const startPosition = dragState.startPositions.get(dragState.key);
+        if (startPosition) {
+          setNodePosition(dragState.key, startPosition.x + deltaX, startPosition.y + deltaY);
+          updateClustersForNodeKeys([dragState.key]);
+          updateEdgesForNodeKeys([dragState.key]);
+        }
+      } else if (dragState.type === 'group') {
+        const movedKeys = [...dragState.startPositions.keys()];
+        for (const [key, startPosition] of dragState.startPositions.entries()) {
+          setNodePosition(key, startPosition.x + deltaX, startPosition.y + deltaY);
+        }
+        updateClusterGeometry(dragState.key);
+        updateEdgesForNodeKeys(movedKeys);
+      }
+
+      event.preventDefault();
+    }
+
+    function finishDrag(event) {
+      const dragState = appState.dragState;
+      if (!dragState) {
+        return;
+      }
+      if (event && dragState.pointerId !== event.pointerId) {
+        return;
+      }
+
+      if (dragState.type === 'node') {
+        appState.nodeElements.get(dragState.key)?.classList.remove('is-dragging');
+      } else if (dragState.type === 'canvas') {
+        viewer.classList.remove('is-panning');
+      } else if (dragState.type === 'group') {
+        appState.clusterElements.get(dragState.key)?.element.classList.remove('is-dragging');
+      }
+
+      if (dragState.moved) {
+        if (dragState.type === 'canvas') {
+          saveViewState();
+        } else {
+          saveState();
+        }
+
+        if (dragState.type === 'group') {
+          setBuilderMessage(`Moved ${getGroupDisplayName(dragState.key)} on the canvas.`);
+        } else if (dragState.type === 'canvas') {
+          setBuilderMessage('Moved the diagram viewport.');
+        } else {
+          setBuilderMessage(`Moved ${appState.nodes.get(dragState.key)?.label || 'selected section'} on the canvas.`);
+        }
+      }
+
+      appState.dragState = null;
+    }
+
+    function applySelectionStyles(key) {
+      const relatedNodes = new Set([key]);
+      const relatedEdges = new Set();
+
+      for (const edge of appState.adjacencyOut.get(key) ?? []) {
+        relatedNodes.add(edge.target);
+        relatedEdges.add(`${edge.source}->${edge.target}`);
+      }
+      for (const edge of appState.adjacencyIn.get(key) ?? []) {
+        relatedNodes.add(edge.source);
+        relatedEdges.add(`${edge.source}->${edge.target}`);
+      }
+
+      for (const [nodeKey, element] of appState.nodeElements.entries()) {
+        element.classList.toggle('is-active', nodeKey === key);
+        element.classList.toggle('is-related', nodeKey !== key && relatedNodes.has(nodeKey));
+      }
+
+      for (const edgeEntry of appState.edgeElements) {
+        const edgeKey = `${edgeEntry.source}->${edgeEntry.target}`;
+        const isRelated = relatedEdges.has(edgeKey);
+        edgeEntry.path?.classList.toggle('is-related', isRelated);
+        edgeEntry.label?.classList.toggle('is-related', isRelated);
+      }
+    }
+
+    function clearSelectionStyles() {
+      for (const element of appState.nodeElements.values()) {
+        element.classList.remove('is-active', 'is-related', 'is-muted');
+      }
+      for (const edgeEntry of appState.edgeElements) {
+        edgeEntry.path?.classList.remove('is-related', 'is-muted');
+        edgeEntry.label?.classList.remove('is-related', 'is-muted');
+      }
+    }
+
+    function focusNode(key, { center = false } = {}) {
+      const node = appState.nodes.get(key);
+      const element = appState.nodeElements.get(key);
+      if (!node || !element) {
+        return;
+      }
+
+      appState.selectedKey = key;
+      appState.activeGroupId = node.groupId;
+      updateInspector(key);
+      applySelectionStyles(key);
+      refreshBuilderControls();
+
+      document.querySelectorAll('[data-group-id]').forEach((button) => {
+        button.classList.toggle('active', button.getAttribute('data-group-id') === node.groupId);
+      });
+
+      if (!center || !appState.panzoom) {
+        return;
+      }
+
+      const viewerRect = viewer.getBoundingClientRect();
+      const bbox = element.getBBox();
+      const padding = 180;
+      const scaleX = (viewerRect.width - padding) / Math.max(bbox.width * 4, 240);
+      const scaleY = (viewerRect.height - padding) / Math.max(bbox.height * 4, 200);
+      const scale = Math.max(0.24, Math.min(scaleX, scaleY, 0.9));
+      const centerX = bbox.x + bbox.width / 2;
+      const centerY = bbox.y + bbox.height / 2;
+      const moveX = viewerRect.width / 2 - centerX * scale;
+      const moveY = viewerRect.height / 2 - centerY * scale;
+
+      appState.panzoom.zoomAbs(0, 0, scale);
+      appState.panzoom.moveTo(moveX, moveY);
+      window.requestAnimationFrame(saveViewState);
+    }
+
+    function clearFocus(resetView = false) {
+      appState.selectedKey = null;
+      clearSelectionStyles();
+      refreshBuilderControls();
+      document.querySelectorAll('[data-node], [data-group-id]').forEach((element) => element.classList.remove('active'));
+      selectedTitle.textContent = 'Entire Operating Model';
+      selectedGroup.textContent = 'Cross-functional system';
+      selectedStats.textContent = `${appState.nodes.size} nodes • ${appState.edges.length} handoffs`;
+      selectedDescription.textContent = 'This map connects customer demand, branded websites, dealership departments, system integrations, financial controls, and ownership retention into one operating cloud.';
+      outgoingList.innerHTML = '<span class="chip">Select a node to inspect downstream connections</span>';
+      incomingList.innerHTML = '<span class="chip">Select a node to inspect upstream dependencies</span>';
+      stageMetric.textContent = 'Focused on: Entire operating model';
+      if (resetView) {
+        fitToScreen();
+      }
+    }
+
+    function fitToScreen() {
+      if (!appState.panzoom || !appState.svgElement) {
+        return;
+      }
+      const viewerRect = viewer.getBoundingClientRect();
+      const svgRect = appState.svgElement.getBBox();
+      const padding = 80;
+      const scaleX = (viewerRect.width - padding) / svgRect.width;
+      const scaleY = (viewerRect.height - padding) / svgRect.height;
+      const nextScale = Math.max(0.08, Math.min(scaleX, scaleY, 1));
+      appState.panzoom.moveTo(0, 0);
+      appState.panzoom.zoomAbs(0, 0, nextScale);
+      window.requestAnimationFrame(saveViewState);
+    }
+
+    function resetView() {
+      if (!appState.panzoom) {
+        return;
+      }
+      appState.panzoom.moveTo(0, 0);
+      appState.panzoom.zoomAbs(0, 0, 0.24);
+      window.requestAnimationFrame(saveViewState);
+    }
+
+    function viewerWheelHandler(event) {
+      appState.panzoom?.zoomWithWheel(event);
+      window.requestAnimationFrame(saveViewState);
+    }
+
+    function wireSvgInteractions() {
+      const nodes = diagram.querySelectorAll('.node');
+      appState.nodeElements.clear();
+      appState.nodeLayout.clear();
+      appState.clusterElements.clear();
+
+      nodes.forEach((element) => {
+        const key = parseNodeKeyFromSvgId(element.id || '');
+        if (!key || !appState.nodes.has(key)) {
+          return;
+        }
+
+        const transform = parseTranslate(element.getAttribute('transform'));
+        const bbox = element.getBBox();
+        appState.nodeElements.set(key, element);
+        appState.nodeLayout.set(key, {
+          x: transform.x,
+          y: transform.y,
+          width: bbox.width,
+          height: bbox.height
+        });
+        element.setAttribute('tabindex', '0');
+        element.setAttribute('role', 'button');
+        element.setAttribute('aria-label', appState.nodes.get(key).label);
+        element.addEventListener('pointerdown', (event) => beginNodeDrag(event, key));
+        element.addEventListener('click', () => focusNode(key, { center: false }));
+        element.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            focusNode(key, { center: false });
+          }
+        });
+      });
+
+      diagram.querySelectorAll('.cluster').forEach((element) => {
+        const group = appState.groups.find((entry) => (element.id || '').endsWith(`-${entry.id}`));
+        const rect = element.querySelector('rect');
+        const label = element.querySelector('.cluster-label');
+        if (!group || !rect || !label) {
+          return;
+        }
+
+        const nodeBounds = group.nodes
+          .map((key) => getNodeBounds(appState.nodeLayout.get(key)))
+          .filter(Boolean);
+        if (!nodeBounds.length) {
+          return;
+        }
+
+        const rectX = Number.parseFloat(rect.getAttribute('x') || '0');
+        const rectY = Number.parseFloat(rect.getAttribute('y') || '0');
+        const rectWidth = Number.parseFloat(rect.getAttribute('width') || '0');
+        const rectHeight = Number.parseFloat(rect.getAttribute('height') || '0');
+        const labelBox = label.getBBox();
+        const minLeft = Math.min(...nodeBounds.map((bound) => bound.left));
+        const maxRight = Math.max(...nodeBounds.map((bound) => bound.right));
+        const minTop = Math.min(...nodeBounds.map((bound) => bound.top));
+        const maxBottom = Math.max(...nodeBounds.map((bound) => bound.bottom));
+
+        appState.clusterElements.set(group.id, {
+          element,
+          rect,
+          label,
+          labelWidth: labelBox.width,
+          padding: {
+            left: Math.max(24, minLeft - rectX),
+            right: Math.max(24, rectX + rectWidth - maxRight),
+            top: Math.max(36, minTop - rectY),
+            bottom: Math.max(24, rectY + rectHeight - maxBottom)
+          }
+        });
+
+      });
+
+      const edgePathMap = new Map();
+      const edgeLabelMap = new Map();
+
+      diagram.querySelectorAll('[data-edge="true"]').forEach((element) => {
+        const dataKey = parseEdgeKey(element.getAttribute('data-id') || element.id || '');
+        if (dataKey) {
+          edgePathMap.set(`${dataKey.source}->${dataKey.target}`, element);
+        }
+      });
+
+      diagram.querySelectorAll('.edgeLabel .label').forEach((element) => {
+        const dataKey = parseEdgeKey(element.getAttribute('data-id') || '');
+        if (dataKey) {
+          edgeLabelMap.set(`${dataKey.source}->${dataKey.target}`, element.closest('.edgeLabel'));
+        }
+      });
+
+      appState.edgeElements = appState.edges.map((edge) => ({
+        source: edge.source,
+        target: edge.target,
+        path: edgePathMap.get(`${edge.source}->${edge.target}`) ?? null,
+        label: edgeLabelMap.get(`${edge.source}->${edge.target}`) ?? null
+      }));
+
+      for (const [key, position] of appState.manualPositions.entries()) {
+        if (appState.nodeLayout.has(key)) {
+          setNodePosition(key, position.x, position.y);
+        }
+      }
+
+      updateAllClusters();
+      updateAllEdges();
+    }
+
+    async function copyMermaidSource() {
+      try {
+        await navigator.clipboard.writeText(appState.graphSource);
+        setBuilderMessage('Current Mermaid source copied to your clipboard.');
+      } catch {
+        setBuilderMessage('Clipboard access was blocked. The builder still keeps the updated Mermaid in the browser state.');
+      }
+    }
+
+    function buildExportPayload() {
+      return {
+        exportedAt: new Date().toISOString(),
+        groups: appState.groups.map((group) => ({
+          id: group.id,
+          name: group.name,
+          nodes: [...group.nodes]
+        })),
+        nodes: [...appState.nodes.values()].map((node) => ({
+          key: node.key,
+          label: node.label,
+          groupId: node.groupId,
+          groupName: node.groupName
+        })),
+        edges: appState.edges.map((edge) => ({
+          source: edge.source,
+          target: edge.target,
+          label: edge.label
+        })),
+        positions: Object.fromEntries(
+          [...appState.nodeLayout.entries()].map(([key, layout]) => [key, { x: layout.x, y: layout.y }])
+        ),
+        descriptions: Object.fromEntries(appState.customDescriptions.entries()),
+        mermaid: appState.graphSource
+      };
+    }
+
+    function downloadFile(fileName, contents, mimeType) {
+      const blob = new Blob([contents], { type: mimeType });
+      const objectUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(objectUrl);
+    }
+
+    function downloadMermaidSource() {
+      downloadFile('dealership-flow-builder-export.mmd', appState.graphSource, 'text/plain;charset=utf-8');
+      setBuilderMessage('Downloaded the current diagram as a Mermaid `.mmd` file.');
+    }
+
+    function downloadJsonExport() {
+      const exportPayload = JSON.stringify(buildExportPayload(), null, 2);
+      downloadFile('dealership-flow-builder-export.json', exportPayload, 'application/json;charset=utf-8');
+      setBuilderMessage('Downloaded the current diagram as a structured JSON export.');
+    }
+
+    async function handleNodeSubmit(event) {
+      event.preventDefault();
+      const label = nodeLabelInput.value.trim();
+      if (!label) {
+        setBuilderMessage('Enter a section label before adding it.');
+        return;
+      }
+
+      const customGroupName = newGroupNameInput.value.trim();
+      let groupId = nodeGroupSelect.value;
+      let groupName = getGroupDisplayName(groupId);
+
+      if (customGroupName) {
+        const existingGroup = findGroupByName(customGroupName);
+        if (existingGroup) {
+          groupId = existingGroup.id;
+          groupName = existingGroup.name;
+        } else {
+          groupId = createUniqueIdentifier(customGroupName, appState.groups.map((group) => group.id), 'Group');
+          groupName = customGroupName;
+          appState.groups.push({ id: groupId, name: groupName, nodes: [] });
+        }
+      }
+
+      if (!groupId) {
+        setBuilderMessage('Choose a target group or type a new group name.');
+        return;
+      }
+
+      const key = createUniqueIdentifier(label, appState.nodes.keys(), 'Node');
+      const group = appState.groups.find((entry) => entry.id === groupId);
+      if (!group) {
+        setBuilderMessage('The selected group could not be found.');
+        return;
+      }
+
+      appState.nodes.set(key, {
+        key,
+        label,
+        groupId,
+        groupName: group.name
+      });
+      group.nodes.push(key);
+
+      const description = nodeDescriptionInput.value.trim();
+      if (description) {
+        appState.customDescriptions.set(key, description);
+      }
+
+      const anchorKey = nodeParentSelect.value;
+      const edgeLabel = nodeEdgeLabelInput.value.trim();
+      if (anchorKey) {
+        const direction = nodeDirectionSelect.value;
+        const edge = direction === 'new-to-anchor'
+          ? { source: key, target: anchorKey, label: edgeLabel }
+          : { source: anchorKey, target: key, label: edgeLabel };
+        appState.edges.push(edge);
+      }
+
+      appState.graphSource = serializeGraph();
+      saveState();
+      closeBuilderForms();
+      await renderApp({ focusKey: key, center: false, fit: false });
+      setBuilderMessage(`Added ${label} to ${group.name}.`);
+    }
+
+    async function handleEdgeSubmit(event) {
+      event.preventDefault();
+      const source = edgeSourceSelect.value;
+      const target = edgeTargetSelect.value;
+      const label = edgeLabelInput.value.trim();
+
+      if (!source || !target) {
+        setBuilderMessage('Choose both a source node and a target node.');
+        return;
+      }
+      if (source === target) {
+        setBuilderMessage('A flow cannot point to the same node.');
+        return;
+      }
+
+      const duplicate = appState.edges.some((edge) => edge.source === source && edge.target === target && edge.label === label);
+      if (duplicate) {
+        setBuilderMessage('That flow already exists. Change the nodes or label to create a new one.');
+        return;
+      }
+
+      appState.edges.push({ source, target, label });
+      appState.graphSource = serializeGraph();
+      saveState();
+      closeBuilderForms();
+      await renderApp({ focusKey: source, center: false, fit: false });
+      setBuilderMessage(`Added a new flow from ${appState.nodes.get(source).label} to ${appState.nodes.get(target).label}.`);
+    }
+
+    function bindStaticControls() {
+      if (appState.controlsBound) {
+        return;
+      }
+      appState.controlsBound = true;
+
+      searchInput.addEventListener('input', (event) => renderSearchResults(event.target.value));
+      fitBtn.addEventListener('click', fitToScreen);
+      resetBtn.addEventListener('click', resetView);
+      zoomInBtn.addEventListener('click', () => appState.panzoom?.smoothZoom(0, 0, 1.2));
+      zoomOutBtn.addEventListener('click', () => appState.panzoom?.smoothZoom(0, 0, 0.8));
+      clearFocusBtn.addEventListener('click', () => clearFocus(true));
+      openNodeBtn.addEventListener('click', () => openNodeForm());
+      openEdgeBtn.addEventListener('click', () => openEdgeForm({}));
+      addChildBtn.addEventListener('click', () => {
+        if (appState.selectedKey) {
+          openNodeForm({ anchorKey: appState.selectedKey });
+        }
+      });
+      connectSelectedBtn.addEventListener('click', () => {
+        if (appState.selectedKey) {
+          openEdgeForm({ sourceKey: appState.selectedKey });
+        }
+      });
+      copyMermaidBtn.addEventListener('click', copyMermaidSource);
+      downloadMmdBtn.addEventListener('click', downloadMermaidSource);
+      downloadJsonBtn.addEventListener('click', downloadJsonExport);
+      resetBuilderBtn.addEventListener('click', async () => {
+        const confirmed = window.confirm('Reset the builder back to the original dealership diagram?');
+        if (!confirmed) {
+          return;
+        }
+        appState.graphSource = initialGraphDefinition;
+        appState.customDescriptions = new Map();
+        appState.manualPositions = new Map();
+        appState.viewState = null;
+        saveState();
+        closeBuilderForms();
+        await renderApp({ focusKey: 'Unified', center: false, fit: true });
+        setBuilderMessage('The builder has been reset to the original dealership diagram.');
+      });
+
+      cancelNodeFormBtn.addEventListener('click', closeBuilderForms);
+      cancelEdgeFormBtn.addEventListener('click', closeBuilderForms);
+      nodeForm.addEventListener('submit', handleNodeSubmit);
+      edgeForm.addEventListener('submit', handleEdgeSubmit);
+      viewer.addEventListener('pointerdown', beginCanvasPan);
+      window.addEventListener('pointermove', handleGlobalPointerMove, { passive: false });
+      window.addEventListener('pointerup', finishDrag);
+      window.addEventListener('pointercancel', finishDrag);
+      window.addEventListener('resize', () => {
+        if (appState.viewState) {
+          applyViewState(appState.viewState);
+        }
+      });
+
+      document.addEventListener('click', (event) => {
+        const nodeButton = event.target.closest('[data-node]');
+        if (nodeButton) {
+          focusNode(nodeButton.getAttribute('data-node'), { center: false });
+          return;
+        }
+
+        const groupButton = event.target.closest('[data-group-id]');
+        if (groupButton) {
+          const groupId = groupButton.getAttribute('data-group-id');
+          appState.activeGroupId = groupId;
+          document.querySelectorAll('[data-group-id]').forEach((element) => {
+            element.classList.toggle('active', element.getAttribute('data-group-id') === groupId);
+          });
+          const firstKey = appState.groups.find((group) => group.id === groupId)?.nodes[0];
+          if (firstKey) {
+            focusNode(firstKey, { center: false });
+          }
+          return;
+        }
+
+        const addGroupButton = event.target.closest('[data-add-to-group]');
+        if (addGroupButton) {
+          openNodeForm({ groupId: addGroupButton.getAttribute('data-add-to-group') });
+        }
+      });
+    }
+
+    async function renderApp({ focusKey = appState.selectedKey, center = false, fit = !appState.rendered && !appState.viewState } = {}) {
+      captureViewState();
+      appState.panzoom?.dispose?.();
+
+      const parsed = parseGraph(appState.graphSource);
+      appState.nodes = parsed.nodes;
+      appState.groups = parsed.groups;
+      appState.edges = parsed.edges;
+      buildAdjacency();
+      renderOverview();
+      renderSearchResults(searchInput.value);
+      refreshBuilderControls();
+
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'loose',
+        theme: 'neutral',
+        flowchart: {
+          useMaxWidth: false,
+          htmlLabels: true,
+          curve: 'basis'
+        }
+      });
+
+      const renderId = `dealership-flow-builder-svg-${Date.now()}`;
+      const { svg, bindFunctions } = await mermaid.render(renderId, appState.graphSource);
+      diagram.innerHTML = svg;
+      bindFunctions?.(diagram);
+
+      appState.svgElement = diagram.querySelector('svg');
+      const viewBox = appState.svgElement.viewBox.baseVal;
+      appState.svgElement.removeAttribute('width');
+      appState.svgElement.removeAttribute('height');
+      appState.svgElement.style.width = `${viewBox.width}px`;
+      appState.svgElement.style.height = `${viewBox.height}px`;
+
+      appState.panzoom = window.panzoom(appState.svgElement, {
+        maxZoom: 4,
+        minZoom: 0.08,
+        smoothScroll: false,
+        contain: 'outside',
+        beforeMouseDown: () => true
+      });
+
+      appState.panzoom.on?.('transform', captureViewState);
+      appState.panzoom.on?.('panend', saveViewState);
+      appState.panzoom.on?.('zoomend', saveViewState);
+
+      if (!appState.wheelBound) {
+        viewer.addEventListener('wheel', viewerWheelHandler, { passive: false });
+        appState.wheelBound = true;
+      }
+
+      wireSvgInteractions();
+
+      const restoredView = applyViewState(appState.viewState);
+
+      if (!restoredView && fit) {
+        fitToScreen();
+      }
+      appState.rendered = true;
+
+      if (focusKey && appState.nodes.has(focusKey)) {
+        focusNode(focusKey, { center });
+      } else {
+        clearFocus(false);
+      }
+    }
+
+    async function bootstrap() {
+      appState.graphSource = loadGraphSource();
+      appState.customDescriptions = loadCustomDescriptions();
+      appState.manualPositions = loadManualPositions();
+      appState.viewState = loadViewState();
+      bindStaticControls();
+      await renderApp({ focusKey: 'Unified', center: false, fit: !appState.viewState });
+    }
+
+    bootstrap().catch((error) => {
+      diagram.innerHTML = `<pre>${String(error.message || error)}</pre>`;
+      setBuilderMessage('The builder hit a render error.');
+    });
+  </script>
+</body>
+</html>

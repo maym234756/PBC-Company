@@ -1,0 +1,34 @@
+{
+  "name": "pbc-omg-marine-cloud",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Premier Boating Centers and Ocean Marine Group marine cloud platform monorepo",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run db:push && npm run db:seed && npm run build -w @marine-cloud/database && concurrently -n web,api -c blue,green \"npm run dev -w @marine-cloud/web\" \"npm run dev -w @marine-cloud/api\"",
+    "build": "npm run db:generate && npm run build -w @marine-cloud/database && npm run build -w @marine-cloud/api && npm run build -w @marine-cloud/web",
+    "test": "npm run test:api && npm run test:web",
+    "test:api": "npm run test -w @marine-cloud/api",
+    "test:web": "npm run test -w @marine-cloud/web",
+    "test:smoke": "npm run test:smoke -w @marine-cloud/web",
+    "setup:db": "npm run db:push && npm run db:seed",
+    "db:generate": "npm run db:generate -w @marine-cloud/database",
+    "db:push": "npm run db:push -w @marine-cloud/database",
+    "db:seed": "npm run db:seed -w @marine-cloud/database",
+    "db:studio": "npm run db:studio -w @marine-cloud/database"
+  },
+  "keywords": [
+    "marine",
+    "dealership",
+    "dms",
+    "cloud"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

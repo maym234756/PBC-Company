@@ -1,0 +1,1098 @@
+flowchart TB
+  subgraph CH[Customer Access Channels]
+    Desktop[Desktop Web]
+    Mobile[Mobile Web]
+    Tablet[Tablet Web]
+    SalesRep[In-Store Sales Team]
+    CallCenter[BDC / Customer Care]
+    Events[Boat Shows / Events]
+    Referral[Referrals / OEM Leads]
+  end
+
+  subgraph BRANDS[Brand and Site Experience Layer]
+    PBC[Premier Boating Centers Website]
+    OMG[Ocean Marine Group Website]
+    Unified[Unified Cloud Website Platform]
+    Portal[Customer Portal / Owner Account]
+    CMS[CMS / Content Management]
+    Search[Inventory Search / Filters / Compare]
+    Specials[Promotions / Service Specials / Parts Specials]
+    Scheduler[Sales Appointment and Service Scheduling]
+    Ecommerce[Parts and Accessories Catalog / Checkout]
+    FinanceLead[Finance Pre-Qual / Credit App]
+    TradeTool[Trade-In / Consignment / Brokerage Intake]
+    ReviewHub[Reviews / Reputation / Testimonials]
+    EventsHub[Boat Shows / Events / Campaign Landing Pages]
+  end
+
+  subgraph JOURNEYS[Customer Journey Flows]
+    Awareness[Marketing Creates Demand]
+    LeadCapture[Lead Capture / Call / Form / Chat / SMS]
+    Qualification[BDC Lead Qualification]
+    Appointment[Appointment Set / Confirmed]
+    SeaTrial[Demo / Sea Trial]
+    DealStruct[Deal Structure / Trade / Accessories]
+    FIProcess[F&I Approval / Products / Contracts]
+    DeliveryPrep[PDI / Rigging / Detail / QC]
+    Delivery[Boat Delivery / Orientation / Training]
+    Ownership[Ownership Lifecycle]
+    OwnerActivation[Owner Activation / First 90 Days]
+    Membership[Boat Club / Membership / VIP Program]
+    ServicePlan[Prepaid Service / Maintenance Plan]
+    EventNurture[Owner Events / Community Funnel]
+    ReferralProgram[Referral / Ambassador Program]
+    UpgradeReady[Upgrade Readiness / Equity Trigger]
+    StorageRenewal[Storage / Slip Renewal]
+    RepowerCycle[Repower / Next-Boat Upgrade Cycle]
+    ServiceRetention[Service / Parts / Storage / Upgrade Retention]
+  end
+
+  subgraph APP[Cloud Website Application Layer]
+    WebApp[Responsive Frontend App]
+    API[API Gateway / Application Services]
+    Auth[Authentication / Identity / Customer Accounts]
+    CRMLogic[CRM / Lead Orchestration]
+    InventoryEngine[Inventory and Listing Engine]
+    ServiceEngine[Service Scheduling Engine]
+    PartsEngine[Parts and Accessories Commerce Engine]
+    DealFlowEngine[Funding / Payoff / Delivery Promise Engine]
+    PartsCommerceEngine[Parts Retail / Accessory Demand Engine]
+    OwnerSuccessEngine[Renewal / Referral / Upgrade Trigger Engine]
+    MarinaYieldEngine[Slip / Contract / Waitlist Yield Engine]
+    FinanceEngine[Finance Lead and Lender Routing]
+    ContentEngine[Content / Promotions / SEO Pages]
+    Notification[Email / SMS / Chat / Notifications]
+    Analytics[Analytics / Attribution / BI Tracking]
+    WorkflowEngine[Workflow / Rules / Escalation Engine]
+    DocsEngine[Digital Deal Jacket / Document Vault]
+    CapacityEngine[Service Dispatch / Capacity Engine]
+    RetentionEngine[Ownership / Retention Automation]
+    PricingEngine[Inventory Pricing / Turn Engine]
+    DeliveryEngine[Delivery / Owner Activation Engine]
+    BrokerageEngine[Brokerage / Consignment Engine]
+    AssuranceEngine[Inspection / Certification / Buyer Assurance Engine]
+    MarinaRevenueEngine[Marina / Slip / Storage Revenue Engine]
+    FleetOpsEngine[Rental / Charter / Fleet Utilization Engine]
+    ServiceControlEngine[Service Control Tower / Skill / QA Engine]
+    GrowthOpsEngine[Lead Response / Reputation / Event Yield Engine]
+    OrgControlEngine[Cash / Title / Commission / Governance Engine]
+    PeopleOpsEngine[Recruiting / Training / Access Governance Engine]
+  end
+
+  subgraph DEPTS[Dealership Operational Departments]
+    Leadership[Ownership / GM / Operations]
+    Sales[Sales Department]
+    FI[F&I Department]
+    Service[Service Department]
+    Parts[Parts Department]
+    Accounting[Accounting / Office / Admin]
+    BDC[BDC / Customer Care]
+    Marketing[Marketing]
+    CX[Customer Experience / Retention]
+    HR[HR]
+    Payroll[Payroll]
+    Compliance[Compliance / Title / Registration / Legal]
+    Inventory[Inventory Management]
+    Yard[Facilities / Yard / Marina / Logistics]
+    IT[IT / Systems / Data]
+  end
+
+  subgraph SALESOPS[Sales Functions]
+    NewSales[New Boat Sales]
+    UsedSales[Used Boat Sales]
+    Brokerage[Brokerage / Consignment]
+    Consignment[Consignment Intake / Owner Onboarding]
+    BrokerageDesk[Brokerage Listing / Deal Coordination]
+    TradeAcq[Trade-In Acquisition]
+    TradeDesk[Trade Desk / Appraisal Control]
+    Desking[Desking / Quote / Payment Proposal]
+    ReserveOpt[Reserve / Product Margin Optimization]
+    StipDesk[Lender Stips / Callback Resolution]
+    DeliveryHandoff[Delivery Handoff / Promise Review]
+    DemoFleet[Demo Fleet / Show Readiness]
+    Wholesale[Wholesale / Auction Disposition]
+    AccessoryStudio[Accessory / Electronics Package Studio]
+    CertifiedUsed[Certified Used / Buyer Assurance]
+    BuyerAssurance[Buyer Assurance / Transparency Desk]
+    ProductSpec[Delivery / Product Specialist]
+    DeliveryPromiseBoard[We-Owe / Delivery Promise Board]
+  end
+
+  subgraph CUSTOMEROPS[BDC, Marketing, and CX Control]
+    LeadResponseDesk[Speed-to-Lead / SLA Desk]
+    AppointmentRecovery[No-Show / Missed Appointment Recovery]
+    LostSaleWinback[Lost Sale / Lost Lead Winback]
+    ReputationDesk[Review Recovery / Reputation Desk]
+    EventROI[Boat Show / Event ROI Desk]
+    RenewalDesk[Renewal / Anniversary Save Desk]
+    ReferralDesk[Referral / Ambassador Activation Desk]
+    UpgradeSignalBoard[Usage / Equity / Upgrade Trigger Board]
+  end
+
+  subgraph SERVICEOPS[Service Functions]
+    Warranty[Warranty Repairs]
+    CustomerPay[Customer-Pay Repairs]
+    Dispatch[Service Dispatch / Load Leveling]
+    TechSchedule[Technician Scheduling / Bay Calendar]
+    WarrantyAdmin[Warranty Authorization / Claim Admin]
+    SkillMatrix[Technician Skill Matrix / Dispatch Rules]
+    BayEfficiency[Bay Efficiency / Throughput Control]
+    FillRate[Parts Fill Rate / Service Readiness]
+    WarrantyEscalation[Warranty Escalation / OEM Backline]
+    ComebackQC[Comeback / QC Watch]
+    PreSaleInspect[Pre-Sale Inspection / Compression / Survey Review]
+    HaulCoord[Haul-Out / Launch Coordination]
+    Rigging[Rigging / PDI / Delivery Prep]
+    Seasonal[Winterization / Spring Commissioning]
+    Electronics[Electronics / Installations]
+    Detail[Detail / Reconditioning]
+    MobileSvc[Mobile Service]
+    MobileRoute[Mobile Route Planning]
+    Storage[Storage / Launch / Retrieval]
+    StorageTurn[Storage Turnover / Yard Staging]
+    ReconCenter[Reconditioning / Turn Readiness]
+    WaterTest[Water Test / Sea Trial Validation]
+    RecallOps[Recall / Campaign Completion]
+  end
+
+  subgraph MARINAOPS[Marina, Dockside, and Waterfront Revenue]
+    SlipSales[Slip / Storage Sales / Renewal]
+    Dockmaster[Dockmaster / Berth Assignment]
+    DocksideSvc[Dockside Service / Concierge Dispatch]
+    FuelDock[Fuel Dock / Pump-Out / Waterfront Revenue]
+    RentalDesk[Rental / Charter Sales Desk]
+    UtilizationBoard[Fleet Utilization / Yield Board]
+    TurnaroundOps[Turnaround / Clean / Ready Line]
+    DamageRecovery[Damage / Incident Recovery]
+    ClubTurn[Club / Rental Turnover]
+    WaitlistYieldBoard[Slip Waitlist / Seasonal Yield Board]
+    GuestExperienceDesk[Transient / Concierge Experience Desk]
+  end
+
+  subgraph PARTSOPS[Parts and Accessories Functions]
+    OEMParts[OEM Parts]
+    Accessory[Accessories / Safety / Electronics]
+    Procurement[Procurement / Replenishment Planning]
+    Kitting[Install Kits / Rigging Staging]
+    Counter[Retail Counter Sales]
+    SpecialOrder[Special Orders]
+    OnlineParts[Online Parts Sales]
+    AccessoryDemandBoard[Accessory Demand / Bundle Planning]
+    ExpediteDesk[Special Order / Expedite Desk]
+    EcomFulfillment[Ecommerce Fulfillment / Pick-Pack-Ship]
+    ReturnsCoreDesk[Returns / Core / Warranty Parts Desk]
+  end
+
+  subgraph BACKOFFICE[Financial and Control Functions]
+    DealAccounting[Deal Accounting]
+    Floorplan[Floorplan Accounting]
+    AP[Accounts Payable]
+    AR[Accounts Receivable]
+    WarrantyRec[Warranty Receivables]
+    ConsignmentPay[Consignment Owner Statements / Payables]
+    FundingDesk[Funding / Lender Packet Tracking]
+    DealAudit[Deal Jacket / Compliance Audit]
+    StorageAR[Storage / Slip A/R]
+    TaxTitle[Tax / Title / Registration]
+    CashFlow[Cash Flow / Reconciliation / Reporting]
+    PayoffDesk[Payoff / Lien Release Desk]
+    CashApp[Cash Application / Deposit Match]
+    ChargebackWatch[Reserve Chargeback / Cancellation Watch]
+    ContractDesk[Slip / Membership Contract Desk]
+    AutopayWatch[Autopay / Delinquency Recovery Desk]
+  end
+
+  subgraph ORGOPS[Leadership, HR, IT, and Control]
+    OpsPulse[Executive Daily Pulse / Variance Review]
+    RecruitPipeline[Recruiting Pipeline / Hiring Bench]
+    TrainingAcademy[Training / Product Certification]
+    CommissionDesk[Commission Audit / Pay Plan Control]
+    TreasuryDesk[Cash / Floorplan / Treasury Watch]
+    TitleWatch[Title / Registration Watchtower]
+    AccessControl[Identity / Access Governance]
+    DataGovernance[Data Quality / Master Data Governance]
+  end
+
+  subgraph EXT[External Systems and Data Sources]
+    DMS[DMS]
+    CRM[CRM]
+    ERP[Accounting / ERP]
+    PayrollSys[Payroll System]
+    OEM[OEM / Manufacturer Portals]
+    Lenders[Banks / Credit Unions / Marine Lenders]
+    ListingSites[Boat Trader / YachtWorld / OEM Listings]
+    Payment[Payment Gateway]
+    DocSign[E-Sign / Document Management]
+    Phone[Phone / Text / Chat Platform]
+    Maps[Marina / Store Locator / Maps]
+    ReviewsAPI[Google / Review Platforms]
+    SurveyAPI[CSI / NPS / Survey Platform]
+    IntegrationHub[Outsourced Integration Hub / iPaaS]
+    MediaVendor[Photo / Video / 360 Asset Vendor]
+    Agency[Digital Agency / SEO / Paid Media Partner]
+    MarinaSys[Marina / Storage Management System]
+    MarketData[Marine Valuation / Market Pricing Data]
+    Telematics[Connected Boat / Telematics Data]
+    Insurance[Marine Insurance / Protection Providers]
+    TitleVendor[Title / Registration / Documentation Vendor]
+    BoatHistory[Boat History / Recall / Vessel Data]
+    Transport[Boat Transport / Delivery Carrier]
+    AuctionAPI[Wholesale / Auction Marketplace]
+    ClubAPI[Boat Club / Rental / Charter Platform]
+    SurveyVendor[Marine Survey / Inspection Partner]
+    ReservationAPI[Slip / Reservation / Marina Marketplace]
+    WaiverAPI[Waiver / Damage / Incident Platform]
+    DistributorAPI[OEM / Aftermarket Distributor Feeds]
+    ShippingAPI[Carrier / Parcel / Freight Platform]
+    WeatherFeed[Weather / Seasonality Demand Feed]
+    LoyaltyAPI[Referral / Loyalty Platform]
+  end
+
+  subgraph DATA[Data, Reporting, KPI, Governance]
+    CDP[Customer plus Inventory plus RO Unified Data]
+    KPI[KPI Dashboards]
+    SalesKPI[Sales KPIs]
+    FIKPI[F&I KPIs]
+    ServiceKPI[Service KPIs]
+    PartsKPI[Parts KPIs]
+    BDCKPI[BDC KPIs]
+    AccountingKPI[Accounting KPIs]
+    HRKPI[HR / Payroll KPIs]
+    CapacityKPI[Capacity / Utilization KPIs]
+    RetentionKPI[Customer Experience / Retention KPIs]
+    TurnKPI[Inventory Turn / Aging KPIs]
+    ActivationKPI[Delivery / Activation KPIs]
+    MarinaKPI[Storage / Slip KPIs]
+    BrokerageKPI[Brokerage / Consignment KPIs]
+    AssuranceKPI[Used / Certification KPIs]
+    FleetEconomicsKPI[Rental / Club Unit Economics KPIs]
+    ServiceControlKPI[Service Control / QA KPIs]
+    GrowthKPI[Lead / Appointment / Reputation KPIs]
+    ControlKPI[Cash / Title / Governance KPIs]
+    PeopleKPI[Hiring / Training / Access KPIs]
+    DealFlowKPI[Funding / Promise / Payoff KPIs]
+    PartsCommerceKPI[Parts Retail / Fulfillment KPIs]
+    OwnerSuccessKPI[Renewal / Referral / Upgrade KPIs]
+    MarinaYieldKPI[Occupancy / Waitlist / Autopay KPIs]
+    Alerting[Aging / Follow-Up / Compliance Alerts]
+  end
+
+  Desktop --> PBC
+  Desktop --> OMG
+  Mobile --> PBC
+  Mobile --> OMG
+  Tablet --> PBC
+  Tablet --> OMG
+  SalesRep --> Unified
+  CallCenter --> Unified
+  Events --> Unified
+  Referral --> Unified
+
+  PBC --> Unified
+  OMG --> Unified
+
+  Unified --> WebApp
+  Unified --> Portal
+  Unified --> CMS
+  Unified --> Search
+  Unified --> Specials
+  Unified --> Scheduler
+  Unified --> Ecommerce
+  Unified --> FinanceLead
+  Unified --> TradeTool
+  Unified --> ReviewHub
+  Unified --> EventsHub
+
+  CMS --> Awareness
+  EventsHub --> Awareness
+  Specials --> Awareness
+  Search --> LeadCapture
+  TradeTool --> LeadCapture
+  FinanceLead --> LeadCapture
+  Scheduler --> LeadCapture
+  Portal --> Ownership
+  Ecommerce --> Ownership
+  ReviewHub --> Awareness
+
+  Awareness --> LeadCapture
+  LeadCapture --> Qualification
+  Qualification --> Appointment
+  Appointment --> SeaTrial
+  SeaTrial --> DealStruct
+  DealStruct --> FIProcess
+  FIProcess --> DeliveryPrep
+  DeliveryPrep --> Delivery
+  Delivery --> Ownership
+  Delivery --> OwnerActivation
+  Ownership --> Membership
+  Ownership --> ServicePlan
+  Ownership --> EventNurture
+  Ownership --> ReferralProgram
+  Ownership --> UpgradeReady
+  Ownership --> ServiceRetention
+
+  WebApp --> API
+  Portal --> Auth
+  Search --> InventoryEngine
+  Scheduler --> ServiceEngine
+  Ecommerce --> PartsEngine
+  FinanceLead --> FinanceEngine
+  FinanceLead --> DealFlowEngine
+  CMS --> ContentEngine
+  Unified --> Notification
+  Unified --> Analytics
+  API --> CRMLogic
+  API --> InventoryEngine
+  API --> ServiceEngine
+  API --> PartsEngine
+  API --> FinanceEngine
+  API --> ContentEngine
+  API --> WorkflowEngine
+  API --> DocsEngine
+  API --> CapacityEngine
+  API --> RetentionEngine
+  API --> PricingEngine
+  API --> DeliveryEngine
+  API --> BrokerageEngine
+  API --> AssuranceEngine
+  API --> MarinaRevenueEngine
+  API --> FleetOpsEngine
+  API --> ServiceControlEngine
+  API --> GrowthOpsEngine
+  API --> OrgControlEngine
+  API --> PeopleOpsEngine
+  API --> DealFlowEngine
+  API --> PartsCommerceEngine
+  API --> OwnerSuccessEngine
+  API --> MarinaYieldEngine
+
+  Leadership --> Sales
+  Leadership --> FI
+  Leadership --> Service
+  Leadership --> Parts
+  Leadership --> Accounting
+  Leadership --> BDC
+  Leadership --> Marketing
+  Leadership --> CX
+  Leadership --> HR
+  Leadership --> Payroll
+  Leadership --> Compliance
+  Leadership --> Inventory
+  Leadership --> Yard
+  Leadership --> IT
+
+  Sales --> NewSales
+  Sales --> UsedSales
+  Sales --> Brokerage
+  Sales --> Consignment
+  Sales --> BrokerageDesk
+  Sales --> TradeAcq
+  Sales --> TradeDesk
+  Sales --> Desking
+  Sales --> DeliveryHandoff
+  Sales --> DemoFleet
+  Sales --> Wholesale
+  Sales --> AccessoryStudio
+  Sales --> CertifiedUsed
+  Sales --> BuyerAssurance
+  Sales --> RentalDesk
+  Sales --> ProductSpec
+  Sales --> DeliveryPromiseBoard
+  Sales --> UpgradeSignalBoard
+
+  FI --> StipDesk
+  FI --> ReserveOpt
+  FI --> DeliveryHandoff
+
+  Service --> Warranty
+  Service --> CustomerPay
+  Service --> Dispatch
+  Service --> TechSchedule
+  Service --> WarrantyAdmin
+  Service --> SkillMatrix
+  Service --> BayEfficiency
+  Service --> FillRate
+  Service --> WarrantyEscalation
+  Service --> ComebackQC
+  Service --> PreSaleInspect
+  Service --> HaulCoord
+  Service --> Rigging
+  Service --> Seasonal
+  Service --> Electronics
+  Service --> Detail
+  Service --> MobileSvc
+  Service --> MobileRoute
+  Service --> Storage
+  Service --> StorageTurn
+  Service --> ReconCenter
+  Service --> WaterTest
+  Service --> RecallOps
+
+  Yard --> HaulCoord
+  Yard --> StorageTurn
+  Yard --> Dockmaster
+  Yard --> FuelDock
+  Yard --> TurnaroundOps
+  Yard --> DamageRecovery
+  Yard --> ClubTurn
+  Yard --> GuestExperienceDesk
+
+  Parts --> OEMParts
+  Parts --> Accessory
+  Parts --> Procurement
+  Parts --> Kitting
+  Parts --> Counter
+  Parts --> SpecialOrder
+  Parts --> OnlineParts
+  Parts --> AccessoryStudio
+  Parts --> AccessoryDemandBoard
+  Parts --> ExpediteDesk
+  Parts --> EcomFulfillment
+  Parts --> ReturnsCoreDesk
+
+  Accounting --> DealAccounting
+  Accounting --> Floorplan
+  Accounting --> AP
+  Accounting --> AR
+  Accounting --> WarrantyRec
+  Accounting --> ConsignmentPay
+  Accounting --> FundingDesk
+  Accounting --> DealAudit
+  Accounting --> StorageAR
+  Accounting --> TaxTitle
+  Accounting --> CashFlow
+  Accounting --> CommissionDesk
+  Accounting --> TreasuryDesk
+  Accounting --> PayoffDesk
+  Accounting --> CashApp
+  Accounting --> ChargebackWatch
+  Accounting --> ContractDesk
+  Accounting --> AutopayWatch
+
+  BDC --> LeadResponseDesk
+  BDC --> AppointmentRecovery
+  BDC --> LostSaleWinback
+
+  Marketing --> ReputationDesk
+  Marketing --> EventROI
+
+  CX --> ReputationDesk
+  CX --> RenewalDesk
+  CX --> ReferralDesk
+
+  Leadership --> OpsPulse
+
+  HR --> RecruitPipeline
+  HR --> TrainingAcademy
+
+  Compliance --> TitleWatch
+
+  IT --> AccessControl
+  IT --> DataGovernance
+
+  Qualification --> BDC
+  Appointment --> Sales
+  SeaTrial --> Sales
+  DealStruct --> Sales
+  FIProcess --> FI
+  DeliveryPrep --> Service
+  DeliveryPrep --> Parts
+  Delivery --> ProductSpec
+  ServiceRetention --> Service
+  ServiceRetention --> Parts
+  ServiceRetention --> BDC
+  ServiceRetention --> Marketing
+
+  Sales -->|Customer info / deal structure / trade / accessories| FI
+  FI -->|Approvals / funding requirements / docs needed| Sales
+  Sales -->|Sold unit / promises / delivery deadline / install list| Service
+  Service -->|Readiness / issues / completion ETA| Sales
+  Service -->|RO / needed parts / urgency / warranty status| Parts
+  Parts -->|Availability / ETA / cost / alternatives| Service
+  FI -->|Signed contracts / lender approval / products / stips| Accounting
+  Accounting -->|Funding status / missing docs / commission eligibility| FI
+  Accounting --> Payroll
+  BDC --> Sales
+  BDC --> Service
+  Sales --> BDC
+  Service --> BDC
+  Accounting --> Compliance
+  Compliance --> Accounting
+
+  CRMLogic --> BDC
+  CRMLogic --> Sales
+  CRMLogic --> Marketing
+  FinanceEngine --> FI
+  FinanceEngine --> TradeDesk
+  FinanceEngine --> StipDesk
+  FinanceEngine --> ReserveOpt
+  FinanceEngine --> DealFlowEngine
+  InventoryEngine --> Inventory
+  InventoryEngine --> Sales
+  InventoryEngine --> Marketing
+  ServiceEngine --> Service
+  ServiceEngine --> BDC
+  ServiceEngine --> TechSchedule
+  ServiceEngine --> MobileRoute
+  PartsEngine --> Parts
+  PartsEngine --> Service
+  PartsEngine --> PartsCommerceEngine
+  ContentEngine --> Marketing
+  Notification --> BDC
+  Notification --> Service
+  Notification --> Marketing
+  CRMLogic --> RetentionEngine
+  ServiceEngine --> Dispatch
+  ServiceEngine --> WarrantyAdmin
+  PartsEngine --> Procurement
+  PartsEngine --> Kitting
+  Notification --> RetentionEngine
+  WorkflowEngine --> BDC
+  WorkflowEngine --> Sales
+  WorkflowEngine --> Service
+  WorkflowEngine --> Accounting
+  WorkflowEngine --> Compliance
+  WorkflowEngine --> DeliveryHandoff
+  DocsEngine --> FI
+  DocsEngine --> FundingDesk
+  DocsEngine --> DealAudit
+  DocsEngine --> StipDesk
+  CapacityEngine --> Dispatch
+  CapacityEngine --> Service
+  CapacityEngine --> Yard
+  CapacityEngine --> TechSchedule
+  CapacityEngine --> HaulCoord
+  CapacityEngine --> MobileRoute
+  CapacityEngine --> StorageTurn
+  RetentionEngine --> CX
+  RetentionEngine --> BDC
+  RetentionEngine --> Marketing
+  RetentionEngine --> Membership
+  RetentionEngine --> ServicePlan
+  RetentionEngine --> EventNurture
+  RetentionEngine --> ReferralProgram
+  RetentionEngine --> UpgradeReady
+  RetentionEngine --> OwnerSuccessEngine
+  PricingEngine --> Inventory
+  PricingEngine --> Sales
+  PricingEngine --> Marketing
+  DeliveryEngine --> ProductSpec
+  DeliveryEngine --> BDC
+  DeliveryEngine --> CX
+  BrokerageEngine --> BrokerageDesk
+  BrokerageEngine --> Consignment
+  BrokerageEngine --> Inventory
+  BrokerageEngine --> Marketing
+  AssuranceEngine --> CertifiedUsed
+  AssuranceEngine --> BuyerAssurance
+  AssuranceEngine --> PreSaleInspect
+  MarinaRevenueEngine --> SlipSales
+  MarinaRevenueEngine --> Dockmaster
+  MarinaRevenueEngine --> DocksideSvc
+  MarinaRevenueEngine --> FuelDock
+  MarinaRevenueEngine --> RentalDesk
+  MarinaRevenueEngine --> UtilizationBoard
+  MarinaRevenueEngine --> TurnaroundOps
+  MarinaRevenueEngine --> DamageRecovery
+  MarinaRevenueEngine --> ClubTurn
+  MarinaRevenueEngine --> StorageAR
+  MarinaRevenueEngine --> MarinaYieldEngine
+  FleetOpsEngine --> RentalDesk
+  FleetOpsEngine --> UtilizationBoard
+  FleetOpsEngine --> TurnaroundOps
+  FleetOpsEngine --> DamageRecovery
+  FleetOpsEngine --> ClubTurn
+  ServiceControlEngine --> SkillMatrix
+  ServiceControlEngine --> BayEfficiency
+  ServiceControlEngine --> FillRate
+  ServiceControlEngine --> WarrantyEscalation
+  ServiceControlEngine --> ComebackQC
+  GrowthOpsEngine --> LeadResponseDesk
+  GrowthOpsEngine --> AppointmentRecovery
+  GrowthOpsEngine --> LostSaleWinback
+  GrowthOpsEngine --> ReputationDesk
+  GrowthOpsEngine --> EventROI
+  OrgControlEngine --> OpsPulse
+  OrgControlEngine --> CommissionDesk
+  OrgControlEngine --> TreasuryDesk
+  OrgControlEngine --> TitleWatch
+  OrgControlEngine --> DataGovernance
+  PeopleOpsEngine --> RecruitPipeline
+  PeopleOpsEngine --> TrainingAcademy
+  PeopleOpsEngine --> AccessControl
+  DealFlowEngine --> DeliveryPromiseBoard
+  DealFlowEngine --> PayoffDesk
+  DealFlowEngine --> CashApp
+  DealFlowEngine --> ChargebackWatch
+  PartsCommerceEngine --> AccessoryDemandBoard
+  PartsCommerceEngine --> ExpediteDesk
+  PartsCommerceEngine --> EcomFulfillment
+  PartsCommerceEngine --> ReturnsCoreDesk
+  OwnerSuccessEngine --> RenewalDesk
+  OwnerSuccessEngine --> ReferralDesk
+  OwnerSuccessEngine --> UpgradeSignalBoard
+  MarinaYieldEngine --> WaitlistYieldBoard
+  MarinaYieldEngine --> GuestExperienceDesk
+  MarinaYieldEngine --> ContractDesk
+  MarinaYieldEngine --> AutopayWatch
+
+  API -->|Pulls customer / deal / RO / unit records| DMS
+  API -->|Pushes leads / pulls follow-up and appointment status| CRM
+  API -->|Posts journals / pulls funding and GL status| ERP
+  API -->|Pushes payroll exports / pulls labor cost| PayrollSys
+  API -->|Pulls specs / pricing / programs / warranty data| OEM
+  API -->|Pushes credit apps / pulls approvals / stips| Lenders
+  API -->|Pushes listings / pulls leads / listing status| ListingSites
+  API -->|Pushes deposits / pulls payment results / fees| Payment
+  API -->|Pushes contracts / pulls signatures / completed packets| DocSign
+  API -->|Pushes calls / texts / chats / pulls transcripts| Phone
+  API -->|Pulls store / marina / geolocation context| Maps
+  API -->|Pulls ratings / pushes review requests| ReviewsAPI
+  API -->|Pushes delivery and service survey invites / pulls response sentiment| SurveyAPI
+  API -->|Syncs vendor jobs / webhooks / retries| IntegrationHub
+  API -->|Pushes quote requests / pulls policy and cancellation status| Insurance
+  API -->|Pushes title packets / pulls registration and documentation status| TitleVendor
+  API -->|Pulls accident history / recall / prior ownership flags| BoatHistory
+  API -->|Pushes haul routes / delivery schedules / pulls ETA updates| Transport
+  API -->|Pulls survey findings / inspection packet status| SurveyVendor
+  API -->|Pushes berth availability / pulls reservation demand and occupancy| ReservationAPI
+  API -->|Pushes waivers / pulls incident and damage status| WaiverAPI
+  API -->|Pulls distributor availability / cost / supersession lookups| DistributorAPI
+  API -->|Pushes shipments / pulls tracking and delivery events| ShippingAPI
+  API -->|Pulls marine weather / seasonality / closure risk signals| WeatherFeed
+  API -->|Pushes referral invites / pulls reward and advocate status| LoyaltyAPI
+
+  DMS -->|Feeds sold units / deals / ROs / customer master| CDP
+  CRM -->|Feeds lead sources / activities / cadence results| CDP
+  ERP -->|Feeds GL / AP / AR / funding / cash data| CDP
+  PayrollSys -->|Feeds payroll costs / commissions / labor data| CDP
+  OEM -->|Feeds specs / warranty claims / program data| CDP
+  Lenders -->|Feeds approvals / funding / stip trends| CDP
+  ListingSites -->|Feeds listing views / inquiries / source quality| CDP
+  Payment -->|Feeds deposits / payment outcomes / fees| CDP
+  DocSign -->|Feeds envelope status / signed contract completion| CDP
+  Phone -->|Feeds calls / recordings / text performance| CDP
+  ReviewsAPI -->|Feeds review volume / score / sentiment| CDP
+  SurveyAPI -->|Feeds CSI / NPS / retention sentiment| CDP
+  Agency -->|Feeds ad spend / conversion / attribution detail| CDP
+  MarinaSys -->|Feeds storage occupancy / slip billing / haul-outs| CDP
+  MarketData -->|Feeds valuation comps / pricing benchmarks| CDP
+  Telematics -->|Feeds hours / alerts / connected-boat usage| CDP
+  Insurance -->|Feeds quote volume / binds / claims signals| CDP
+  TitleVendor -->|Feeds title status / registration backlog / packet completion| CDP
+  BoatHistory -->|Feeds history flags / recall exposure / ownership checks| CDP
+  Transport -->|Feeds route status / carrier ETA / delivery exceptions| CDP
+  SurveyVendor -->|Feeds survey findings / condition grades / inspection outcomes| CDP
+  ReservationAPI -->|Feeds transient demand / reservation conversion / berth occupancy| CDP
+  WaiverAPI -->|Feeds waiver completion / incident recovery / damage holds| CDP
+  DistributorAPI -->|Feeds distributor stock / pricing / supersession / ETA data| CDP
+  ShippingAPI -->|Feeds parcel status / proof of delivery / delay events| CDP
+  WeatherFeed -->|Feeds boating-day forecasts / storm risk / seasonal demand shifts| CDP
+  LoyaltyAPI -->|Feeds advocate activity / reward redemptions / referral conversion| CDP
+  IntegrationHub -->|Feeds sync failures / retry backlog / vendor outages| Alerting
+
+  OEM -->|New inventory / specs / pricing / incentives| InventoryEngine
+  DMS -->|Used inventory / deals / ROs / customer records| API
+  CRM -->|Leads / follow-up / source tracking| CRMLogic
+  ListingSites -->|Inbound listing traffic / outbound syndication| InventoryEngine
+  IntegrationHub -->|Pushes media shot lists / pulls approved assets| MediaVendor
+  IntegrationHub -->|Pushes campaign audiences / pulls ad results| Agency
+  IntegrationHub -->|Pulls slip / storage / haul-out activity| MarinaSys
+  IntegrationHub -->|Pulls pricing comps / sold-boat market data| MarketData
+  IntegrationHub -->|Pulls engine hours / alerts / usage data| Telematics
+  IntegrationHub -->|Pushes quote requests / pulls policy outcomes| Insurance
+  IntegrationHub -->|Pushes registration packets / pulls title status| TitleVendor
+  IntegrationHub -->|Pulls recall and vessel-history records| BoatHistory
+  IntegrationHub -->|Pushes carrier dispatch / pulls haul ETA| Transport
+  IntegrationHub -->|Pulls survey packets / inspection findings| SurveyVendor
+  IntegrationHub -->|Pushes transient inventory / pulls marina reservations| ReservationAPI
+  IntegrationHub -->|Pushes waivers / pulls incident charges and claim recovery| WaiverAPI
+  IntegrationHub -->|Pulls distributor inventory / pricing / order status| DistributorAPI
+  IntegrationHub -->|Pushes shipping labels / pulls parcel tracking and proof of delivery| ShippingAPI
+  IntegrationHub -->|Pulls marine weather / boating-day forecasts| WeatherFeed
+  IntegrationHub -->|Pushes owner referrals / pulls reward and advocate status| LoyaltyAPI
+  MediaVendor -->|Photos / video / 360 tours| InventoryEngine
+  MediaVendor -->|Brand assets / landing-page media| ContentEngine
+  Agency -->|Campaign spend / attribution / launch timing| Analytics
+  Agency -->|Campaign reporting / SEO and paid-media feedback| Marketing
+  Marketing -->|Budgets / offers / calendars / creative| Agency
+  MarinaSys -->|Storage contracts / berth activity / service add-ons| ServiceEngine
+  MarinaSys -->|Haul-outs / launch timing / yard moves| HaulCoord
+  MarinaSys -->|Storage billing events| Accounting
+  MarketData -->|Valuation comps / brokerage pricing guidance| InventoryEngine
+  MarketData -->|Appraisal guidance / resale pricing| Sales
+  MarketData -->|Trade valuation comps / retail spread checks| TradeDesk
+  Telematics -->|Engine hours / service alerts / preventive triggers| ServiceEngine
+  Telematics -->|Usage trends / service-plan and upgrade signals| UpgradeReady
+  OEM -->|Prior approval rules / reimbursement updates| WarrantyAdmin
+  Insurance -->|Marine insurance / protection package quoting| FI
+  TitleVendor -->|Registration status / title packet completion| Compliance
+  BoatHistory -->|Recall / damage / ownership checks| InventoryEngine
+  BoatHistory -->|History flags / disclosure support| Sales
+  BoatHistory -->|Disclosure packet / prior-owner context| BuyerAssurance
+  Transport -->|Pickup windows / carrier ETA / launch logistics| Yard
+  Transport -->|Home delivery / dealer transfer ETA| Delivery
+  OEM -->|Recall bulletins / campaign status / required completions| RecallOps
+  IntegrationHub -->|Pushes aged units / pulls auction bids and sale status| AuctionAPI
+  IntegrationHub -->|Pulls membership reservations / club usage / charter activity| ClubAPI
+  AuctionAPI -->|Bid activity / sold statuses / wholesale price signals| PricingEngine
+  AuctionAPI -->|Aged-unit disposition / bid outcomes| Wholesale
+  ClubAPI -->|Reservation behavior / usage / member conversion| Membership
+  ClubAPI -->|Club utilization / trial-to-owner signals| EventNurture
+  ClubAPI -->|Turn schedules / rental utilization / fleet readiness| ClubTurn
+  ClubAPI -->|Trip volume / utilization / downtime patterns| UtilizationBoard
+  SurveyVendor -->|Survey findings / inspection packet clarity| AssuranceEngine
+  SurveyVendor -->|Compression / hull / systems review findings| PreSaleInspect
+  ReservationAPI -->|Reservation demand / berth occupancy / transient slip revenue| MarinaRevenueEngine
+  ReservationAPI -->|Slip availability / reservation intake| SlipSales
+  ReservationAPI -->|Rental demand / charter reservations / booking pace| FleetOpsEngine
+  ReservationAPI -->|Bookings / capacity demand / transient requests| RentalDesk
+  SurveyAPI -->|CSI recovery cases / detractor outreach| CX
+  SurveyAPI -->|Delivery feedback / onboarding issues / activation follow-up| OwnerActivation
+  SurveyAPI -->|Detractors / public-review save chances| ReputationDesk
+  SurveyAPI -->|Owner sentiment / promoter recovery / renewal risk| RenewalDesk
+  Maps -->|Territory drive time / dock routing| MobileRoute
+  Lenders -->|Stips / callbacks / funding conditions| StipDesk
+  MarketData -->|Retail pricing / market aging / price-drop guidance| PricingEngine
+  MarketData -->|Brokerage pricing guidance / used market comps| BrokerageDesk
+  MarketData -->|Rental rate comps / seasonal demand pricing| UtilizationBoard
+  MarketData -->|Resale momentum / equity windows / upgrade affordability| UpgradeSignalBoard
+  Telematics -->|First-usage patterns / onboarding success / idle alerts| OwnerActivation
+  Telematics -->|Trip hours / idle days / fleet usage intensity| UtilizationBoard
+  Telematics -->|Usage streaks / idle risk / trip confidence| UpgradeSignalBoard
+  Payment -->|Rental deposits / charter settlement / incident holds| FleetOpsEngine
+  Payment -->|Deposit matching / refund and chargeback activity| CashApp
+  Payment -->|Autopay failures / stored-payment health / recovery events| AutopayWatch
+  WaiverAPI -->|Damage holds / waiver completion / incident flags| DamageRecovery
+  DMS -->|Comeback frequency / repeat repair flags| ComebackQC
+  DMS -->|Open due bills / we-owe items / promise status| DeliveryPromiseBoard
+  Lenders -->|Funding aging / reserve adjustments / payoff status| DealFlowEngine
+  DocSign -->|Signed due bills / payoff authorizations / title docs| DealFlowEngine
+  DistributorAPI -->|Availability / supersessions / alternates / landed cost| Procurement
+  DistributorAPI -->|Special-order ETA / alternates / allocation risks| ExpediteDesk
+  ShippingAPI -->|Tracking / delivery ETA / proof of delivery| EcomFulfillment
+  OEM -->|Warranty core / return authorization / parts recovery rules| ReturnsCoreDesk
+  CRM -->|Renewal dates / promoter owners / referral-ready accounts| RenewalDesk
+  CRM -->|Advocate owners / ambassador status / invite readiness| ReferralDesk
+  ReservationAPI -->|Waitlist depth / transient demand / stay-length mix| WaitlistYieldBoard
+  WeatherFeed -->|Boating-day outlook / storm closures / weekend demand lift| WaitlistYieldBoard
+  LoyaltyAPI -->|Advocate status / reward progress / referral credits| ReferralDesk
+  MarinaSys -->|Contract dates / occupancy / autopay enrollment| ContractDesk
+  CRM -->|Open leads / stale follow-up / no-show patterns| LeadResponseDesk
+  Phone -->|Missed calls / text backlog / response lag| LeadResponseDesk
+  Scheduler -->|No-shows / reschedules / appointment fallout| AppointmentRecovery
+  ReviewsAPI -->|Public detractors / recent review recovery cases| ReputationDesk
+  EventsHub -->|Boat-show RSVP volume / registrations / follow-up demand| EventROI
+  Analytics -->|Response speed / show ROI / channel quality| GrowthOpsEngine
+  ERP -->|Cash position / floorplan interest / payable pressure| TreasuryDesk
+  PayrollSys -->|Commission pay-plan data / overtime drift| CommissionDesk
+  TitleVendor -->|Packet aging / title exceptions / registration backlog| TitleWatch
+  Auth -->|User roles / MFA / login access events| AccessControl
+  DMS -->|Cross-system duplicates / unit and customer conflicts| DataGovernance
+  CRM -->|Lead and customer duplicate risk / source integrity| DataGovernance
+  ERP -->|Entity / GL mapping and posting integrity| DataGovernance
+  Inventory -->|Boat details / HIN / aging / availability| InventoryEngine
+  Sales -->|Trade appraisals / brokerage / consignment| InventoryEngine
+  Service -->|Service menu / seasonal offers / repair status| ServiceEngine
+  Parts -->|Parts catalog / accessory packages / specials| PartsEngine
+  Marketing -->|Campaigns / offers / pages / events| ContentEngine
+  WorkflowEngine --> LeadResponseDesk
+  WorkflowEngine --> CommissionDesk
+  WorkflowEngine --> TitleWatch
+  WorkflowEngine --> DealFlowEngine
+  DocsEngine --> TitleWatch
+  DocsEngine --> DealFlowEngine
+
+  Inventory -->|Boat selected| Sales
+  LeadResponseDesk --> BDCKPI
+  LeadResponseDesk --> GrowthKPI
+  AppointmentRecovery --> Sales
+  AppointmentRecovery --> GrowthKPI
+  LostSaleWinback --> BDC
+  LostSaleWinback --> GrowthKPI
+  ReputationDesk --> CX
+  ReputationDesk --> ReviewHub
+  ReputationDesk --> GrowthKPI
+  EventROI --> Marketing
+  EventROI --> GrowthKPI
+  RenewalDesk --> Membership
+  RenewalDesk --> StorageRenewal
+  RenewalDesk --> OwnerSuccessKPI
+  ReferralDesk --> ReferralProgram
+  ReferralDesk --> OwnerSuccessKPI
+  UpgradeSignalBoard --> UpgradeReady
+  UpgradeSignalBoard --> RepowerCycle
+  UpgradeSignalBoard --> OwnerSuccessKPI
+  OpsPulse --> Leadership
+  CommissionDesk --> Payroll
+  CommissionDesk --> ControlKPI
+  TreasuryDesk --> CashFlow
+  TreasuryDesk --> ControlKPI
+  TitleWatch --> Compliance
+  TitleWatch --> ControlKPI
+  AccessControl --> IT
+  AccessControl --> ControlKPI
+  DataGovernance --> CDP
+  DataGovernance --> ControlKPI
+  RecruitPipeline --> HRKPI
+  RecruitPipeline --> PeopleKPI
+  TrainingAcademy --> Sales
+  TrainingAcademy --> Service
+  TrainingAcademy --> BDC
+  TrainingAcademy --> PeopleKPI
+  Ecommerce --> PartsCommerceEngine
+  DeliveryPromiseBoard --> Service
+  DeliveryPromiseBoard --> Parts
+  DeliveryPromiseBoard --> ProductSpec
+  DeliveryPromiseBoard --> DealFlowKPI
+  PayoffDesk --> Accounting
+  PayoffDesk --> TitleWatch
+  PayoffDesk --> DealFlowKPI
+  CashApp --> Accounting
+  CashApp --> DealFlowKPI
+  ChargebackWatch --> FI
+  ChargebackWatch --> DealFlowKPI
+  AccessoryDemandBoard --> AccessoryStudio
+  AccessoryDemandBoard --> PartsCommerceKPI
+  ExpediteDesk --> Procurement
+  ExpediteDesk --> PartsCommerceKPI
+  EcomFulfillment --> OnlineParts
+  EcomFulfillment --> PartsCommerceKPI
+  ReturnsCoreDesk --> WarrantyAdmin
+  ReturnsCoreDesk --> PartsCommerceKPI
+  DealStruct --> TradeDesk
+  Brokerage --> Consignment
+  Brokerage --> BrokerageDesk
+  Consignment --> BrokerageDesk
+  Consignment --> DocsEngine
+  BrokerageDesk --> InventoryEngine
+  BrokerageDesk --> Marketing
+  BrokerageDesk --> ConsignmentPay
+  UsedSales --> CertifiedUsed
+  RentalDesk --> LeadCapture
+  RentalDesk --> ClubTurn
+  RentalDesk --> FleetEconomicsKPI
+  TradeAcq -->|ACV / payoff / appraisal notes| TradeDesk
+  TradeDesk -->|Appraisal guardrails / equity view / market comps| Desking
+  Desking -->|Payment mix / product menu / reserve guardrails| ReserveOpt
+  ReserveOpt --> FIKPI
+  DealStruct --> Desking
+  Desking --> FI
+  Sales -->|Penciled deal| FI
+  FI --> DocsEngine
+  FI -->|Missing docs / stips / callbacks| StipDesk
+  StipDesk --> FundingDesk
+  FIProcess --> DeliveryHandoff
+  DeliveryHandoff --> DeliveryPrep
+  DeliveryHandoff --> ProductSpec
+  DocSign -->|Signed packets / completed disclosures| DocsEngine
+  FundingDesk -->|Funded packets / missing stips / reserve timing| DealAudit
+  DealAudit --> Compliance
+  FI -->|Funded / approved| Accounting
+  Accounting -->|Booked deal / posted gross / payoff| Sales
+  Accounting -->|Booked deal / commissionable amounts| Payroll
+  WarrantyAdmin -->|Claim status / approved labor / parts recovery| WarrantyRec
+  Procurement -->|Stock replenishment / vendor POs / receiving priorities| AP
+  Kitting -->|Staged kits / install bundles / rigging readiness| Rigging
+  Inventory -->|Aging / turn pressure / price-watch needs| PricingEngine
+  PricingEngine -->|Price moves / aged-unit actions / turn priorities| Inventory
+  PricingEngine --> TurnKPI
+  Dispatch --> TechSchedule
+  Dispatch --> BayEfficiency
+  TechSchedule --> CapacityKPI
+  SkillMatrix --> Dispatch
+  SkillMatrix --> TechSchedule
+  SkillMatrix --> CapacityKPI
+  BayEfficiency --> CapacityKPI
+  BayEfficiency --> ServiceControlKPI
+  FillRate --> Procurement
+  FillRate --> Kitting
+  FillRate --> ServiceControlKPI
+  Parts --> FillRate
+  WarrantyEscalation --> WarrantyAdmin
+  WarrantyEscalation --> ServiceControlKPI
+  ComebackQC --> CX
+  ComebackQC --> ServiceControlKPI
+  PreSaleInspect --> CertifiedUsed
+  Storage --> HaulCoord
+  Storage --> SlipSales
+  Storage --> Dockmaster
+  HaulCoord --> StorageTurn
+  HaulCoord --> CapacityKPI
+  MobileSvc --> MobileRoute
+  MobileRoute --> Dispatch
+  MobileRoute --> CapacityKPI
+  StorageTurn --> CapacityKPI
+  ReconCenter -->|Turn-ready status / recon ETA / cosmetics complete| Inventory
+  ReconCenter --> TurnKPI
+  ReconCenter --> CertifiedUsed
+  WaterTest -->|On-water validation / readiness sign-off| DeliveryPrep
+  WaterTest --> CertifiedUsed
+  RecallOps -->|Open recalls / completion status / owner campaign needs| CX
+  RecallOps --> CertifiedUsed
+  OEM -->|Field case escalations / engineering approvals| WarrantyEscalation
+  Service -->|PDI / rigging / QC| ProductSpec
+  Parts -->|Accessories / install items| ProductSpec
+  AccessoryStudio -->|Package options / electronics bundles / install scope| Desking
+  AccessoryStudio -->|Install package commitments| ProductSpec
+  DemoFleet -->|Demo availability / show-ready units| SeaTrial
+  Wholesale -->|Aged-unit exit / auction clears| Inventory
+  CertifiedUsed --> BuyerAssurance
+  CertifiedUsed --> AssuranceKPI
+  BuyerAssurance --> Sales
+  BuyerAssurance --> SeaTrial
+  BuyerAssurance --> AssuranceKPI
+  SlipSales --> StorageAR
+  SlipSales --> MarinaKPI
+  Dockmaster --> HaulCoord
+  Dockmaster --> StorageTurn
+  Dockmaster --> DocksideSvc
+  DocksideSvc --> Dispatch
+  DocksideSvc --> MobileRoute
+  FuelDock --> StorageAR
+  FuelDock --> MarinaKPI
+  TurnaroundOps --> ClubTurn
+  TurnaroundOps --> MarinaKPI
+  DamageRecovery --> StorageAR
+  DamageRecovery --> Accounting
+  DamageRecovery --> FleetEconomicsKPI
+  ClubTurn --> Membership
+  ClubTurn --> EventNurture
+  ClubTurn --> MarinaKPI
+  ClubTurn --> FleetEconomicsKPI
+  WaitlistYieldBoard --> SlipSales
+  WaitlistYieldBoard --> RentalDesk
+  WaitlistYieldBoard --> MarinaYieldKPI
+  GuestExperienceDesk --> DocksideSvc
+  GuestExperienceDesk --> EventNurture
+  GuestExperienceDesk --> MarinaYieldKPI
+  ContractDesk --> StorageAR
+  ContractDesk --> MarinaYieldKPI
+  AutopayWatch --> Accounting
+  AutopayWatch --> StorageAR
+  AutopayWatch --> MarinaYieldKPI
+  UtilizationBoard --> PricingEngine
+  UtilizationBoard --> FleetEconomicsKPI
+  ProductSpec -->|Orientation / walkthrough / training| Delivery
+  ProductSpec --> OwnerActivation
+
+  Ownership --> Scheduler
+  Ownership --> Ecommerce
+  Ownership --> Specials
+  Ownership --> Portal
+  Ownership --> RetentionEngine
+  OwnerActivation --> ServiceRetention
+  OwnerActivation --> ActivationKPI
+  Membership --> ServiceRetention
+  Membership --> RetentionKPI
+  ServicePlan --> ServiceRetention
+  ServicePlan --> RetentionKPI
+  EventNurture --> Marketing
+  EventNurture --> RetentionKPI
+  ReferralProgram --> LeadCapture
+  ReferralProgram --> RetentionKPI
+  UpgradeReady --> Sales
+  UpgradeReady --> RetentionKPI
+  ServiceRetention --> StorageRenewal
+  ServiceRetention --> RepowerCycle
+  StorageRenewal --> SlipSales
+  StorageRenewal --> MarinaKPI
+  RepowerCycle --> Sales
+  RepowerCycle --> RetentionKPI
+  ConsignmentPay --> Accounting
+  StorageAR --> Accounting
+  Scheduler --> Service
+  Ecommerce --> Parts
+  Specials --> Marketing
+  BDC -->|Break-in / annual / winterization / upgrade reminders| Ownership
+  ServiceRetention --> CX
+  Service -->|RO history / service recommendations| CRMLogic
+  Parts -->|Accessory upsell / replacement cycle| CRMLogic
+  Marketing -->|Email / SMS / campaigns / events| Notification
+
+  HR --> Payroll
+  HR --> Leadership
+  Payroll --> Accounting
+  HR --> Sales
+  HR --> Service
+  HR --> Parts
+  HR --> BDC
+  HR --> FI
+  Yard --> Sales
+  Yard --> Service
+  Yard --> Inventory
+  IT --> Unified
+  IT --> API
+  IT --> CDP
+
+  Analytics --> CDP
+  Notification --> CDP
+  Sales --> SalesKPI
+  FI --> FIKPI
+  Service --> ServiceKPI
+  Parts --> PartsKPI
+  BDC --> BDCKPI
+  Accounting --> AccountingKPI
+  HR --> HRKPI
+  Payroll --> HRKPI
+
+  SalesKPI --> KPI
+  FIKPI --> KPI
+  ServiceKPI --> KPI
+  PartsKPI --> KPI
+  BDCKPI --> KPI
+  AccountingKPI --> KPI
+  HRKPI --> KPI
+  Dispatch --> CapacityKPI
+  CX --> RetentionKPI
+  CapacityEngine --> CapacityKPI
+  RetentionEngine --> RetentionKPI
+  DeliveryEngine --> ActivationKPI
+  BrokerageDesk --> BrokerageKPI
+  ConsignmentPay --> BrokerageKPI
+  StorageAR --> MarinaKPI
+  MarinaRevenueEngine --> MarinaKPI
+  PreSaleInspect --> AssuranceKPI
+  FleetOpsEngine --> FleetEconomicsKPI
+  FuelDock --> FleetEconomicsKPI
+  ServiceControlEngine --> ServiceControlKPI
+  GrowthOpsEngine --> GrowthKPI
+  OrgControlEngine --> ControlKPI
+  PeopleOpsEngine --> PeopleKPI
+  DealFlowEngine --> DealFlowKPI
+  PartsCommerceEngine --> PartsCommerceKPI
+  OwnerSuccessEngine --> OwnerSuccessKPI
+  MarinaYieldEngine --> MarinaYieldKPI
+  CapacityKPI --> KPI
+  RetentionKPI --> KPI
+  TurnKPI --> KPI
+  ActivationKPI --> KPI
+  MarinaKPI --> KPI
+  BrokerageKPI --> KPI
+  AssuranceKPI --> KPI
+  FleetEconomicsKPI --> KPI
+  ServiceControlKPI --> KPI
+  GrowthKPI --> KPI
+  ControlKPI --> KPI
+  PeopleKPI --> KPI
+  DealFlowKPI --> KPI
+  PartsCommerceKPI --> KPI
+  OwnerSuccessKPI --> KPI
+  MarinaYieldKPI --> KPI
+
+  KPI --> Leadership
+  CDP --> KPI
+  CDP --> Alerting
+  Alerting --> Leadership
+  Alerting --> Sales
+  Alerting --> Service
+  Alerting --> BDC
+  Alerting --> Accounting
+  Alerting --> Compliance
+
+  Service -->|Labor gross| Accounting
+  Parts -->|Parts gross| Accounting
+  Storage -->|Storage revenue| Accounting
+  Sales -->|Vehicle gross| Accounting
+  FI -->|F&I gross| Accounting
+  Accounting -->|Net profit / cash flow / absorption| Leadership

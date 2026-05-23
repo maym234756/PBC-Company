@@ -1,0 +1,1682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Boat Dealership Top-Down Flow Map</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #dce5ea;
+      --panel: rgba(245, 249, 251, 0.92);
+      --panel-soft: rgba(249, 252, 253, 0.92);
+      --ink: #102734;
+      --muted: #617682;
+      --line: rgba(87, 109, 120, 0.2);
+      --line-strong: rgba(43, 77, 92, 0.3);
+      --accent: #0b5d73;
+      --accent-2: #2a7f97;
+      --accent-soft: #d8e8ef;
+      --warm: #b97b1c;
+      --warm-soft: rgba(185, 123, 28, 0.12);
+      --shadow: 0 24px 60px rgba(16, 39, 52, 0.12);
+      --upstream: rgba(185, 123, 28, 0.12);
+      --upstream-ink: #925412;
+      --downstream: rgba(11, 93, 115, 0.12);
+      --downstream-ink: #0b5d73;
+      --active-ring: rgba(11, 93, 115, 0.28);
+      --canvas-bg:
+        radial-gradient(circle at top, rgba(255, 255, 255, 0.48), transparent 34%),
+        linear-gradient(rgba(11, 93, 115, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(11, 93, 115, 0.08) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(223, 232, 238, 0.96), rgba(240, 246, 249, 0.98));
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      font-family: "Aptos", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(11, 93, 115, 0.14), transparent 26%),
+        radial-gradient(circle at top right, rgba(185, 123, 28, 0.1), transparent 16%),
+        linear-gradient(180deg, #f3f7f9 0%, var(--bg) 100%);
+    }
+
+    body {
+      padding: 18px;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    .app {
+      max-width: 1940px;
+      min-height: calc(100vh - 36px);
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .sidebar,
+    .content-shell,
+    .panel,
+    .flow-stage-shell,
+    .node-card {
+      background: linear-gradient(180deg, rgba(248, 251, 252, 0.92), rgba(238, 245, 248, 0.88));
+      border: 1px solid rgba(255, 255, 255, 0.88);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      -webkit-backdrop-filter: blur(16px);
+      backdrop-filter: blur(16px);
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 18px;
+      max-height: calc(100vh - 36px);
+      overflow: auto;
+      padding: 16px;
+      display: grid;
+      align-content: start;
+      gap: 14px;
+      background: linear-gradient(180deg, rgba(245, 249, 250, 0.94), rgba(235, 242, 246, 0.88));
+    }
+
+    .content-shell {
+      overflow: hidden;
+      padding: 0;
+      display: block;
+      background: linear-gradient(180deg, rgba(247, 250, 252, 0.96), rgba(234, 242, 246, 0.88));
+    }
+
+    .panel {
+      padding: 16px;
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(241, 247, 249, 0.94));
+      display: grid;
+      gap: 12px;
+      box-shadow: 0 12px 28px rgba(16, 39, 52, 0.06);
+    }
+
+    .eyebrow,
+    .meta-pill,
+    .depth-chip,
+    .mini-chip,
+    .metric {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+    }
+
+    .eyebrow {
+      width: max-content;
+      padding: 6px 10px;
+      background: rgba(11, 93, 115, 0.08);
+      color: var(--accent);
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: clamp(1.9rem, 2.2vw, 2.8rem);
+      line-height: 1.04;
+    }
+
+    h2 {
+      font-size: 1rem;
+    }
+
+    h3 {
+      font-size: 0.94rem;
+    }
+
+    .lead,
+    .section-copy,
+    .helper-copy {
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 0.95rem;
+    }
+
+    .toolbar,
+    .stat-row,
+    .root-list,
+    .nav-list,
+    .related-list,
+    .card-meta,
+    .card-flows,
+    .legend,
+    .lane-tags,
+    .stage-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .button-link,
+    .secondary-button,
+    .jump-link,
+    .related-link,
+    .root-chip {
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.9);
+      color: var(--ink);
+      cursor: pointer;
+      transition: transform 120ms ease, filter 120ms ease, border-color 120ms ease;
+    }
+
+    .button-link.primary {
+      color: #fff;
+      border-color: transparent;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    }
+
+    .button-link:hover,
+    .secondary-button:hover,
+    .jump-link:hover,
+    .related-link:hover,
+    .root-chip:hover,
+    .node-card:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.02);
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.9);
+      color: var(--ink);
+    }
+
+    .metric {
+      padding: 8px 12px;
+      background: rgba(11, 93, 115, 0.08);
+      color: var(--accent);
+      font-size: 0.88rem;
+      font-weight: 800;
+    }
+
+    .meta-pill,
+    .depth-chip,
+    .mini-chip {
+      padding: 6px 10px;
+      background: rgba(16, 39, 52, 0.06);
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .legend .mini-chip.upstream,
+    .related-link.upstream,
+    .root-chip.upstream {
+      background: var(--upstream);
+      color: var(--upstream-ink);
+      border-color: rgba(180, 83, 9, 0.18);
+    }
+
+    .legend .mini-chip.downstream,
+    .related-link.downstream,
+    .root-chip.downstream {
+      background: var(--downstream);
+      color: var(--downstream-ink);
+      border-color: rgba(15, 118, 110, 0.18);
+    }
+
+    .flow-stage-shell {
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-height: calc(100vh - 36px);
+      background: linear-gradient(180deg, rgba(247, 250, 252, 0.98), rgba(229, 238, 243, 0.92));
+    }
+
+    .flow-stage-topbar {
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      align-items: flex-end;
+      justify-content: space-between;
+      background: linear-gradient(180deg, rgba(250, 252, 253, 0.98), rgba(241, 247, 249, 0.94));
+    }
+
+    .flow-stage-topbar .title {
+      display: grid;
+      gap: 8px;
+      max-width: 920px;
+    }
+
+    .flow-stage-topbar .title h2 {
+      font-size: 1.2rem;
+    }
+
+    .flow-stage {
+      overflow: auto;
+      max-height: calc(100vh - 36px);
+      background: var(--canvas-bg);
+      background-size: 100% 100%, 40px 40px, 40px 40px, 100% 100%;
+    }
+
+    .flow-canvas {
+      position: relative;
+      min-width: max(100%, 1400px);
+      padding: 28px 28px 42px;
+    }
+
+    .flow-overlay {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+      overflow: visible;
+    }
+
+    .flow-lanes {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      gap: 20px;
+      padding: 8px 0 18px;
+    }
+
+    .flow-lane {
+      position: relative;
+      padding: 16px 0 10px;
+      display: grid;
+      grid-template-columns: 240px minmax(0, 1fr);
+      gap: 20px;
+      align-items: start;
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+
+    .flow-lane::before {
+      content: "";
+      position: absolute;
+      left: 264px;
+      right: 0;
+      top: 48px;
+      height: 1px;
+      background: linear-gradient(90deg, var(--line-strong), rgba(11, 93, 115, 0));
+    }
+
+    .flow-lane::after {
+      content: "";
+      position: absolute;
+      left: 230px;
+      top: 18px;
+      bottom: 10px;
+      width: 1px;
+      background: linear-gradient(180deg, rgba(11, 93, 115, 0.22), rgba(11, 93, 115, 0.02));
+    }
+
+    .flow-lane.is-hidden,
+    .node-card.is-hidden {
+      display: none;
+    }
+
+    .flow-lane-head {
+      display: grid;
+      gap: 10px;
+      justify-items: start;
+      text-align: left;
+      padding: 8px 12px 0 0;
+    }
+
+    .flow-lane-title {
+      display: grid;
+      gap: 12px;
+      justify-items: start;
+    }
+
+    .lane-title-block {
+      display: grid;
+      gap: 8px;
+    }
+
+    .lane-index {
+      width: 64px;
+      height: 64px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(11, 93, 115, 0.12), rgba(11, 93, 115, 0.04));
+      color: var(--accent);
+      font-size: 1.02rem;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      flex: 0 0 auto;
+      border: 1px solid rgba(11, 93, 115, 0.16);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    }
+
+    .flow-lane-copy {
+      color: var(--muted);
+      line-height: 1.55;
+      font-size: 0.88rem;
+      max-width: none;
+    }
+
+    .flow-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(188px, 1fr));
+      gap: 14px;
+      align-items: stretch;
+      padding: 20px 0 0 18px;
+    }
+
+    .lane-groups {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-start;
+      gap: 8px;
+    }
+
+    .group-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(11, 93, 115, 0.12);
+      background: rgba(255, 255, 255, 0.82);
+      color: var(--accent);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .lane-tags {
+      gap: 8px;
+    }
+
+    .node-card {
+      width: auto;
+      min-height: 172px;
+      padding: 14px 14px 12px;
+      display: grid;
+      gap: 10px;
+      align-content: start;
+      text-align: left;
+      cursor: pointer;
+      position: relative;
+      border-radius: 12px;
+      border-color: rgba(11, 93, 115, 0.14);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(243, 248, 250, 0.92));
+      transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease, background 120ms ease, opacity 120ms ease;
+      box-shadow: 0 12px 24px rgba(16, 39, 52, 0.06);
+    }
+
+    .node-card::before {
+      content: "";
+      position: absolute;
+      left: 10px;
+      top: 10px;
+      bottom: 10px;
+      width: 2px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, rgba(11, 93, 115, 0.28), rgba(11, 93, 115, 0));
+      opacity: 0.9;
+    }
+
+    .node-card::after {
+      content: "";
+      position: absolute;
+      inset: 7px;
+      border: 1px dashed rgba(11, 93, 115, 0.08);
+      border-radius: 8px;
+      pointer-events: none;
+    }
+
+    .node-card.active {
+      border-color: var(--active-ring);
+      box-shadow: 0 18px 34px rgba(11, 93, 115, 0.16);
+      background: linear-gradient(180deg, #ffffff, #e7f0f4);
+    }
+
+    .node-card.active::before {
+      background: linear-gradient(180deg, rgba(11, 93, 115, 0.52), rgba(42, 127, 151, 0.22));
+    }
+
+    .node-card.is-upstream {
+      border-color: rgba(185, 123, 28, 0.22);
+      background: linear-gradient(180deg, #fffaf4, rgba(185, 123, 28, 0.1));
+    }
+
+    .node-card.is-downstream {
+      border-color: rgba(11, 93, 115, 0.2);
+      background: linear-gradient(180deg, #f5fbfd, rgba(11, 93, 115, 0.08));
+    }
+
+    .node-card.is-muted {
+      opacity: 0.35;
+      filter: saturate(0.8);
+    }
+
+    .node-title {
+      padding-left: 10px;
+      font-size: 0.92rem;
+      font-weight: 800;
+      line-height: 1.35;
+    }
+
+    .node-subtitle {
+      padding-left: 10px;
+      color: var(--muted);
+      font-size: 0.76rem;
+      line-height: 1.45;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 4;
+      overflow: hidden;
+      min-height: 4.1em;
+    }
+
+    .card-meta {
+      justify-content: space-between;
+      align-items: center;
+      padding-left: 10px;
+    }
+
+    .card-flows {
+      gap: 6px;
+      padding-left: 10px;
+    }
+
+    .card-flows .mini-chip {
+      padding: 5px 8px;
+      background: rgba(11, 93, 115, 0.08);
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 0.68rem;
+    }
+
+    .flow-edge {
+      fill: none;
+      stroke: rgba(16, 39, 52, 0.18);
+      stroke-width: 1.35;
+      stroke-linecap: square;
+      stroke-linejoin: round;
+    }
+
+    .flow-edge.is-general {
+      stroke: rgba(16, 39, 52, 0.16);
+      opacity: 0.84;
+      stroke-dasharray: 8 10;
+    }
+
+    .flow-edge.is-downstream {
+      stroke: var(--downstream-ink);
+      stroke-width: 1.8;
+      opacity: 0.92;
+    }
+
+    .flow-edge.is-upstream {
+      stroke: var(--upstream-ink);
+      stroke-width: 1.7;
+      stroke-dasharray: 7 6;
+      opacity: 0.84;
+    }
+
+    .inspector-grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    .related-group {
+      display: grid;
+      gap: 10px;
+    }
+
+    .status {
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(0, 95, 115, 0.08);
+      color: var(--accent);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    .status.error {
+      background: rgba(180, 35, 24, 0.1);
+      color: #8f2d20;
+    }
+
+    @page {
+      size: landscape;
+      margin: 0.5in;
+    }
+
+    @media print {
+      html,
+      body {
+        background: #fff;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      body {
+        padding: 0;
+      }
+
+      .app {
+        display: block;
+        max-width: none;
+      }
+
+      .sidebar,
+      .flow-overlay {
+        display: none !important;
+      }
+
+      .content-shell,
+      .flow-stage-shell,
+      .flow-stage,
+      .flow-canvas {
+        overflow: visible !important;
+        max-height: none !important;
+        min-width: 0 !important;
+        padding: 0;
+        background: #fff;
+        border: 0;
+        box-shadow: none;
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+      }
+
+      .flow-stage-topbar {
+        padding: 0 0 18px;
+        border-bottom: 1px solid rgba(18, 48, 59, 0.12);
+        background: none;
+      }
+
+      .flow-lanes {
+        gap: 20px;
+        padding: 18px 0 0;
+      }
+
+      .flow-lane {
+        grid-template-columns: 220px minmax(0, 1fr);
+      }
+
+      .flow-lane::after {
+        left: 210px;
+      }
+
+      .flow-lane::before {
+        left: 248px;
+      }
+
+      .flow-lane,
+      .node-card,
+      .panel {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+    }
+
+    @media (max-width: 1200px) {
+      .app {
+        grid-template-columns: 1fr;
+        min-height: 0;
+      }
+
+      .sidebar {
+        position: static;
+        max-height: none;
+      }
+
+      .flow-stage-shell,
+      .flow-stage {
+        min-height: 0;
+        max-height: none;
+      }
+
+      .flow-lane {
+        grid-template-columns: 1fr;
+      }
+
+      .flow-lane::before {
+        left: 0;
+        top: 126px;
+      }
+
+      .flow-lane::after {
+        display: none;
+      }
+
+      .flow-row {
+        padding-left: 0;
+      }
+    }
+
+    @media (max-width: 760px) {
+      body {
+        padding: 12px;
+      }
+
+      .content-shell,
+      .sidebar,
+      .flow-stage-topbar,
+      .panel {
+        padding: 14px;
+      }
+
+      .flow-lane {
+        padding: 16px 0;
+      }
+
+      .flow-canvas {
+        min-width: 1080px;
+        padding: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <aside class="sidebar">
+      <section class="panel">
+        <span class="eyebrow">Architect Sheet</span>
+        <h1>Boat Dealership Top-Down Scaffold</h1>
+        <p class="lead">This sheet reframes the model as a top-down architecture drawing: core platform bands first, operating layers beneath them, and major project blocks exposed far enough to read the system without drowning in every internal node.</p>
+        <div class="toolbar">
+          <a class="button-link primary" href="./dealership-operating-diagram.html">Open Live Canvas</a>
+          <button id="savePdfBtn" type="button" class="secondary-button">Save PDF</button>
+          <button id="clearFocusBtn" type="button" class="secondary-button">Clear Focus</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Search Nodes</h2>
+        <input id="searchInput" class="search-input" type="search" placeholder="Search departments, systems, journeys, sites..." aria-label="Search nodes" />
+        <p class="helper-copy">Filter the scaffold view. Click any block to trace its upstream and downstream path through the project structure.</p>
+      </section>
+
+      <section class="panel">
+        <h2>Program Summary</h2>
+        <div id="statRow" class="stat-row"></div>
+        <h3>Source Entry Nodes</h3>
+        <div id="rootList" class="root-list"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Band Index</h2>
+        <div id="layerNav" class="nav-list"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Notation</h2>
+        <div class="legend">
+          <span class="mini-chip downstream">Downstream path</span>
+          <span class="mini-chip upstream">Upstream path</span>
+          <span class="mini-chip">Primary scaffold band</span>
+        </div>
+        <p class="helper-copy">The sheet stays at the main operating-layer level first. Deeper internal nodes are condensed so the overall scaffold stays readable like a drawing set, not a raw data dump.</p>
+      </section>
+
+      <section class="panel inspector-grid">
+        <div>
+          <h2 id="inspectorTitle">Entire Flow Map</h2>
+          <p id="inspectorMeta" class="section-copy">Select a node to inspect direct and full-path relationships.</p>
+        </div>
+        <p id="inspectorDescription" class="section-copy">This separate scaffold uses the same model as the live diagram, but reorganizes it into broader operating bands so the business path reads like an architected top-down section instead of a deep internal tree.</p>
+        <div id="inspectorStats" class="stat-row"></div>
+        <div class="related-group">
+          <h3>Feeds Into</h3>
+          <div id="downstreamList" class="related-list"></div>
+        </div>
+        <div class="related-group">
+          <h3>Receives From</h3>
+          <div id="upstreamList" class="related-list"></div>
+        </div>
+      </section>
+
+      <section id="statusBox" class="status">Loading the dealership operating model...</section>
+    </aside>
+
+    <section class="content-shell">
+      <section class="flow-stage-shell">
+        <header class="flow-stage-topbar">
+          <div class="title">
+            <span class="eyebrow">Top-Down Architect View</span>
+            <h2>Project Scaffold Drawing</h2>
+            <p class="section-copy">Each band is treated like a structural rail in the operating model. The sheet starts with the cloud application layer, then steps down through experience, demand flow, departments, and execution blocks with a drafting-style hierarchy.</p>
+          </div>
+          <div class="stage-meta">
+            <div id="stageMetric" class="metric">Focused on: Entire flow map</div>
+            <div id="visibleMetric" class="metric">Showing all visible nodes</div>
+          </div>
+        </header>
+        <div class="flow-stage" id="flowStage">
+          <div class="flow-canvas" id="flowCanvas">
+            <svg id="flowOverlay" class="flow-overlay" aria-hidden="true"></svg>
+            <div id="flowLanes" class="flow-lanes" aria-live="polite"></div>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const GRAPH_SOURCE_URL = './dealership-operating-diagram.mmd';
+
+    const GROUP_DESCRIPTIONS = {
+      CH: 'How demand first enters the operating model through digital, human, and event-driven touchpoints.',
+      BRANDS: 'The brand, site, and customer-facing website layer that turns traffic into actions.',
+      JOURNEYS: 'The step-by-step journey from awareness through ownership and retention.',
+      APP: 'The cloud application and orchestration layer behind the website and customer workflows.',
+      DEPTS: 'The dealership leadership and department structure that executes the work.',
+      SALESOPS: 'Sales-side operating functions that turn demand into delivered boats.',
+      SERVICEOPS: 'Service-side operating functions that keep ownership and retention alive.',
+      PARTSOPS: 'Parts and accessories functions supporting both service and direct revenue.',
+      BACKOFFICE: 'Financial control, accounting, reconciliation, and reporting functions.',
+      EXT: 'External systems, lenders, vendors, and platforms that feed the business.',
+      DATA: 'Unified data, KPI, alerting, and governance systems for operational visibility.'
+    };
+
+    const OVERVIEW_NODE_LIMITS = {
+      CH: 7,
+      BRANDS: 5,
+      JOURNEYS: 8,
+      APP: 4,
+      DEPTS: 6,
+      SALESOPS: 3,
+      SERVICEOPS: 3,
+      PARTSOPS: 3,
+      BACKOFFICE: 3,
+      EXT: 4,
+      DATA: 4
+    };
+
+    const DEVELOPER_BAND_ORDER = [
+      'APP',
+      'BRANDS',
+      'CH',
+      'JOURNEYS',
+      'DEPTS',
+      'SALESOPS',
+      'SERVICEOPS',
+      'PARTSOPS',
+      'BACKOFFICE',
+      'EXT',
+      'DATA'
+    ];
+
+    const OVERVIEW_PRIORITY_KEYS = {
+      CH: ['Desktop', 'Mobile', 'Tablet', 'SalesRep', 'CallCenter', 'Events', 'Referral'],
+      BRANDS: ['Unified', 'PBC', 'OMG', 'Portal', 'Search'],
+      JOURNEYS: ['Awareness', 'LeadCapture', 'Qualification', 'Appointment', 'DealStruct', 'FIProcess', 'Delivery', 'ServiceRetention'],
+      APP: ['WebApp', 'API', 'Auth', 'CRMLogic'],
+      DEPTS: ['Leadership', 'Sales', 'FI', 'Service', 'Parts', 'Accounting'],
+      SALESOPS: ['NewSales', 'UsedSales', 'Brokerage'],
+      SERVICEOPS: ['Warranty', 'CustomerPay', 'Rigging'],
+      PARTSOPS: ['OEMParts', 'Accessory', 'OnlineParts'],
+      BACKOFFICE: ['DealAccounting', 'AP', 'CashFlow'],
+      EXT: ['DMS', 'CRM', 'OEM', 'Lenders'],
+      DATA: ['CDP', 'KPI', 'SalesKPI', 'Alerting']
+    };
+
+    const NODE_OVERVIEW_DETAILS = {
+      Desktop: 'Desktop website entry point for inventory browsing, lead capture, and promotions.',
+      Mobile: 'Mobile-first website entry point for shoppers taking quick actions on the go.',
+      Tablet: 'Tablet browsing entry point for showroom, couch, and in-store assisted shopping.',
+      SalesRep: 'Walk-in dealership touchpoint where floor traffic starts with the sales team.',
+      CallCenter: 'BDC intake point for calls, texts, and early lead follow-up.',
+      Events: 'Boat-show and live-event demand source feeding new prospects into the funnel.',
+      Referral: 'Referral and OEM lead source entering the dealership demand stream.',
+      Unified: 'Primary shared website hub connecting customer actions to the business systems behind them.',
+      PBC: 'Premier Boating Centers brand website front door for local market demand.',
+      OMG: 'Ocean Marine Group brand website front door for local market demand.',
+      Portal: 'Owner-facing account area for logged-in customer actions and self-service.',
+      Search: 'Main inventory discovery experience for shoppers comparing available boats.',
+      Awareness: 'Top-of-funnel demand creation across campaigns, content, events, and reputation.',
+      LeadCapture: 'Point where shopper activity becomes a trackable lead, call, form, or message.',
+      Qualification: 'Initial sorting step that turns raw leads into workable sales opportunities.',
+      Appointment: 'Scheduled handoff from interest into a real dealership interaction.',
+      DealStruct: 'Sales working stage where pricing, trade, and package decisions take shape.',
+      FIProcess: 'Finance and contracting step for approvals, protection products, and funding.',
+      Delivery: 'Customer handoff stage where the boat, orientation, and ownership begin.',
+      ServiceRetention: 'Post-sale retention path that keeps customers engaged through service and upgrades.',
+      WebApp: 'Customer-facing application layer powering the website experience in the browser.',
+      API: 'Core service layer connecting the frontend to dealership workflows and systems.',
+      Auth: 'Identity and access layer for secure customer sign-in and account actions.',
+      CRMLogic: 'Lead-routing and follow-up logic coordinating sales-side customer engagement.',
+      Leadership: 'Executive operating layer guiding priorities, accountability, and performance.',
+      Sales: 'Primary department turning shopper demand into sold and delivered boats.',
+      FI: 'Department handling approvals, compliance, products, and final contracts.',
+      Service: 'Department responsible for repair, maintenance, prep, and customer support after sale.',
+      Parts: 'Department supplying parts and accessories for service work and retail demand.',
+      Accounting: 'Office control layer managing financial processing, reconciliation, and records.',
+      NewSales: 'Core selling function for new boats and manufacturer-aligned inventory.',
+      UsedSales: 'Sales function focused on pre-owned inventory and value-based buyer demand.',
+      Brokerage: 'Sales channel for consignment and brokered boats outside standard new inventory.',
+      Warranty: 'Service workstream handling manufacturer-covered repair and claim activity.',
+      CustomerPay: 'Retail repair work paid directly by the customer outside warranty coverage.',
+      Rigging: 'Prep and install function getting sold boats ready for delivery and use.',
+      OEMParts: 'Primary source for manufacturer-backed replacement parts and component support.',
+      Accessory: 'Merchandise and upgrade line for add-ons, electronics, safety, and customization.',
+      OnlineParts: 'Digital parts-selling channel extending inventory demand beyond the counter.',
+      DealAccounting: 'Financial closeout function for sold deals, paperwork, and booking accuracy.',
+      AP: 'Accounts payable control point for outgoing bills, vendors, and expense settlement.',
+      CashFlow: 'Cash and reconciliation view tracking liquidity, timing, and reporting health.',
+      DMS: 'Core dealership system of record for transactions, units, and operational data.',
+      CRM: 'External customer relationship system feeding sales workflow and follow-up execution.',
+      OEM: 'Manufacturer portals and systems supporting warranty, inventory, and brand operations.',
+      Lenders: 'Funding partners supporting approvals, financing options, and deal completion.',
+      CDP: 'Unified operating dataset joining customer, inventory, and repair-order information.',
+      KPI: 'Executive dashboard layer tracking performance across the dealership system.',
+      SalesKPI: 'Sales-specific scorecard for lead quality, close rate, pace, and profitability.',
+      Alerting: 'Exception-monitoring layer surfacing aging, compliance, and follow-up issues early.'
+    };
+
+    const appState = {
+      graphSource: '',
+      nodes: new Map(),
+      groups: [],
+      edges: [],
+      adjacencyOut: new Map(),
+      adjacencyIn: new Map(),
+      depthByNode: new Map(),
+      roots: [],
+      selectedKey: null,
+      searchQuery: '',
+      groupOrder: new Map(),
+      depthTiers: [],
+      cardElements: new Map(),
+      sectionElements: new Map(),
+      connectionFrame: 0
+    };
+
+    const searchInput = document.getElementById('searchInput');
+    const savePdfBtn = document.getElementById('savePdfBtn');
+    const clearFocusBtn = document.getElementById('clearFocusBtn');
+    const statRow = document.getElementById('statRow');
+    const rootList = document.getElementById('rootList');
+    const layerNav = document.getElementById('layerNav');
+    const flowStage = document.getElementById('flowStage');
+    const flowCanvas = document.getElementById('flowCanvas');
+    const flowOverlay = document.getElementById('flowOverlay');
+    const flowLanes = document.getElementById('flowLanes');
+    const stageMetric = document.getElementById('stageMetric');
+    const visibleMetric = document.getElementById('visibleMetric');
+    const statusBox = document.getElementById('statusBox');
+    const inspectorTitle = document.getElementById('inspectorTitle');
+    const inspectorMeta = document.getElementById('inspectorMeta');
+    const inspectorDescription = document.getElementById('inspectorDescription');
+    const inspectorStats = document.getElementById('inspectorStats');
+    const downstreamList = document.getElementById('downstreamList');
+    const upstreamList = document.getElementById('upstreamList');
+
+    function setStatus(message, tone = 'info') {
+      statusBox.textContent = message;
+      statusBox.classList.toggle('error', tone === 'error');
+    }
+
+    function createElement(tagName, className, text) {
+      const element = document.createElement(tagName);
+      if (className) {
+        element.className = className;
+      }
+      if (text !== undefined) {
+        element.textContent = text;
+      }
+      return element;
+    }
+
+    async function loadGraphSource() {
+      const response = await fetch(GRAPH_SOURCE_URL, { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error('Could not load dealership-operating-diagram.mmd. Open this page through the local preview server so the shared model file can be read.');
+      }
+      return response.text();
+    }
+
+    function parseGraph(definition) {
+      const lines = definition.split('\n');
+      const nodes = new Map();
+      const groups = [];
+      const groupMap = new Map();
+      const edges = [];
+      let currentGroup = null;
+
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line || line === 'flowchart TB') {
+          continue;
+        }
+
+        const subgraphMatch = line.match(/^subgraph\s+([A-Za-z0-9_]+)\[(.+)\]$/);
+        if (subgraphMatch) {
+          currentGroup = { id: subgraphMatch[1], name: subgraphMatch[2] };
+          if (!groupMap.has(currentGroup.id)) {
+            const entry = { id: currentGroup.id, name: currentGroup.name, nodes: [] };
+            groupMap.set(currentGroup.id, entry);
+            groups.push(entry);
+          }
+          continue;
+        }
+
+        if (line === 'end') {
+          currentGroup = null;
+          continue;
+        }
+
+        const labeledEdgeMatch = line.match(/^([A-Za-z0-9_]+)\s+-->\|([^|]*)\|\s*([A-Za-z0-9_]+)$/);
+        if (labeledEdgeMatch) {
+          edges.push({ source: labeledEdgeMatch[1], target: labeledEdgeMatch[3], label: labeledEdgeMatch[2].trim() });
+          continue;
+        }
+
+        const plainEdgeMatch = line.match(/^([A-Za-z0-9_]+)\s+-->\s*([A-Za-z0-9_]+)$/);
+        if (plainEdgeMatch) {
+          edges.push({ source: plainEdgeMatch[1], target: plainEdgeMatch[2], label: '' });
+          continue;
+        }
+
+        const nodeMatch = line.match(/^([A-Za-z0-9_]+)\[(.+)\]$/);
+        if (nodeMatch && currentGroup) {
+          const key = nodeMatch[1];
+          const label = nodeMatch[2];
+          if (!nodes.has(key)) {
+            nodes.set(key, {
+              key,
+              label,
+              groupId: currentGroup.id,
+              groupName: currentGroup.name
+            });
+            groupMap.get(currentGroup.id).nodes.push(key);
+          }
+        }
+      }
+
+      return { nodes, groups, edges };
+    }
+
+    function buildAdjacency() {
+      const adjacencyOut = new Map();
+      const adjacencyIn = new Map();
+
+      for (const key of appState.nodes.keys()) {
+        adjacencyOut.set(key, []);
+        adjacencyIn.set(key, []);
+      }
+
+      for (const edge of appState.edges) {
+        adjacencyOut.get(edge.source)?.push(edge);
+        adjacencyIn.get(edge.target)?.push(edge);
+      }
+
+      appState.adjacencyOut = adjacencyOut;
+      appState.adjacencyIn = adjacencyIn;
+    }
+
+    function buildGroupOrder() {
+      const orderedGroups = getOrderedGroups();
+      appState.groupOrder = new Map(orderedGroups.map((group, index) => [group.id, index]));
+    }
+
+    function getPreferredGroupIndex(groupId) {
+      const preferredIndex = DEVELOPER_BAND_ORDER.indexOf(groupId);
+      return preferredIndex === -1 ? DEVELOPER_BAND_ORDER.length + 100 : preferredIndex;
+    }
+
+    function getOrderedGroups() {
+      return [...appState.groups].sort((left, right) => {
+        const preferredDifference = getPreferredGroupIndex(left.id) - getPreferredGroupIndex(right.id);
+        if (preferredDifference !== 0) {
+          return preferredDifference;
+        }
+        return left.name.localeCompare(right.name);
+      });
+    }
+
+    function getGroupOrderForNode(key) {
+      const node = appState.nodes.get(key);
+      return node ? (appState.groupOrder.get(node.groupId) ?? 0) : 0;
+    }
+
+    function computeDepths() {
+      const indegree = new Map([...appState.nodes.keys()].map((key) => [key, appState.adjacencyIn.get(key)?.length ?? 0]));
+      const roots = [...appState.nodes.keys()].filter((key) => indegree.get(key) === 0);
+      const depthByNode = new Map();
+      const queue = [];
+
+      for (const key of roots) {
+        depthByNode.set(key, 0);
+        queue.push(key);
+      }
+
+      while (queue.length) {
+        const current = queue.shift();
+        const currentDepth = depthByNode.get(current) ?? 0;
+        for (const edge of appState.adjacencyOut.get(current) ?? []) {
+          const nextDepth = currentDepth + 1;
+          const previousDepth = depthByNode.get(edge.target);
+          if (previousDepth === undefined || nextDepth < previousDepth) {
+            depthByNode.set(edge.target, nextDepth);
+            queue.push(edge.target);
+          }
+        }
+      }
+
+      for (const group of appState.groups) {
+        for (const key of group.nodes) {
+          if (depthByNode.has(key)) {
+            continue;
+          }
+
+          const inboundDepths = (appState.adjacencyIn.get(key) ?? [])
+            .map((edge) => depthByNode.get(edge.source))
+            .filter((depth) => Number.isFinite(depth));
+
+          if (inboundDepths.length) {
+            depthByNode.set(key, Math.min(...inboundDepths) + 1);
+          } else {
+            depthByNode.set(key, getGroupOrderForNode(key));
+          }
+        }
+      }
+
+      appState.depthByNode = depthByNode;
+      appState.roots = roots;
+    }
+
+    function buildDepthTiers() {
+      appState.depthTiers = getOrderedGroups()
+        .filter((group) => group.nodes.length)
+        .map((group, index) => {
+          const keys = [...group.nodes];
+          const displayKeys = getDisplayKeysForTier(keys, group.id);
+          return {
+            depth: Math.min(...keys.map((key) => getNodeDepth(key))),
+            maxDepth: Math.max(...keys.map((key) => getNodeDepth(key))),
+            groupId: group.id,
+            keys,
+            displayKeys,
+            hiddenCount: Math.max(0, keys.length - displayKeys.length),
+            stageIndex: index + 1,
+            stageKey: `tier-${index}`
+          };
+        });
+    }
+
+    function getNodeDepth(key) {
+      return appState.depthByNode.get(key) ?? 0;
+    }
+
+    function getGroupName(groupId) {
+      return appState.groups.find((group) => group.id === groupId)?.name ?? groupId;
+    }
+
+    function getNodeImportance(key) {
+      const inboundCount = appState.adjacencyIn.get(key)?.length ?? 0;
+      const outboundCount = appState.adjacencyOut.get(key)?.length ?? 0;
+      const totalCount = inboundCount + outboundCount;
+      const isRoot = appState.roots.includes(key);
+      const bridgesFlow = inboundCount > 0 && outboundCount > 0;
+      return (totalCount * 8) + (Math.min(inboundCount, outboundCount) * 6) + (bridgesFlow ? 12 : 0) + (isRoot ? 24 : 0);
+    }
+
+    function getDisplayKeysForTier(keys, groupId) {
+      const limit = Math.min(keys.length, OVERVIEW_NODE_LIMITS[groupId] ?? 5);
+      const sortedKeys = [...keys].sort((left, right) => {
+        if (groupId === 'JOURNEYS') {
+          const depthDifference = getNodeDepth(left) - getNodeDepth(right);
+          if (depthDifference !== 0) {
+            return depthDifference;
+          }
+        }
+
+        const importanceDifference = getNodeImportance(right) - getNodeImportance(left);
+        if (importanceDifference !== 0) {
+          return importanceDifference;
+        }
+
+        const depthDifference = getNodeDepth(left) - getNodeDepth(right);
+        if (depthDifference !== 0) {
+          return depthDifference;
+        }
+
+        return appState.nodes.get(left).label.localeCompare(appState.nodes.get(right).label);
+      });
+
+      const priorityKeys = (OVERVIEW_PRIORITY_KEYS[groupId] ?? []).filter((key) => keys.includes(key));
+      const prioritySet = new Set(priorityKeys);
+      const orderedKeys = [
+        ...priorityKeys,
+        ...sortedKeys.filter((key) => !prioritySet.has(key))
+      ];
+
+      return orderedKeys.slice(0, limit);
+    }
+
+    function getTierGroupIds(keys) {
+      return [...new Set(keys.map((key) => appState.nodes.get(key)?.groupId).filter(Boolean))]
+        .sort((left, right) => (appState.groupOrder.get(left) ?? 0) - (appState.groupOrder.get(right) ?? 0));
+    }
+
+    function describeTier(groupIds) {
+      if (!groupIds.length) {
+        return 'This stage captures the next visible operating step in the business flow.';
+      }
+
+      if (groupIds.length === 1) {
+        return GROUP_DESCRIPTIONS[groupIds[0]] || `${getGroupName(groupIds[0])} sits in this stage of the operating flow.`;
+      }
+
+      const groupNames = groupIds.map((groupId) => getGroupName(groupId));
+      if (groupNames.length <= 3) {
+        return `This stage blends ${groupNames.join(', ')} as work converges and branches through the operating flow.`;
+      }
+
+      return `This stage mixes ${groupNames.length} operating slices as the business flow fans out and reconnects deeper in the model.`;
+    }
+
+    function describeBand(tier) {
+      const description = GROUP_DESCRIPTIONS[tier.groupId] || `${getGroupName(tier.groupId)} sits in this stage of the operating flow.`;
+      if (tier.hiddenCount > 0) {
+        return `${description} This overview band surfaces the main nodes first and keeps ${tier.hiddenCount} deeper node${tier.hiddenCount === 1 ? '' : 's'} condensed.`;
+      }
+      if (tier.depth === 0) {
+        return `${description} This band starts near the entry edge of the operating model.`;
+      }
+      return `${description} This band stays focused on the main operating layer instead of the deeper internal branches.`;
+    }
+
+    function getDirectDownstream(key) {
+      return (appState.adjacencyOut.get(key) ?? []).map((edge) => edge.target);
+    }
+
+    function getDirectUpstream(key) {
+      return (appState.adjacencyIn.get(key) ?? []).map((edge) => edge.source);
+    }
+
+    function collectReachable(startKey, direction) {
+      const visited = new Set();
+      const queue = [startKey];
+
+      while (queue.length) {
+        const current = queue.shift();
+        const edges = direction === 'out' ? appState.adjacencyOut.get(current) ?? [] : appState.adjacencyIn.get(current) ?? [];
+        for (const edge of edges) {
+          const nextKey = direction === 'out' ? edge.target : edge.source;
+          if (visited.has(nextKey) || nextKey === startKey) {
+            continue;
+          }
+          visited.add(nextKey);
+          queue.push(nextKey);
+        }
+      }
+
+      return visited;
+    }
+
+    function renderOverview() {
+      statRow.replaceChildren(
+        createElement('span', 'metric', `${appState.nodes.size} nodes`),
+        createElement('span', 'metric', `${appState.edges.length} handoffs`),
+        createElement('span', 'metric', `${appState.depthTiers.length} main bands`)
+      );
+
+      rootList.replaceChildren();
+      for (const key of appState.roots) {
+        const node = appState.nodes.get(key);
+        if (!node) {
+          continue;
+        }
+        const button = createElement('button', 'root-chip', node.label);
+        button.type = 'button';
+        button.addEventListener('click', () => setActiveNode(key));
+        rootList.appendChild(button);
+      }
+
+      layerNav.replaceChildren();
+      appState.depthTiers.forEach((tier) => {
+        const link = createElement('a', 'jump-link', `${String(tier.stageIndex).padStart(2, '0')} ${getGroupName(tier.groupId)}`);
+        link.href = `#${tier.stageKey}`;
+        layerNav.appendChild(link);
+      });
+    }
+
+    function buildNodeFlowChips(key) {
+      const uniqueTargets = [...new Set(getDirectDownstream(key))]
+        .map((targetKey) => appState.nodes.get(targetKey))
+        .filter(Boolean);
+
+      if (!uniqueTargets.length) {
+        return [createElement('span', 'mini-chip', 'No direct downstream nodes')];
+      }
+
+      const chips = [createElement('span', 'mini-chip', uniqueTargets[0].label)];
+      if (uniqueTargets.length > 1) {
+        chips.push(createElement('span', 'mini-chip', `+${uniqueTargets.length - 1} more`));
+      }
+      return chips;
+    }
+
+    function summarizeNodeList(keys) {
+      const labels = [...new Set(keys)]
+        .map((nodeKey) => appState.nodes.get(nodeKey)?.label)
+        .filter(Boolean);
+
+      if (!labels.length) {
+        return '';
+      }
+      if (labels.length === 1) {
+        return labels[0];
+      }
+      return `${labels[0]} + ${labels.length - 1} more`;
+    }
+
+    function buildNodeOverviewDetail(key) {
+      const explicitDetail = NODE_OVERVIEW_DETAILS[key];
+      if (explicitDetail) {
+        return explicitDetail;
+      }
+
+      const node = appState.nodes.get(key);
+      if (!node) {
+        return 'Overview node in the operating flow map.';
+      }
+
+      return `${node.label} is one of the main visible points inside the ${node.groupName.toLowerCase()} layer.`;
+    }
+
+    function renderRelatedList(container, keys, tone) {
+      container.replaceChildren();
+
+      if (!keys.length) {
+        container.appendChild(createElement('span', 'mini-chip', 'None in this direction'));
+        return;
+      }
+
+      keys.forEach((key) => {
+        const node = appState.nodes.get(key);
+        if (!node) {
+          return;
+        }
+        const button = createElement('button', `related-link ${tone}`, node.label);
+        button.type = 'button';
+        button.addEventListener('click', () => setActiveNode(key));
+        container.appendChild(button);
+      });
+    }
+
+    function renderInspector() {
+      const key = appState.selectedKey;
+      if (!key || !appState.nodes.has(key)) {
+        inspectorTitle.textContent = 'Entire Flow Map';
+        inspectorMeta.textContent = `${appState.nodes.size} nodes across ${appState.depthTiers.length} main operating bands.`;
+        inspectorDescription.textContent = 'Select a node card to drill into direct inbound handoffs, direct outbound handoffs, and the broader path it touches through the top-down operating flow.';
+        inspectorStats.replaceChildren(
+          createElement('span', 'metric', `${appState.roots.length} roots`),
+          createElement('span', 'metric', `${appState.edges.length} total handoffs`)
+        );
+        downstreamList.replaceChildren(createElement('span', 'mini-chip', 'Select a node to inspect downstream flow'));
+        upstreamList.replaceChildren(createElement('span', 'mini-chip', 'Select a node to inspect upstream flow'));
+        return;
+      }
+
+      const node = appState.nodes.get(key);
+      const directDownstream = getDirectDownstream(key);
+      const directUpstream = getDirectUpstream(key);
+      const allDownstream = collectReachable(key, 'out');
+      const allUpstream = collectReachable(key, 'in');
+
+      inspectorTitle.textContent = node.label;
+      inspectorMeta.textContent = `${node.groupName} • Depth ${getNodeDepth(key) + 1}`;
+      inspectorDescription.textContent = `${node.label} has ${directUpstream.length} direct inbound handoff${directUpstream.length === 1 ? '' : 's'}, ${directDownstream.length} direct outbound handoff${directDownstream.length === 1 ? '' : 's'}, ${allUpstream.size} total upstream node${allUpstream.size === 1 ? '' : 's'}, and ${allDownstream.size} total downstream node${allDownstream.size === 1 ? '' : 's'} in the full operating stack.`;
+      inspectorStats.replaceChildren(
+        createElement('span', 'metric', `${directUpstream.length} direct in`),
+        createElement('span', 'metric', `${directDownstream.length} direct out`),
+        createElement('span', 'metric', `${allDownstream.size} downstream nodes`)
+      );
+
+      renderRelatedList(downstreamList, directDownstream, 'downstream');
+      renderRelatedList(upstreamList, directUpstream, 'upstream');
+    }
+
+    function renderFlowCanvas() {
+      appState.cardElements.clear();
+      appState.sectionElements.clear();
+      flowLanes.replaceChildren();
+
+      appState.depthTiers.forEach((tier) => {
+        const lane = createElement('section', 'flow-lane');
+        lane.id = tier.stageKey;
+        lane.dataset.depth = String(tier.depth);
+        lane.dataset.groupId = tier.groupId;
+
+        const head = createElement('div', 'flow-lane-head');
+        const titleWrap = createElement('div', 'flow-lane-title');
+        titleWrap.appendChild(createElement('div', 'lane-index', String(tier.stageIndex).padStart(2, '0')));
+
+        const titleText = createElement('div', 'lane-title-block');
+        titleText.appendChild(createElement('span', 'meta-pill', tier.groupId));
+        titleText.appendChild(createElement('h2', '', getGroupName(tier.groupId)));
+        titleText.appendChild(createElement('p', 'flow-lane-copy', describeBand(tier)));
+        titleWrap.appendChild(titleText);
+
+        const tags = createElement('div', 'lane-tags');
+        tags.append(
+          createElement('span', 'mini-chip', `${tier.displayKeys.length} visible`),
+          createElement('span', 'mini-chip', `${tier.keys.length} total`)
+        );
+        if (tier.hiddenCount > 0) {
+          tags.appendChild(createElement('span', 'mini-chip upstream', `${tier.hiddenCount} condensed`));
+        }
+
+        head.append(titleWrap, tags);
+
+        const row = createElement('div', 'flow-row');
+        const sortedKeys = [...tier.displayKeys];
+
+        sortedKeys.forEach((key, index) => {
+          const node = appState.nodes.get(key);
+          const card = createElement('button', 'node-card');
+          card.type = 'button';
+          card.dataset.nodeKey = key;
+
+          const meta = createElement('div', 'card-meta');
+          meta.append(
+            createElement('span', 'depth-chip', `Band ${String(tier.stageIndex).padStart(2, '0')}`),
+            createElement('span', 'mini-chip', key || `Node ${String(index + 1).padStart(2, '0')}`)
+          );
+
+          const title = createElement('div', 'node-title', node.label);
+          const subtitle = createElement('div', 'node-subtitle', buildNodeOverviewDetail(key));
+          const flows = createElement('div', 'card-flows');
+          flows.append(
+            createElement('span', 'mini-chip upstream', `${appState.adjacencyIn.get(key)?.length ?? 0} in`),
+            createElement('span', 'mini-chip downstream', `${appState.adjacencyOut.get(key)?.length ?? 0} out`)
+          );
+
+          card.append(meta, title, subtitle, flows);
+          card.addEventListener('click', () => setActiveNode(key));
+
+          appState.cardElements.set(key, card);
+          row.appendChild(card);
+        });
+
+        lane.append(head, row);
+        flowLanes.appendChild(lane);
+        appState.sectionElements.set(tier.stageKey, lane);
+      });
+    }
+
+    function isCardVisible(card) {
+      if (!card) {
+        return false;
+      }
+      if (card.classList.contains('is-hidden')) {
+        return false;
+      }
+      return !card.closest('.flow-lane')?.classList.contains('is-hidden');
+    }
+
+    function getCardAnchors(card) {
+      const canvasRect = flowCanvas.getBoundingClientRect();
+      const rect = card.getBoundingClientRect();
+      return {
+        x: rect.left - canvasRect.left + rect.width / 2,
+        top: rect.top - canvasRect.top,
+        bottom: rect.bottom - canvasRect.top
+      };
+    }
+
+    function buildConnectionPath(startPoint, endPoint) {
+      const verticalDelta = endPoint.y - startPoint.y;
+
+      if (Math.abs(verticalDelta) < 16) {
+        const middleX = startPoint.x + (endPoint.x - startPoint.x) / 2;
+        return `M ${startPoint.x} ${startPoint.y} L ${middleX} ${startPoint.y} L ${middleX} ${endPoint.y} L ${endPoint.x} ${endPoint.y}`;
+      }
+
+      const direction = verticalDelta >= 0 ? 1 : -1;
+      const elbowOffset = Math.max(28, Math.abs(verticalDelta) * 0.32);
+      const middleY = startPoint.y + elbowOffset * direction;
+      return `M ${startPoint.x} ${startPoint.y} L ${startPoint.x} ${middleY} L ${endPoint.x} ${middleY} L ${endPoint.x} ${endPoint.y}`;
+    }
+
+    function getVisibleConnectionState(edge, upstreamNodes, downstreamNodes) {
+      const sourceCard = appState.cardElements.get(edge.source);
+      const targetCard = appState.cardElements.get(edge.target);
+      if (!isCardVisible(sourceCard) || !isCardVisible(targetCard)) {
+        return null;
+      }
+
+      if (!appState.selectedKey) {
+        return null;
+      }
+
+      const isDownstream = downstreamNodes.has(edge.source) && downstreamNodes.has(edge.target);
+      const isUpstream = upstreamNodes.has(edge.source) && upstreamNodes.has(edge.target);
+
+      if (isDownstream) {
+        return 'downstream';
+      }
+      if (isUpstream) {
+        return 'upstream';
+      }
+
+      return null;
+    }
+
+    function drawConnections() {
+      flowOverlay.replaceChildren();
+
+      const width = flowCanvas.scrollWidth;
+      const height = flowCanvas.scrollHeight;
+      flowOverlay.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      flowOverlay.setAttribute('width', String(width));
+      flowOverlay.setAttribute('height', String(height));
+      flowOverlay.style.width = `${width}px`;
+      flowOverlay.style.height = `${height}px`;
+
+      const selectedKey = appState.selectedKey;
+      const downstreamNodes = selectedKey ? new Set([selectedKey, ...collectReachable(selectedKey, 'out')]) : new Set();
+      const upstreamNodes = selectedKey ? new Set([selectedKey, ...collectReachable(selectedKey, 'in')]) : new Set();
+
+      for (const edge of appState.edges) {
+        const state = getVisibleConnectionState(edge, upstreamNodes, downstreamNodes);
+        if (!state) {
+          continue;
+        }
+
+        const sourceCard = appState.cardElements.get(edge.source);
+        const targetCard = appState.cardElements.get(edge.target);
+        const sourceAnchors = getCardAnchors(sourceCard);
+        const targetAnchors = getCardAnchors(targetCard);
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('class', `flow-edge is-${state}`);
+        path.setAttribute('d', buildConnectionPath(
+          { x: sourceAnchors.x, y: sourceAnchors.bottom },
+          { x: targetAnchors.x, y: targetAnchors.top }
+        ));
+        flowOverlay.appendChild(path);
+      }
+    }
+
+    function queueConnectionRender() {
+      if (appState.connectionFrame) {
+        return;
+      }
+
+      appState.connectionFrame = window.requestAnimationFrame(() => {
+        appState.connectionFrame = 0;
+        drawConnections();
+      });
+    }
+
+    function updateStageMetrics() {
+      const visibleNodes = [...appState.cardElements.values()].filter((card) => isCardVisible(card)).length;
+      const visibleLanes = [...appState.sectionElements.values()].filter((section) => !section.classList.contains('is-hidden')).length;
+
+      if (appState.selectedKey && appState.nodes.has(appState.selectedKey)) {
+        stageMetric.textContent = `Focused on: ${appState.nodes.get(appState.selectedKey).label}`;
+      } else {
+        stageMetric.textContent = 'Focused on: Entire flow map';
+      }
+
+      visibleMetric.textContent = `Showing ${visibleNodes} main nodes across ${visibleLanes} bands`;
+    }
+
+    function applyHighlights() {
+      const selectedKey = appState.selectedKey;
+      const downstream = selectedKey ? collectReachable(selectedKey, 'out') : new Set();
+      const upstream = selectedKey ? collectReachable(selectedKey, 'in') : new Set();
+
+      for (const [key, card] of appState.cardElements.entries()) {
+        const isActive = key === selectedKey;
+        const isDownstream = !isActive && downstream.has(key);
+        const isUpstream = !isActive && upstream.has(key);
+        const isMuted = Boolean(selectedKey) && !isActive && !isDownstream && !isUpstream;
+
+        card.classList.toggle('active', isActive);
+        card.classList.toggle('is-downstream', isDownstream);
+        card.classList.toggle('is-upstream', isUpstream);
+        card.classList.toggle('is-muted', isMuted);
+      }
+    }
+
+    function applySearchFilter() {
+      const query = appState.searchQuery.trim().toLowerCase();
+      let selectedVisible = !appState.selectedKey;
+
+      for (const tier of appState.depthTiers) {
+        let tierHasMatch = false;
+
+        for (const key of tier.displayKeys) {
+          const node = appState.nodes.get(key);
+          const card = appState.cardElements.get(key);
+          if (!node || !card) {
+            continue;
+          }
+
+          const searchBody = `${node.label} ${node.groupName}`.toLowerCase();
+          const matches = !query || searchBody.includes(query);
+          card.classList.toggle('is-hidden', !matches);
+          tierHasMatch ||= matches;
+
+          if (key === appState.selectedKey) {
+            selectedVisible = matches;
+          }
+        }
+
+        appState.sectionElements.get(tier.stageKey)?.classList.toggle('is-hidden', !tierHasMatch);
+      }
+
+      if (!selectedVisible) {
+        appState.selectedKey = null;
+      }
+
+      renderInspector();
+      applyHighlights();
+      updateStageMetrics();
+      queueConnectionRender();
+    }
+
+    function setActiveNode(key, { shouldScroll = true } = {}) {
+      appState.selectedKey = key && appState.nodes.has(key) ? key : null;
+      renderInspector();
+      applyHighlights();
+      updateStageMetrics();
+      queueConnectionRender();
+
+      if (!shouldScroll || !appState.selectedKey) {
+        return;
+      }
+
+      const card = appState.cardElements.get(appState.selectedKey);
+      if (card && isCardVisible(card)) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+      }
+    }
+
+    function bindControls() {
+      searchInput.addEventListener('input', (event) => {
+        appState.searchQuery = event.target.value;
+        applySearchFilter();
+      });
+
+      savePdfBtn.addEventListener('click', () => {
+        window.print();
+      });
+      clearFocusBtn.addEventListener('click', () => setActiveNode(null, { shouldScroll: false }));
+      window.addEventListener('resize', queueConnectionRender);
+    }
+
+    async function bootstrap() {
+      bindControls();
+      appState.graphSource = await loadGraphSource();
+
+      const parsed = parseGraph(appState.graphSource);
+      appState.nodes = parsed.nodes;
+      appState.groups = parsed.groups;
+      appState.edges = parsed.edges;
+
+      buildAdjacency();
+      buildGroupOrder();
+      computeDepths();
+      buildDepthTiers();
+      renderOverview();
+      renderFlowCanvas();
+      renderInspector();
+      applyHighlights();
+      applySearchFilter();
+      updateStageMetrics();
+      queueConnectionRender();
+      document.fonts?.ready?.then(queueConnectionRender);
+
+      setStatus('Overview flow map is ready. Click a node when you want to drill into a major path through the business.');
+    }
+
+    bootstrap().catch((error) => {
+      setStatus(String(error.message || error), 'error');
+      flowLanes.replaceChildren();
+      flowOverlay.replaceChildren();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Boat Dealership $100K Production Launch Plan</title>
+  <style>
+    :root {
+      --navy: #12263f;
+      --navy-2: #1d4361;
+      --teal: #0d7a78;
+      --gold: #b7862e;
+      --mist: #eef5f6;
+      --sand: #f5efe4;
+      --ink: #18222e;
+      --muted: #5d6976;
+      --line: #d5dde3;
+      --card: #ffffff;
+      --page: #f7f4ee;
+      --good: #1d6c56;
+      --warn: #96591e;
+      --shadow: 0 18px 44px rgba(18, 38, 63, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    @page {
+      size: letter;
+      margin: 0.55in;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: Aptos, "Segoe UI", sans-serif;
+      line-height: 1.45;
+      background: linear-gradient(180deg, #edf4f6 0%, var(--page) 26%, #fcfbf8 100%);
+    }
+
+    main {
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 28px 18px 44px;
+    }
+
+    section {
+      margin-top: 24px;
+      break-inside: avoid;
+    }
+
+    .cover {
+      position: relative;
+      overflow: hidden;
+      padding: 34px 34px 30px;
+      border-radius: 30px;
+      color: #fff;
+      background:
+        radial-gradient(circle at top right, rgba(255, 255, 255, 0.24), transparent 32%),
+        radial-gradient(circle at left bottom, rgba(13, 122, 120, 0.26), transparent 30%),
+        linear-gradient(145deg, #12263f 0%, #173651 40%, #1d4361 68%, #245d74 100%);
+      box-shadow: var(--shadow);
+    }
+
+    .cover::after {
+      content: "";
+      position: absolute;
+      inset: 22px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 22px;
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      color: rgba(255, 255, 255, 0.92);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+      margin: 0;
+      line-height: 1.1;
+      font-family: Georgia, "Times New Roman", serif;
+    }
+
+    h1 {
+      max-width: 820px;
+      margin-top: 18px;
+      font-size: 40px;
+      letter-spacing: -0.02em;
+    }
+
+    h2 {
+      font-size: 28px;
+      color: var(--navy);
+    }
+
+    h3 {
+      font-size: 20px;
+      color: var(--navy);
+    }
+
+    .lead {
+      max-width: 820px;
+      margin-top: 18px;
+      font-size: 16px;
+      color: rgba(255, 255, 255, 0.88);
+    }
+
+    .cover-grid,
+    .four-up,
+    .three-up,
+    .two-up,
+    .metric-grid {
+      display: grid;
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    .cover-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .four-up {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .three-up {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .two-up {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .metric-grid {
+      grid-template-columns: 1.1fr 0.9fr;
+    }
+
+    .meta-card,
+    .stat-card,
+    .panel,
+    .mini-card,
+    .callout,
+    .budget-banner {
+      break-inside: avoid;
+    }
+
+    .meta-card {
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.13);
+    }
+
+    .meta-card span {
+      display: block;
+    }
+
+    .meta-label {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.74);
+    }
+
+    .meta-value {
+      margin-top: 8px;
+      font-size: 23px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .panel {
+      padding: 22px 24px;
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid rgba(18, 38, 63, 0.08);
+      box-shadow: 0 12px 34px rgba(18, 38, 63, 0.07);
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+    }
+
+    .section-intro {
+      margin-top: 10px;
+      max-width: 900px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .stat-card {
+      padding: 18px;
+      border-radius: 20px;
+      background: var(--card);
+      border: 1px solid rgba(18, 38, 63, 0.08);
+      box-shadow: 0 10px 28px rgba(18, 38, 63, 0.07);
+    }
+
+    .stat-card span {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .stat-card strong {
+      display: block;
+      margin-top: 10px;
+      font-size: 28px;
+      color: var(--navy);
+    }
+
+    .stat-card p {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .callout {
+      padding: 18px 20px;
+      border-radius: 20px;
+      background: linear-gradient(180deg, var(--mist) 0%, #f9fbfb 100%);
+      border-left: 5px solid var(--teal);
+    }
+
+    .callout p {
+      margin: 10px 0 0;
+      color: var(--muted);
+    }
+
+    .mini-card {
+      padding: 18px;
+      border-radius: 18px;
+      background: var(--sand);
+      border: 1px solid rgba(18, 38, 63, 0.08);
+    }
+
+    .mini-card p,
+    .mini-card li {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .budget-banner {
+      padding: 20px 22px;
+      border-radius: 22px;
+      color: #fff;
+      background: linear-gradient(135deg, #0d7a78 0%, #0f5f66 100%);
+      box-shadow: 0 14px 34px rgba(13, 122, 120, 0.24);
+    }
+
+    .budget-banner h3 {
+      color: #fff;
+      font-size: 24px;
+    }
+
+    .budget-banner p,
+    .budget-banner li {
+      color: rgba(255, 255, 255, 0.9);
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .pill {
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--navy);
+      background: #edf2f5;
+      border: 1px solid rgba(18, 38, 63, 0.08);
+    }
+
+    table {
+      width: 100%;
+      margin-top: 16px;
+      border-collapse: collapse;
+      font-size: 13px;
+      background: rgba(255, 255, 255, 0.84);
+      border-radius: 18px;
+      overflow: hidden;
+    }
+
+    th,
+    td {
+      padding: 11px 12px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--line);
+    }
+
+    th {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--navy);
+      background: #edf2f5;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    ul {
+      margin: 12px 0 0;
+      padding-left: 18px;
+    }
+
+    li {
+      margin-top: 7px;
+    }
+
+    .money {
+      white-space: nowrap;
+      font-weight: 700;
+      color: var(--navy);
+    }
+
+    .good {
+      color: var(--good);
+      font-weight: 700;
+    }
+
+    .warn {
+      color: var(--warn);
+      font-weight: 700;
+    }
+
+    .formula {
+      padding: 14px 16px;
+      margin-top: 14px;
+      border-radius: 16px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 13px;
+      color: #eef8fa;
+      background: linear-gradient(90deg, var(--navy) 0%, var(--navy-2) 100%);
+    }
+
+    .timeline {
+      margin-top: 18px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .timeline-item {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 14px;
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: #fbfbfa;
+      border: 1px solid rgba(18, 38, 63, 0.08);
+    }
+
+    .timeline-item strong {
+      color: var(--navy);
+    }
+
+    .footer-call {
+      padding: 22px 24px;
+      border-radius: 24px;
+      color: #fff;
+      background: linear-gradient(135deg, #173651 0%, #245d74 100%);
+      box-shadow: var(--shadow);
+    }
+
+    .footer-call h2 {
+      color: #fff;
+    }
+
+    .footer-call p,
+    .footer-call li {
+      color: rgba(255, 255, 255, 0.9);
+    }
+
+    .page-break {
+      break-before: page;
+      page-break-before: always;
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+
+      main {
+        max-width: none;
+        padding: 0;
+      }
+
+      .cover,
+      .panel,
+      .stat-card,
+      .mini-card,
+      .callout,
+      .budget-banner,
+      .footer-call {
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="cover">
+      <span class="eyebrow">Phase One Production Plan</span>
+      <h1>Boat Dealership Platform: $100K Budget Plan to Launch a Production-Ready Core</h1>
+      <p class="lead">
+        This report answers a narrower question than the full-platform valuation: with a hard starting budget of <strong>$100,000</strong>,
+        what should be built now so the product can be live, secure, and operational, and what should be intentionally deferred until later.
+      </p>
+
+      <div class="cover-grid">
+        <div class="meta-card">
+          <span class="meta-label">Budget Cap</span>
+          <span class="meta-value">$100,000</span>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Recommended Release Type</span>
+          <span class="meta-value">Production Pilot</span>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Recommended Timeline</span>
+          <span class="meta-value">10 Weeks</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="four-up">
+      <article class="stat-card">
+        <span>Ship Now</span>
+        <strong>1 Core Wedge</strong>
+        <p>Authenticated operating canvas with persistent graph editing, search, tree view, and exports.</p>
+      </article>
+      <article class="stat-card">
+        <span>Do Not Attempt Now</span>
+        <strong>Full Platform</strong>
+        <p>The complete SaaS vision does not fit inside $100K without cutting production quality.</p>
+      </article>
+      <article class="stat-card">
+        <span>Safe Target</span>
+        <strong>1 Dealer Group</strong>
+        <p>Launch for one internal organization or one pilot customer rather than broad enterprise rollout.</p>
+      </article>
+      <article class="stat-card">
+        <span>Critical Constraint</span>
+        <strong>Scope Discipline</strong>
+        <p>Every non-essential feature removed now buys real production readiness later.</p>
+      </article>
+    </section>
+
+    <section class="panel">
+      <h2>Executive Recommendation</h2>
+      <p class="section-intro">
+        A true full-platform build is not realistic at $100K. A <strong>production-ready phase-one pilot</strong> is realistic if the first release is defined tightly:
+        one secure web product, one managed backend, one pilot organization, core persistence, basic roles, export, and deployment operations.
+      </p>
+
+      <div class="two-up">
+        <div class="callout">
+          <h3>What Should Be Built Now</h3>
+          <p>
+            Build the current live diagram and builder into a secure hosted application where authenticated users can open the operating model,
+            edit nodes and flows, save versions, search, inspect, export, and view the top-down flow map with persistent backend storage.
+          </p>
+        </div>
+        <div class="callout">
+          <h3>What Must Wait</h3>
+          <p>
+            Defer deep integrations, workflow automation, KPI engines, billing, enterprise multi-tenant expansion, advanced analytics,
+            and broad customer deployment tooling. Those features belong in phase two and beyond.
+          </p>
+        </div>
+      </div>
+
+      <div class="formula">
+        $100K is enough for a production-ready core product only if the goal is "launch one narrow, secure, usable system" and not "finish the whole roadmap."
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>What Production-Ready Means at This Budget</h2>
+      <p class="section-intro">
+        Production-ready does not mean enterprise-complete. At this budget it should mean safe, hosted, backed up, authenticated, supportable, and usable by a real pilot team.
+      </p>
+
+      <div class="three-up">
+        <article class="mini-card">
+          <h3>Must Exist</h3>
+          <ul>
+            <li>HTTPS-hosted web app</li>
+            <li>Authentication and basic roles</li>
+            <li>Persistent database storage</li>
+            <li>Graph save/load/version snapshot behavior</li>
+            <li>Error monitoring and backups</li>
+            <li>Basic admin access and support runbook</li>
+          </ul>
+        </article>
+        <article class="mini-card">
+          <h3>Can Stay Simple</h3>
+          <ul>
+            <li>Single organization or limited pilot tenant model</li>
+            <li>Manual user onboarding</li>
+            <li>Managed authentication provider</li>
+            <li>Managed database and hosting services</li>
+            <li>Manual invoicing rather than self-serve billing</li>
+          </ul>
+        </article>
+        <article class="mini-card">
+          <h3>Cannot Be Fake</h3>
+          <ul>
+            <li>Security basics</li>
+            <li>Data persistence</li>
+            <li>Role controls</li>
+            <li>Backups and recovery</li>
+            <li>Launch documentation</li>
+            <li>Bug and error visibility</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Recommended Phase-One Scope</h2>
+      <p class="section-intro">
+        The best use of the first $100K is to productionize the current interactive operating canvas as the initial product wedge.
+        That keeps the existing prototype value, shortens time-to-launch, and avoids starting a new product from zero.
+      </p>
+
+      <div class="metric-grid">
+        <div class="budget-banner">
+          <h3>Phase-One Product Definition</h3>
+          <ul>
+            <li>Secure login for pilot users</li>
+            <li>One organization workspace with saved operating models</li>
+            <li>Core live canvas with node and edge editing</li>
+            <li>Persistent save, load, restore, and version snapshots</li>
+            <li>Search, inspector, quick-focus modes, and top-down flow map</li>
+            <li>Download Mermaid and JSON exports</li>
+            <li>Browser-based PDF export support</li>
+            <li>Basic user roles: admin and editor or viewer</li>
+            <li>Cloud deployment, logging, monitoring, and backups</li>
+          </ul>
+        </div>
+        <div class="mini-card">
+          <h3>Recommended Delivery Shape</h3>
+          <p>
+            Treat this as a <span class="good">production pilot release</span> for one real operator group, not a generic public launch.
+            The product should be stable enough to run live, but intentionally narrow enough to fit inside budget.
+          </p>
+          <div class="pill-row">
+            <span class="pill">Live canvas</span>
+            <span class="pill">Builder controls</span>
+            <span class="pill">Tree view</span>
+            <span class="pill">Version save</span>
+            <span class="pill">Role-based access</span>
+            <span class="pill">Export</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel page-break">
+      <h2>What Ships Now vs. What Waits</h2>
+      <p class="section-intro">
+        The line below is the most important decision in this entire plan. The only way to stay inside budget and still be production ready is to draw a hard boundary.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Build in Phase One</th>
+            <th>Wait for Later Phases</th>
+            <th>Reason for Deferral</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Hosted app shell and secure login</td>
+            <td>Enterprise SSO, SCIM, broad identity features</td>
+            <td>Too costly for first launch; managed auth is enough for pilot production.</td>
+          </tr>
+          <tr>
+            <td>Persistent graph storage and version snapshots</td>
+            <td>Advanced collaboration, approvals, and workflow routing</td>
+            <td>Core save and restore matter now; collaboration workflow does not.</td>
+          </tr>
+          <tr>
+            <td>Node and edge editing with save/load</td>
+            <td>Live multiplayer editing and commenting</td>
+            <td>Single-user edit reliability is more important than concurrency in phase one.</td>
+          </tr>
+          <tr>
+            <td>Search, inspector, focus modes, tree view</td>
+            <td>Advanced KPI dashboards and embedded analytics</td>
+            <td>Users need navigation now; analytics can wait until real data exists.</td>
+          </tr>
+          <tr>
+            <td>JSON and Mermaid export</td>
+            <td>Full API platform and partner integrations</td>
+            <td>Export preserves portability; integrations are expensive and should follow product proof.</td>
+          </tr>
+          <tr>
+            <td>Basic admin roles and audit snapshots</td>
+            <td>Full enterprise RBAC matrix and compliance workflow</td>
+            <td>Admin/editor/viewer is enough for a pilot; deep policy layering is not.</td>
+          </tr>
+          <tr>
+            <td>Monitoring, backups, launch runbook</td>
+            <td>Billing engine, self-serve onboarding, subscription automation</td>
+            <td>Manual commercial ops is cheaper until the product has paying scale.</td>
+          </tr>
+          <tr>
+            <td>Browser PDF and operational exports</td>
+            <td>Server-side document generation suite</td>
+            <td>Current export behavior is already sufficient for launch and far cheaper to maintain.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>Suggested Technical Approach</h2>
+      <p class="section-intro">
+        The cheapest way to get to production safely is to use managed services and reuse the current front-end interaction model instead of inventing a more ambitious stack.
+      </p>
+
+      <div class="three-up">
+        <article class="mini-card">
+          <h3>Frontend</h3>
+          <ul>
+            <li>Production web app built around the current live canvas and flow map behavior</li>
+            <li>Keep search, focus modes, drag, save, export, and tree view</li>
+            <li>Harden for responsive layout, accessibility, and error handling</li>
+          </ul>
+        </article>
+        <article class="mini-card">
+          <h3>Backend</h3>
+          <ul>
+            <li>Managed Postgres + storage</li>
+            <li>Managed auth provider for login and basic roles</li>
+            <li>Simple API for graph save/load/version export</li>
+            <li>One-organization workspace model first</li>
+          </ul>
+        </article>
+        <article class="mini-card">
+          <h3>Operations</h3>
+          <ul>
+            <li>Managed hosting platform</li>
+            <li>Error monitoring and uptime alerting</li>
+            <li>Nightly backups or snapshot strategy</li>
+            <li>Basic deployment pipeline and rollback path</li>
+          </ul>
+        </article>
+      </div>
+
+      <div class="formula">
+        Best-fit architecture at $100K = Managed Auth + Managed Database + Narrow API + Productionized Existing Frontend
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Budget Allocation: $100,000 Exactly</h2>
+      <p class="section-intro">
+        This budget only works if contingency is protected and low-value expansion is refused. The line items below deliberately bias toward getting one stable release live.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Budget Area</th>
+            <th>Amount</th>
+            <th>Why It Is Included</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Product scoping, solution design, technical planning</td>
+            <td class="money">$7,000</td>
+            <td>Prevents build drift and keeps the team inside the narrow launch scope.</td>
+          </tr>
+          <tr>
+            <td>UX cleanup, responsive polish, production interaction pass</td>
+            <td class="money">$6,000</td>
+            <td>Turns the current prototype into something a pilot customer can actually use daily.</td>
+          </tr>
+          <tr>
+            <td>Frontend productionization of canvas, builder, search, tree view, exports</td>
+            <td class="money">$24,000</td>
+            <td>The current UI is the product wedge, so this is the largest application line item.</td>
+          </tr>
+          <tr>
+            <td>Backend API, database schema, graph persistence, version snapshots</td>
+            <td class="money">$20,000</td>
+            <td>Moves the app from browser-local state into real production persistence.</td>
+          </tr>
+          <tr>
+            <td>Authentication, user roles, workspace access control</td>
+            <td class="money">$10,000</td>
+            <td>Production launch without auth and role control is not acceptable.</td>
+          </tr>
+          <tr>
+            <td>Admin surface, basic audit logging, restore flow</td>
+            <td class="money">$8,000</td>
+            <td>Supports safe pilot operation and basic internal governance.</td>
+          </tr>
+          <tr>
+            <td>QA, accessibility, performance, acceptance testing</td>
+            <td class="money">$8,000</td>
+            <td>Prevents a rushed launch from collapsing into support debt immediately.</td>
+          </tr>
+          <tr>
+            <td>Deployment, monitoring, logging, backups, launch hardening</td>
+            <td class="money">$7,000</td>
+            <td>Ensures the product is actually supportable once live.</td>
+          </tr>
+          <tr>
+            <td>Documentation, training, project management, UAT</td>
+            <td class="money">$6,000</td>
+            <td>Important for handoff, launch readiness, and a stable pilot operating motion.</td>
+          </tr>
+          <tr>
+            <td>Protected contingency reserve</td>
+            <td class="money">$4,000</td>
+            <td>Small but necessary buffer for last-mile bugs and hosting surprises.</td>
+          </tr>
+          <tr>
+            <td><strong>Total</strong></td>
+            <td class="money"><strong>$100,000</strong></td>
+            <td><strong>Only valid if roadmap creep is actively rejected during delivery.</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel page-break">
+      <h2>Delivery Plan by Week</h2>
+      <p class="section-intro">
+        The delivery timeline below assumes a narrow team, managed services, and no major scope changes after planning week.
+      </p>
+
+      <div class="timeline">
+        <div class="timeline-item">
+          <strong>Week 1</strong>
+          <div>
+            Finalize scope, lock phase-one backlog, select managed services, define data model, and freeze launch criteria.
+          </div>
+        </div>
+        <div class="timeline-item">
+          <strong>Weeks 2-3</strong>
+          <div>
+            Build application shell, auth, organization/workspace model, database schema, and initial graph persistence endpoints.
+          </div>
+        </div>
+        <div class="timeline-item">
+          <strong>Weeks 4-5</strong>
+          <div>
+            Productionize live canvas behavior, node and edge editing, save/load flows, version snapshots, and export paths.
+          </div>
+        </div>
+        <div class="timeline-item">
+          <strong>Weeks 6-7</strong>
+          <div>
+            Add tree-view connection to saved models, admin controls, restore path, search and inspector hardening, and role testing.
+          </div>
+        </div>
+        <div class="timeline-item">
+          <strong>Week 8</strong>
+          <div>
+            Monitoring, backups, deployment pipeline, environment setup, and production hardening.
+          </div>
+        </div>
+        <div class="timeline-item">
+          <strong>Week 9</strong>
+          <div>
+            QA, bug fixing, accessibility pass, UAT, and runbook completion.
+          </div>
+        </div>
+        <div class="timeline-item">
+          <strong>Week 10</strong>
+          <div>
+            Pilot launch, controlled rollout to initial users, support monitoring, and immediate post-launch stabilization.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Launch Criteria</h2>
+      <p class="section-intro">
+        If the following criteria are not met, the product is not production ready yet, no matter how much of the UI feels done.
+      </p>
+
+      <div class="two-up">
+        <div class="mini-card">
+          <h3>Required for Go-Live</h3>
+          <ul>
+            <li>Authenticated access with at least admin and editor or viewer roles</li>
+            <li>Persistent graph save and restore against the backend database</li>
+            <li>Version snapshot or recovery path</li>
+            <li>Functional search, inspector, and export flows</li>
+            <li>Tree view reading the saved model</li>
+            <li>Logging, error monitoring, and backup coverage</li>
+            <li>Documented deploy and rollback steps</li>
+          </ul>
+        </div>
+        <div class="mini-card">
+          <h3>Not Required for Phase One</h3>
+          <ul>
+            <li>Direct CRM, DMS, ERP, lender, marina, or telematics integrations</li>
+            <li>Automated workflow engine and alert routing</li>
+            <li>Embedded KPI warehouse and BI dashboards</li>
+            <li>Subscription billing and self-serve signup</li>
+            <li>Enterprise SSO, SCIM, and advanced permission matrices</li>
+            <li>Real-time collaboration, comments, and multiplayer edit mode</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Major Risks and Guardrails</h2>
+      <p class="section-intro">
+        The delivery risk is not that $100K is too small to build anything useful. The real risk is pretending it is enough to build everything useful.
+      </p>
+
+      <div class="three-up">
+        <article class="mini-card">
+          <h3>Risk: Scope Explosion</h3>
+          <p><span class="warn">Highest risk.</span> New feature requests will consume the production budget before launch-quality work is finished.</p>
+          <ul>
+            <li>Guardrail: no new modules after week 1</li>
+            <li>Guardrail: every add means a same-sized cut</li>
+          </ul>
+        </article>
+        <article class="mini-card">
+          <h3>Risk: Overbuilding Infrastructure</h3>
+          <p>Trying to design a large enterprise platform too early will waste budget that should go to shipping the core product.</p>
+          <ul>
+            <li>Guardrail: use managed auth and database</li>
+            <li>Guardrail: optimize for one pilot organization first</li>
+          </ul>
+        </article>
+        <article class="mini-card">
+          <h3>Risk: False Production Readiness</h3>
+          <p>A polished UI without persistence, auth, backups, and support visibility is still not launchable.</p>
+          <ul>
+            <li>Guardrail: protect QA and operations budget</li>
+            <li>Guardrail: launch checklist must be met before release</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel page-break">
+      <h2>What Phase Two Should Fund Later</h2>
+      <p class="section-intro">
+        Once the product is live and used by a real pilot customer or internal operator team, the next dollars should go into depth and leverage, not redoing phase one.
+      </p>
+
+      <div class="three-up">
+        <article class="mini-card">
+          <h3>Phase Two: Operational Depth</h3>
+          <ul>
+            <li>Workflow automation</li>
+            <li>KPI and reporting engine</li>
+            <li>Approval flows and richer audit trails</li>
+            <li>Template libraries and reusable playbooks</li>
+          </ul>
+        </article>
+        <article class="mini-card">
+          <h3>Phase Three: System Connectivity</h3>
+          <ul>
+            <li>CRM, DMS, ERP, payment, and marina integrations</li>
+            <li>Inbound and outbound data sync</li>
+            <li>External API model</li>
+            <li>Scheduled import and reconciliation logic</li>
+          </ul>
+        </article>
+        <article class="mini-card">
+          <h3>Phase Four: Scale Features</h3>
+          <ul>
+            <li>True multi-tenant enterprise rollout</li>
+            <li>Expanded RBAC and SSO</li>
+            <li>Billing and subscription management</li>
+            <li>Customer success tooling and rollout automation</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="footer-call">
+      <h2>Bottom-Line Decision</h2>
+      <p>
+        With <strong>$100,000</strong>, the right move is not to chase the full marine dealership platform. The right move is to launch a narrow,
+        production-ready pilot centered on the current live operating canvas, persistent saved models, role-based access, exports, and one secure hosted workspace.
+        That gets the product <strong>up and running for real</strong> while protecting the option to build the deeper platform later.
+      </p>
+      <ul>
+        <li>Recommended immediate goal: production-ready pilot for one organization</li>
+        <li>Recommended timeline: 10 weeks</li>
+        <li>Recommended budget principle: protect core quality and defer everything not required for launch</li>
+        <li>Recommended success measure: live users can securely save, edit, export, and manage the operating model in production</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

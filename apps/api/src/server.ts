@@ -1,0 +1,5607 @@
+import { randomUUID } from "node:crypto";
+import { prisma } from "@marine-cloud/database";
+import cors from "cors";
+import express from "express";
+import { z } from "zod";
+import {
+  applyServiceOrderDetailMutation,
+  buildServiceOrderPartCatalog,
+  initializeServiceOrder,
+  resolveServiceOrderDetail,
+  serializeServiceOrderDetail,
+  type ServiceOrderActivityEntry,
+  type ServiceOrderDetailMutation,
+  type ServiceOrderTaskEntry,
+  type ServiceOrderWorkspaceRow
+} from "./serviceOrderDetail.js";
+import { buildServiceWorkspaceNotifications } from "./serviceNotifications.js";
+import { resolveWorkflowActionPlan } from "./workflowActionPlans.js";
+
+const app = express();
+const port = Number(process.env.PORT ?? 4000);
+const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
+const allowedOrigins = new Set([webOrigin, "http://localhost:5173", "http://127.0.0.1:5173"]);
+const localHostnames = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+function isAllowedOrigin(origin: string) {
+  if (allowedOrigins.has(origin)) {
+    return true;
+  }
+
+  try {
+    const { hostname, protocol } = new URL(origin);
+
+    return (protocol === "http:" || protocol === "https:") && localHostnames.has(hostname);
+  } catch {
+    return false;
+  }
+}
+
+const navigation = [
+  {
+    label: "Application",
+    items: [
+      {
+        label: "View",
+        items: [
+          {
+            label: "Workspace Surface",
+            items: [
+              {
+                label: "Desktop Shell",
+                items: ["Desktop", "Open Windows"]
+              },
+              {
+                label: "Command Center",
+                items: ["Command Search", "Workspace Overview"]
+              }
+            ]
+          },
+          {
+            label: "Operator Rails",
+            items: [
+              {
+                label: "Productivity Rails",
+                items: ["Activity Snapshot", "Task Queue Monitor"]
+              },
+              {
+                label: "Inbox & Search",
+                items: ["Notification Center", "Search Results"]
+              }
+            ]
+          },
+          {
+            label: "Store Scope",
+            items: [
+              {
+                label: "Store Pulse",
+                items: ["Store Status Board", "Operator Status Board"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Recent Documents",
+        items: [
+          {
+            label: "Sales Documents",
+            items: [
+              {
+                label: "Desk Files",
+                items: ["Sales Deal Jackets", "Pending Quotes"]
+              },
+              {
+                label: "Delivery Files",
+                items: ["Delivery Packets"]
+              }
+            ]
+          },
+          {
+            label: "Service Documents",
+            items: [
+              {
+                label: "Repair Intake",
+                items: ["Repair Orders", "Estimate Worksheets"]
+              },
+              {
+                label: "Warranty Files",
+                items: ["Warranty Packets"]
+              }
+            ]
+          },
+          {
+            label: "Parts Documents",
+            items: [
+              {
+                label: "Counter Files",
+                items: ["Parts Purchase Orders", "Special Order Slips"]
+              },
+              {
+                label: "Receiving Controls",
+                items: ["Receiving Exceptions"]
+              }
+            ]
+          },
+          {
+            label: "Control Documents",
+            items: [
+              {
+                label: "Operational Controls",
+                items: ["Audit Notes", "Exception Logs", "Workflow Checklists"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Recent Reports",
+        items: [
+          {
+            label: "Executive Reports",
+            items: [
+              {
+                label: "Leadership Pulse",
+                items: ["Executive Snapshot", "Cash Pulse"]
+              },
+              {
+                label: "Store Scorecards",
+                items: ["Store Scorecard"]
+              }
+            ]
+          },
+          {
+            label: "Sales Reports",
+            items: [
+              {
+                label: "Desk Metrics",
+                items: ["Sales Velocity", "Lead Source Mix", "Desk Productivity"]
+              }
+            ]
+          },
+          {
+            label: "Service Reports",
+            items: [
+              {
+                label: "Service Lane",
+                items: ["Service Promise Board", "Technician Load"]
+              },
+              {
+                label: "Risk Watch",
+                items: ["Comeback Watch"]
+              }
+            ]
+          },
+          {
+            label: "Parts Reports",
+            items: [
+              {
+                label: "Parts Metrics",
+                items: ["Parts Fill Rate", "Vendor Performance"]
+              },
+              {
+                label: "Aging Risk",
+                items: ["Obsolescence Watch"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Workspace Tools",
+        items: [
+          {
+            label: "Window Control",
+            items: [
+              {
+                label: "Window Layout",
+                items: ["Pinned Windows", "Window Layout Presets"]
+              },
+              {
+                label: "Reset Actions",
+                items: ["Workspace Reset"]
+              }
+            ]
+          },
+          {
+            label: "Alerts & Notices",
+            items: [
+              {
+                label: "Operator Inbox",
+                items: ["Notifications", "Follow-Up Prompts"]
+              },
+              {
+                label: "Exception Review",
+                items: ["Exception Inbox"]
+              }
+            ]
+          },
+          {
+            label: "Store Operations",
+            items: [
+              {
+                label: "Store Operations Board",
+                items: ["Store Summary", "Store Roster", "Shift Notes"]
+              }
+            ]
+          },
+          {
+            label: "Setup",
+            items: [
+              {
+                label: "Personal Setup",
+                items: ["Preferences", "Personal Shortcuts"]
+              },
+              {
+                label: "Launch Setup",
+                items: ["Quick Launch Setup"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Favorites",
+        items: [
+          {
+            label: "My Workspaces",
+            items: [
+              {
+                label: "Pinned Workspaces",
+                items: ["Favorite Desktop", "Favorite Service Board", "Favorite Parts Board", "Favorite Sales Board"]
+              }
+            ]
+          },
+          {
+            label: "My Dashboards",
+            items: [
+              {
+                label: "Pinned Dashboards",
+                items: ["Favorite Executive Board", "Favorite Website Feed", "Favorite Audit Trail"]
+              }
+            ]
+          }
+        ]
+      },
+      "Switch Store",
+      "Lock Screen",
+      "Logout",
+      "Exit"
+    ]
+  },
+  {
+    label: "Parts",
+    items: [
+      {
+        label: "Inventory Control",
+        items: [
+          {
+            label: "Stock Visibility",
+            items: [
+              {
+                label: "Lookup Tools",
+                items: ["Parts Inventory", "Part Number Lookup"]
+              },
+              {
+                label: "Cross-Reference Search",
+                items: ["Secondary Number Lookup", "Description Search"]
+              }
+            ]
+          },
+          {
+            label: "Inventory Accuracy",
+            items: [
+              {
+                label: "Count Verification",
+                items: ["Cycle Counts", "Bin Location Review"]
+              },
+              {
+                label: "Adjustment Control",
+                items: ["On-Hand Adjustments", "Stock Status Review"]
+              }
+            ]
+          },
+          {
+            label: "Pricing & Availability",
+            items: [
+              {
+                label: "Pricing Review",
+                items: ["Price Matrix Review", "Stocking Class Review"]
+              },
+              {
+                label: "Availability Watch",
+                items: ["Availability Watch", "Substitute Parts"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Purchasing",
+        items: [
+          {
+            label: "Replenishment",
+            items: [
+              {
+                label: "Daily Ordering",
+                items: ["Ordering", "Purchase Order Queue"]
+              },
+              {
+                label: "Urgent Movement",
+                items: ["Emergency Buy", "Transfer Requests"]
+              }
+            ]
+          },
+          {
+            label: "Special Procurement",
+            items: [
+              {
+                label: "Customer Orders",
+                items: ["Special Orders", "Backorder Review"]
+              },
+              {
+                label: "Direct Fulfillment",
+                items: ["Drop Ship Requests", "Supplier Follow-Up"]
+              }
+            ]
+          },
+          {
+            label: "Vendor Management",
+            items: [
+              {
+                label: "Supplier Coverage",
+                items: ["Preferred Vendor Matrix", "Supplier Scorecards"]
+              },
+              {
+                label: "Lead Time & Claims",
+                items: ["Vendor Lead Times", "Open Vendor Claims"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Receiving & Returns",
+        items: [
+          {
+            label: "Dock Flow",
+            items: [
+              {
+                label: "Receiving Queue",
+                items: ["Receiving", "Receipt Match Queue"]
+              },
+              {
+                label: "Dock Exceptions",
+                items: ["Vendor Discrepancies", "Core Tracking"]
+              }
+            ]
+          },
+          {
+            label: "Returns",
+            items: [
+              {
+                label: "Vendor Returns",
+                items: ["Vendor Returns", "Warranty Returns"]
+              },
+              {
+                label: "Authorizations",
+                items: ["Return Authorizations", "Damaged Goods Hold"]
+              }
+            ]
+          },
+          {
+            label: "Exception Control",
+            items: [
+              {
+                label: "Receiving Audit",
+                items: ["Packing Slip Variances", "Receipt Audit Trail"]
+              },
+              {
+                label: "Core Follow-Up",
+                items: ["Missing Core Follow-Up", "Freight Damage Review"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Counter & Tickets",
+        items: [
+          {
+            label: "Customer Counter",
+            items: [
+              {
+                label: "Counter Entry",
+                items: ["Cashiering", "Counter Sale Entry"]
+              },
+              {
+                label: "Pickup & Quotes",
+                items: ["Will Call Queue", "Quote Builder"]
+              }
+            ]
+          },
+          {
+            label: "Service Support",
+            items: [
+              {
+                label: "Technician Support",
+                items: ["Technician Parts Requests", "Open Pick Tickets"]
+              },
+              {
+                label: "Install Staging",
+                items: ["Install Prep Queue", "Service Parts Staging"]
+              }
+            ]
+          },
+          {
+            label: "Ticket Controls",
+            items: [
+              {
+                label: "Held Tickets",
+                items: ["Hold Tickets", "Pending Invoice Review"]
+              },
+              {
+                label: "Closeout & Refunds",
+                items: ["Counter Closeout", "Refund Approvals"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Lists & Reporting",
+        items: [
+          {
+            label: "Operational Lists",
+            items: [
+              {
+                label: "Printed Lists",
+                items: ["Lists", "Bin Labels", "Cycle Count Sheets"]
+              },
+              {
+                label: "Update Queue",
+                items: ["Price Update Queue"]
+              }
+            ]
+          },
+          {
+            label: "Performance Reports",
+            items: [
+              {
+                label: "Performance Pack",
+                items: ["Reports", "Fill Rate Summary", "Lost Sales Report"]
+              },
+              {
+                label: "Obsolescence & Custom",
+                items: ["Obsolescence Report", "Custom Reports"]
+              }
+            ]
+          },
+          {
+            label: "Financial Reports",
+            items: [
+              {
+                label: "Margin Review",
+                items: ["Gross Margin Detail", "Counter Closeout Summary"]
+              },
+              {
+                label: "Returns & Spend",
+                items: ["Return Activity Report", "Vendor Spend Analysis"]
+              }
+            ]
+          },
+          {
+            label: "Scheduled Output",
+            items: [
+              {
+                label: "Report Sets",
+                items: ["Saved Report Sets", "Scheduled Report Runs"]
+              },
+              {
+                label: "Delivery History",
+                items: ["Report Delivery Queue", "Export History"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Administration & Setup",
+        items: [
+          {
+            label: "Catalog Maintenance",
+            items: [
+              {
+                label: "Catalog Updates",
+                items: ["Vendor Catalog Sync", "Supersession Review"]
+              },
+              {
+                label: "Assemblies",
+                items: ["Kit Assemblies", "Accessory Bundles"]
+              }
+            ]
+          },
+          {
+            label: "Security & Policy",
+            items: [
+              {
+                label: "Permission Controls",
+                items: ["Counter Permissions", "Approval Limits"]
+              },
+              {
+                label: "Overrides & Access",
+                items: ["Parts Overrides", "Role Access Review"]
+              }
+            ]
+          },
+          {
+            label: "Department Setup",
+            items: [
+              {
+                label: "Pricing Setup",
+                items: ["Tax & Fee Setup", "Core Charge Table"]
+              },
+              {
+                label: "Discount & Forms",
+                items: ["Discount Rules", "Print Form Layouts"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Utilities",
+        items: [
+          {
+            label: "Barcode & Labels",
+            items: [
+              {
+                label: "Label Printing",
+                items: ["Barcode Utilities", "Label Reprint Queue"]
+              },
+              {
+                label: "Shelf & Bin Labels",
+                items: ["Bin Label Designer", "Shelf Tag Runs"]
+              }
+            ]
+          },
+          {
+            label: "Import & Export",
+            items: [
+              {
+                label: "File Intake",
+                items: ["Import Staging", "Vendor File Drops"]
+              },
+              {
+                label: "Outbound Files",
+                items: ["Export Queue", "Price File Updates"]
+              }
+            ]
+          },
+          {
+            label: "Housekeeping",
+            items: [
+              {
+                label: "Archive & Purge",
+                items: ["Archive Closed Tickets", "Purge Temp Holds"]
+              },
+              {
+                label: "Merge & Reindex",
+                items: ["Merge Duplicate Parts", "Rebuild Search Index"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Favorites",
+        items: [
+          {
+            label: "My Parts Views",
+            items: [
+              {
+                label: "Favorite Boards",
+                items: ["Favorite Parts Board", "Favorite Receiving Queue"]
+              },
+              {
+                label: "Favorite Queues",
+                items: ["Favorite PO Queue", "Favorite Parts Reports"]
+              }
+            ]
+          },
+          {
+            label: "My Shortcuts",
+            items: [
+              {
+                label: "Supplier Favorites",
+                items: ["Favorite Vendor Scorecards", "Favorite Catalog Sync"]
+              },
+              {
+                label: "Performance Favorites",
+                items: ["Favorite Fill Rate View", "Favorite Counter Closeout"]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    label: "Service",
+    items: [
+      {
+        label: "Order Intake",
+        items: [
+          {
+            label: "Write-Up",
+            items: [
+              {
+                label: "Service Intake",
+                items: ["New Estimate", "New Repair Order"]
+              },
+              {
+                label: "Open Orders",
+                items: ["Estimates & Repair Orders", "Express Write-Up"]
+              }
+            ]
+          },
+          {
+            label: "Customer Arrival",
+            items: [
+              {
+                label: "Arrival Queue",
+                items: ["Check-In Board", "Unit Intake Photos"]
+              },
+              {
+                label: "Promise & Pickup",
+                items: ["Promise Date Entry", "Pickup Appointment Queue"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Queue & Dispatch",
+        items: [
+          {
+            label: "Status Queues",
+            items: [
+              {
+                label: "Repair Queue",
+                items: ["Repair Order Queue", "Customer Reply", "Tech Complete"]
+              },
+              {
+                label: "Parts Queue",
+                items: ["Parts Received", "Parts Hold"]
+              }
+            ]
+          },
+          {
+            label: "Shop Control",
+            items: [
+              {
+                label: "Dispatch Planning",
+                items: ["Dispatch Board", "Bay Schedule"]
+              },
+              {
+                label: "Production Watch",
+                items: ["Work In Progress", "Promise Date Watch"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Workbench & Detail",
+        items: [
+          {
+            label: "RO Workbench",
+            items: [
+              {
+                label: "Order Detail",
+                items: ["Repair Order Detail", "Job Workbench"]
+              },
+              {
+                label: "Labor & Recommendations",
+                items: ["Labor Sessions", "Recommendations Queue"]
+              }
+            ]
+          },
+          {
+            label: "Document Actions",
+            items: [
+              {
+                label: "Output Queue",
+                items: ["Print Service Packet", "Report Queue", "Detail Review"]
+              },
+              {
+                label: "Duplicate Control",
+                items: ["Duplicate RO"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Technician & Shop",
+        items: [
+          {
+            label: "Labor Control",
+            items: [
+              {
+                label: "Time Tracking",
+                items: ["Technician Time Entry", "Clocked Hours Review"]
+              },
+              {
+                label: "Productivity Review",
+                items: ["Flat Rate Review", "Technician Productivity"]
+              }
+            ]
+          },
+          {
+            label: "Quality Control",
+            items: [
+              {
+                label: "Final Review",
+                items: ["Final Inspection", "Delivery Prep Queue"]
+              },
+              {
+                label: "Sea Trial Risk",
+                items: ["Sea Trial Checklist", "Comeback Watch"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Warranty & Claims",
+        items: [
+          {
+            label: "Claim Processing",
+            items: [
+              {
+                label: "Carrier Intake",
+                items: ["Warranty Claims", "Pre-Authorization Queue"]
+              },
+              {
+                label: "Submission Status",
+                items: ["Carrier Submission Queue", "Claim Status Review"]
+              }
+            ]
+          },
+          {
+            label: "Recovery Tracking",
+            items: [
+              {
+                label: "Recovery Review",
+                items: ["Warranty Receivables", "Deductible Review"]
+              },
+              {
+                label: "Delay Audit",
+                items: ["Delayed Claim Watch", "Claim Audit Trail"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Customer Communication",
+        items: [
+          {
+            label: "Approvals & Replies",
+            items: [
+              {
+                label: "Approval Queue",
+                items: ["Approval Needed Queue", "Customer Reply Monitor"]
+              },
+              {
+                label: "Pickup Updates",
+                items: ["Pickup Ready Queue", "Status Update Log"]
+              }
+            ]
+          },
+          {
+            label: "Notifications",
+            items: [
+              {
+                label: "Alert Inbox",
+                items: ["Notification Rail", "Unread Service Alerts"]
+              },
+              {
+                label: "Risk Follow-Up",
+                items: ["Promise Risk Alerts", "Follow-Up Callbacks"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Lists & Reporting",
+        items: [
+          {
+            label: "Operational Lists",
+            items: [
+              {
+                label: "Open Order Lists",
+                items: ["Lists", "Open Estimates List", "Open RO Aging"]
+              },
+              {
+                label: "Assignment Sheets",
+                items: ["Technician Assignment Sheet"]
+              }
+            ]
+          },
+          {
+            label: "Performance Reports",
+            items: [
+              {
+                label: "Time & Promise",
+                items: ["Reports", "Elapsed Time Summary", "Promise-Date Performance"]
+              },
+              {
+                label: "Warranty Throughput",
+                items: ["Warranty Throughput", "Custom Reports"]
+              }
+            ]
+          },
+          {
+            label: "Financial Reports",
+            items: [
+              {
+                label: "Labor Performance",
+                items: ["Labor Sales Summary", "Effective Labor Rate"]
+              },
+              {
+                label: "Cost Review",
+                items: ["Comeback Cost Review", "Sublet Analysis"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Administration & Setup",
+        items: [
+          {
+            label: "Department Setup",
+            items: [
+              {
+                label: "Rate & Writers",
+                items: ["Labor Rate Setup", "Service Writer Assignments"]
+              },
+              {
+                label: "Codes & Forms",
+                items: ["Job Code Library", "Print Form Layouts"]
+              }
+            ]
+          },
+          {
+            label: "Policy & Controls",
+            items: [
+              {
+                label: "Approval Rules",
+                items: ["Approval Limits", "Promise Date Rules"]
+              },
+              {
+                label: "Warranty Access",
+                items: ["Warranty Policy Matrix", "Role Access Review"]
+              }
+            ]
+          },
+          {
+            label: "Workflow Setup",
+            items: [
+              {
+                label: "Status & Dispatch",
+                items: ["Status Rules", "Dispatch Priorities"]
+              },
+              {
+                label: "Alerts & Inspection",
+                items: ["Notification Triggers", "Inspection Templates"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Utilities",
+        items: [
+          {
+            label: "Schedule & Capacity",
+            items: [
+              {
+                label: "Capacity Planning",
+                items: ["Capacity Planner", "Bay Availability Matrix"]
+              },
+              {
+                label: "Loaner & Pickup",
+                items: ["Loaner Schedule", "Pickup Calendar"]
+              }
+            ]
+          },
+          {
+            label: "Data & Cleanup",
+            items: [
+              {
+                label: "Archive & Merge",
+                items: ["Archive Closed ROs", "Merge Duplicate Units"]
+              },
+              {
+                label: "Renumber & Reindex",
+                items: ["Repair Order Renumbering", "Rebuild Search Index"]
+              }
+            ]
+          },
+          {
+            label: "Imports & Exports",
+            items: [
+              {
+                label: "Data Export",
+                items: ["Export Queue", "Service Data Extracts"]
+              },
+              {
+                label: "Sync Exchange",
+                items: ["Mobile Tech Sync", "Vendor File Exchange"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Favorites",
+        items: [
+          {
+            label: "My Service Views",
+            items: [
+              {
+                label: "Favorite Boards",
+                items: ["Favorite RO Queue", "Favorite Dispatch Board"]
+              },
+              {
+                label: "Warranty & Reports",
+                items: ["Favorite Warranty Board", "Favorite Service Reports"]
+              }
+            ]
+          },
+          {
+            label: "My Shortcuts",
+            items: [
+              {
+                label: "Promise & Approval",
+                items: ["Favorite Promise Watch", "Favorite Approval Queue"]
+              },
+              {
+                label: "Tech & Pickup",
+                items: ["Favorite Tech Productivity", "Favorite Pickup Ready"]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    label: "Sales",
+    items: [
+      {
+        label: "Lead Desk",
+        items: [
+          {
+            label: "Prospect Capture",
+            items: [
+              {
+                label: "Lead Intake",
+                items: ["New Lead", "Showroom Ups"]
+              },
+              {
+                label: "Remote Intake",
+                items: ["Phone Ups", "Internet Lead Entry"]
+              }
+            ]
+          },
+          {
+            label: "Follow-Up Queues",
+            items: [
+              {
+                label: "Open Pipeline",
+                items: ["Leads, Quotes & Deals", "Unsold Follow-Up"]
+              },
+              {
+                label: "Appointments & Calls",
+                items: ["Appointment Board", "CRM Call List"]
+              }
+            ]
+          },
+          {
+            label: "Board Views",
+            items: [
+              {
+                label: "Lead Views",
+                items: ["Lead Board", "Quote Board"]
+              },
+              {
+                label: "Deal Views",
+                items: ["Open Deal Board", "Deposit Board"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Quote & Deal Desk",
+        items: [
+          {
+            label: "Quote Creation",
+            items: [
+              {
+                label: "Quote Drafting",
+                items: ["New Quote", "Payment Quote"]
+              },
+              {
+                label: "Worksheet Review",
+                items: ["Quote Revisions", "Worksheet Builder"]
+              }
+            ]
+          },
+          {
+            label: "Deal Structuring",
+            items: [
+              {
+                label: "Deal Entry",
+                items: ["New Deal", "Deal Jacket Review"]
+              },
+              {
+                label: "Trade & Deposit",
+                items: ["Trade Appraisal Desk", "Deposit Log"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Inventory & Availability",
+        items: [
+          {
+            label: "Unit Visibility",
+            items: [
+              {
+                label: "Inventory Lookup",
+                items: ["Major Unit Inventory", "Major Unit Locator"]
+              },
+              {
+                label: "Incoming & Aging",
+                items: ["Incoming Unit Schedule", "Aged Inventory Watch"]
+              }
+            ]
+          },
+          {
+            label: "Pricing & Promotion",
+            items: [
+              {
+                label: "Promotion Controls",
+                items: ["Consumer Promos", "Rebate Matrix"]
+              },
+              {
+                label: "Package Pricing",
+                items: ["Package Builder", "MSRP Override Review"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "F&I & Delivery",
+        items: [
+          {
+            label: "Finance Workflow",
+            items: [
+              {
+                label: "Deposit & Credit",
+                items: ["Take Deposit", "Credit Application Queue"]
+              },
+              {
+                label: "Funding Follow-Up",
+                items: ["Lender Follow-Up", "Funding Pending"]
+              },
+              {
+                label: "Compliance Review",
+                items: ["Compliance Packet"]
+              }
+            ]
+          },
+          {
+            label: "Delivery Control",
+            items: [
+              {
+                label: "Delivery Prep",
+                items: ["Delivery Checklist", "Sold Not Delivered"]
+              },
+              {
+                label: "We Owe & Calendar",
+                items: ["We Owe Log", "Delivery Calendar"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Customer & CRM",
+        items: [
+          {
+            label: "Customer Pipeline",
+            items: [
+              {
+                label: "Prospect Review",
+                items: ["Prospect 360", "Duplicate Customer Review"]
+              },
+              {
+                label: "Recovery & Referral",
+                items: ["Lost Prospect Recovery", "Referral Tracker"]
+              }
+            ]
+          },
+          {
+            label: "Communication",
+            items: [
+              {
+                label: "Campaign Outreach",
+                items: ["Email Campaign Queue", "Text Follow-Up Board"]
+              },
+              {
+                label: "Relationship Lists",
+                items: ["Birthday & Anniversary List", "CSI Outreach"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Reporting & Analysis",
+        items: [
+          {
+            label: "Sales Performance",
+            items: [
+              {
+                label: "Rep Performance",
+                items: ["Salesperson Insights", "Closing Ratio Summary"]
+              },
+              {
+                label: "Source & Gross",
+                items: ["Lead Source Mix", "Gross Profit Summary"]
+              }
+            ]
+          },
+          {
+            label: "Forecast & Aging",
+            items: [
+              {
+                label: "Aging Review",
+                items: ["Quote Aging", "Appraisal Aging"]
+              },
+              {
+                label: "Forecast Reporting",
+                items: ["Deal Forecast", "Custom Sales Reports"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Administration & Setup",
+        items: [
+          {
+            label: "Desk Setup",
+            items: [
+              {
+                label: "Sales Desk",
+                items: ["Salesperson Assignment", "Lead Source Setup"]
+              },
+              {
+                label: "Quote Rules",
+                items: ["Quote Form Layouts", "Deal Status Rules"]
+              }
+            ]
+          },
+          {
+            label: "Finance Controls",
+            items: [
+              {
+                label: "Rate & Fee",
+                items: ["Rate Tables", "Doc Fee Setup"]
+              },
+              {
+                label: "Menu & Compliance",
+                items: ["Menu Template Library", "Compliance Forms"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Favorites",
+        items: [
+          {
+            label: "My Sales Views",
+            items: [
+              {
+                label: "Favorite Boards",
+                items: ["Favorite Lead Queue", "Favorite Deal Desk"]
+              },
+              {
+                label: "Delivery & Reports",
+                items: ["Favorite Delivery Board", "Favorite Sales Reports"]
+              }
+            ]
+          },
+          {
+            label: "My Shortcuts",
+            items: [
+              {
+                label: "Funding & Appraisal",
+                items: ["Favorite Funding Watch", "Favorite Appraisal Log"]
+              },
+              {
+                label: "Promotions & Sold",
+                items: ["Favorite Promotions", "Favorite Sold Board"]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    label: "Management Activity",
+    items: [
+      {
+        label: "Leadership Dashboards",
+        items: [
+          {
+            label: "Executive Views",
+            items: ["Desktop", "Executive Board", "Daily Scorecard", "Forecast Snapshot"]
+          },
+          {
+            label: "Exception Watch",
+            items: ["Exception Monitor", "Margin Risk Board", "Cash Pulse", "Funding Alerts"]
+          }
+        ]
+      },
+      {
+        label: "Department Activity",
+        items: [
+          {
+            label: "Sales & F&I",
+            items: ["Sales Activity", "Deal Funding Watch", "Lead Response Monitor", "Delivery Readiness"]
+          },
+          {
+            label: "Service & Parts",
+            items: ["Service Throughput", "Promise Date Watch", "Parts Fill Rate", "Backorder Risk"]
+          }
+        ]
+      },
+      {
+        label: "Digital & Workforce",
+        items: [
+          {
+            label: "Website & CRM",
+            items: ["Website Activity", "Lead Handoff Monitor", "Campaign Response", "Reputation Watch"]
+          },
+          {
+            label: "Payroll & People",
+            items: ["Payroll Review", "Time Clock Exceptions", "Comp Plan Review", "Staffing Coverage"]
+          }
+        ]
+      },
+      {
+        label: "Cross-Store & Audit",
+        items: [
+          {
+            label: "Group Oversight",
+            items: ["Cross-Store View", "Store Scorecards", "Benchmark Queue", "Action Tracker"]
+          },
+          {
+            label: "Compliance & Close",
+            items: ["Audit Trail", "Policy Exceptions", "Approval Log", "Month-End Readiness"]
+          }
+        ]
+      },
+      {
+        label: "Favorites",
+        items: [
+          {
+            label: "Leadership Views",
+            items: ["Favorite Executive Board", "Favorite Exception Watch", "Favorite Website Pulse", "Favorite Payroll Audit"]
+          },
+          {
+            label: "Shortcuts",
+            items: ["Favorite Forecast", "Favorite Cross-Store Compare", "Favorite Funding Alerts", "Favorite Approval Log"]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    label: "Receivables",
+    items: [
+      {
+        label: "Customer Accounts",
+        items: [
+          {
+            label: "Inquiry & Statements",
+            items: [
+              {
+                label: "Account Review",
+                items: ["Customer Inquiry", "Credit Hold Review"]
+              },
+              {
+                label: "Statement Services",
+                items: ["Statement Requests", "Balance Forward Review"]
+              }
+            ]
+          },
+          {
+            label: "Promise Tracking",
+            items: [
+              {
+                label: "Promise Monitor",
+                items: ["Promise to Pay", "Broken Promise Review"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Collections Desk",
+        items: [
+          {
+            label: "Collector Queue",
+            items: [
+              {
+                label: "Active Collections",
+                items: ["Collections Queue", "Delinquency Watch"]
+              }
+            ]
+          },
+          {
+            label: "Notes & Escalations",
+            items: [
+              {
+                label: "Collector Notes",
+                items: ["Follow-Up Notes", "Dispute Follow-Up"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Payment Processing",
+        items: [
+          {
+            label: "Batch Control",
+            items: [
+              {
+                label: "Settlement Review",
+                items: ["Credit Card Batch Payments", "Batch Deposit Match"]
+              },
+              {
+                label: "ACH Review",
+                items: ["ACH Exceptions", "NSF Watch"]
+              }
+            ]
+          },
+          {
+            label: "Risk Review",
+            items: [
+              {
+                label: "Risk Signals",
+                items: ["Chargeback Watch", "Merchant Reserve Review"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Reporting & Close",
+        items: [
+          {
+            label: "Aging & Promise Reports",
+            items: [
+              {
+                label: "Aging Packets",
+                items: ["Reports", "Aging Review"]
+              },
+              {
+                label: "Promise Coverage",
+                items: ["Promise Tracker", "Broken Promise Summary"]
+              }
+            ]
+          },
+          {
+            label: "Month-End Actions",
+            items: [
+              {
+                label: "AR Closeout",
+                items: ["Month-End AR", "Finance Follow-Up", "Write-Off Review"]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    label: "General Ledger",
+    items: [
+      {
+        label: "Financial Views",
+        items: [
+          {
+            label: "Store Financials",
+            items: [
+              {
+                label: "Performance Review",
+                items: ["Store Summary", "Department P&L"]
+              }
+            ]
+          },
+          {
+            label: "Daily Flash",
+            items: [
+              {
+                label: "Variance Pulse",
+                items: ["Flash Report", "Expense Variance"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Posting Control",
+        items: [
+          {
+            label: "Deal & Funding",
+            items: [
+              {
+                label: "Posting Queue",
+                items: ["Deal Posting", "Funding to GL"]
+              }
+            ]
+          },
+          {
+            label: "Transit Review",
+            items: [
+              {
+                label: "Exception Posting",
+                items: ["Contract-in-Transit", "Funding Exception Review"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Cash Control",
+        items: [
+          {
+            label: "Deposit Review",
+            items: [
+              {
+                label: "Deposit Audit",
+                items: ["Deposits", "Deposit Exceptions"]
+              }
+            ]
+          },
+          {
+            label: "Clearing",
+            items: [
+              {
+                label: "Variance Control",
+                items: ["Cash Clearing", "Deposit Slip Match"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Close & Reconcile",
+        items: [
+          {
+            label: "Period Close",
+            items: [
+              {
+                label: "Close Ownership",
+                items: ["Month End", "Close Checklist", "Accrual Review"]
+              },
+              {
+                label: "Trial Balance",
+                items: ["Trial Balance Review"]
+              }
+            ]
+          },
+          {
+            label: "Reconciliation",
+            items: [
+              {
+                label: "Balance Sheet",
+                items: ["Bank Reconciliation", "Schedule Review"]
+              },
+              {
+                label: "Journal Control",
+                items: ["Journal Entry Queue", "Recurring Journal Review"]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    label: "System",
+    items: [
+      {
+        label: "Digital Operations",
+        items: [
+          {
+            label: "Website Publishing",
+            items: [
+              {
+                label: "Feed Delivery",
+                items: ["Website Feed", "Feed Health"]
+              },
+              {
+                label: "Publishing Exceptions",
+                items: ["Feed Retry Queue"]
+              }
+            ]
+          },
+          {
+            label: "Lead & Sync",
+            items: [
+              {
+                label: "Lead Delivery",
+                items: ["Lead Form Routing", "Sync Monitor"]
+              },
+              {
+                label: "Retry & Recovery",
+                items: ["Lead Retry Queue"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Access & Security",
+        items: [
+          {
+            label: "User Access",
+            items: [
+              {
+                label: "Role Coverage",
+                items: ["Users & Roles", "Store Access Matrix"]
+              },
+              {
+                label: "Provisioning",
+                items: ["MFA Reset Queue"]
+              }
+            ]
+          },
+          {
+            label: "Security Events",
+            items: [
+              {
+                label: "Change Review",
+                items: ["Permission Changes", "Login Watch"]
+              },
+              {
+                label: "Policy Controls",
+                items: ["Password Policy Review"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Automation & Configuration",
+        items: [
+          {
+            label: "Workflow Automation",
+            items: [
+              {
+                label: "Runtime Rules",
+                items: ["Workflow Rules", "Notification Escalations", "Background Jobs"]
+              }
+            ]
+          },
+          {
+            label: "Environment Controls",
+            items: [
+              {
+                label: "Release Controls",
+                items: ["Feature Flags", "Environment Review"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Audit & Integrations",
+        items: [
+          {
+            label: "Audit Logs",
+            items: [
+              {
+                label: "System Audit",
+                items: ["Audit Trail", "Policy Change Log"]
+              }
+            ]
+          },
+          {
+            label: "Integration Endpoints",
+            items: [
+              {
+                label: "Connectors",
+                items: ["API Connectors", "Vendor Endpoints"]
+              },
+              {
+                label: "Message Templates",
+                items: ["Template Library", "Webhook Retry Log"]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    label: "Help",
+    items: [
+      {
+        label: "Quick Start",
+        items: [
+          {
+            label: "First Day",
+            items: [
+              {
+                label: "Core Orientation",
+                items: ["Operator Guide", "New Operator Checklist"]
+              },
+              {
+                label: "Ramp Plan",
+                items: ["First Week Plan"]
+              }
+            ]
+          },
+          {
+            label: "Navigation",
+            items: [
+              {
+                label: "Command Surface",
+                items: ["Shortcut Map", "Open Windows Guide"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Daily Operations",
+        items: [
+          {
+            label: "Department Tips",
+            items: [
+              {
+                label: "Department Coaching",
+                items: ["Service Tips", "Sales Tips", "Parts Tips"]
+              }
+            ]
+          },
+          {
+            label: "Process Guides",
+            items: [
+              {
+                label: "Daily Playbooks",
+                items: ["Workflow Walkthroughs", "Queue Triage Guide"]
+              },
+              {
+                label: "Closeout",
+                items: ["Month-End Walkthrough"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Release Center",
+        items: [
+          {
+            label: "Release Notes",
+            items: [
+              {
+                label: "Briefing",
+                items: ["Release Notes", "Upcoming Changes"]
+              }
+            ]
+          },
+          {
+            label: "Issue Awareness",
+            items: [
+              {
+                label: "Issue Watch",
+                items: ["Known Issues", "Fix Verification Checklist"]
+              }
+            ]
+          },
+          {
+            label: "Demo & Training",
+            items: [
+              {
+                label: "Training Assets",
+                items: ["Demo Scripts", "Release Webinar"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        label: "Support Desk",
+        items: [
+          {
+            label: "Support Access",
+            items: [
+              {
+                label: "Support Requests",
+                items: ["Support", "Open Ticket"]
+              },
+              {
+                label: "Escalation",
+                items: ["Escalation Playbook"]
+              }
+            ]
+          },
+          {
+            label: "Contacts & Training",
+            items: [
+              {
+                label: "Support Network",
+                items: ["Contact Directory", "Role-Based Training"]
+              },
+              {
+                label: "Certification",
+                items: ["Certification Tracker"]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+];
+
+const loginSchema = z.object({
+  email: z.string().trim().email(),
+  password: z.string().trim().min(1)
+});
+
+const workspaceSchema = z.enum(["desktop", "sales", "service", "parts", "analytics", "website", "audit"]);
+const serviceOrderTypeSchema = z.enum(["Estimate", "Repair Order"]);
+const activityToneSchema = z.enum(["stable", "accent", "attention", "neutral"]);
+const taskStatusSchema = z.enum(["Queued", "In Progress", "Blocked", "Done"]);
+const actorContextSchema = z.object({
+  actorUserId: z.string().trim().min(1)
+});
+const activityFilterSchema = z.object({
+  workspaceId: workspaceSchema,
+  actorUserId: z.string().trim().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(50).optional()
+});
+const taskFilterSchema = activityFilterSchema;
+const taskStatusUpdateSchema = z.object({
+  status: taskStatusSchema,
+  actorUserId: z.string().trim().min(1)
+});
+const taskAssigneeUpdateSchema = z.object({
+  actorUserId: z.string().trim().min(1),
+  assigneeUserId: z.string().trim().min(1).nullable()
+});
+const taskNoteKindSchema = z.enum(["Comment", "Resolution"]);
+const taskNoteSchema = z.object({
+  actorUserId: z.string().trim().min(1),
+  body: z.string().trim().min(1).max(400),
+  kind: taskNoteKindSchema
+});
+const taskActionSchema = z.object({
+  mode: z.literal("cleanupServiceUtilityQa"),
+  actorUserId: z.string().trim().min(1),
+  roNumber: z.string().trim().min(1)
+});
+const serviceOrderDetailActionSchema = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("createJob"),
+    actorUserId: z.string().trim().min(1),
+    title: z.string().trim().min(1).max(120),
+    unitLabel: z.string().trim().max(160).default(""),
+    description: z.string().trim().max(400).default(""),
+    technician: z.string().trim().max(120).default("")
+  }),
+  z.object({
+    mode: z.literal("updateJob"),
+    actorUserId: z.string().trim().min(1),
+    jobId: z.string().trim().min(1),
+    title: z.string().trim().min(1).max(120),
+    customerApproval: z.string().trim().min(1).max(80),
+    status: z.string().trim().min(1).max(120),
+    appliance: z.string().trim().min(1).max(120),
+    description: z.string().trim().max(600),
+    resolution: z.string().trim().max(600),
+    recommendations: z.string().trim().max(600),
+    technician: z.string().trim().min(1).max(120),
+    laborRate: z.string().trim().min(1).max(120),
+    chargeBy: z.string().trim().min(1).max(40),
+    rate: z.number().finite().min(0),
+    quantity: z.number().finite().min(0)
+  }),
+  z.object({
+    mode: z.literal("addPart"),
+    actorUserId: z.string().trim().min(1),
+    jobId: z.string().trim().min(1),
+    partNumber: z.string().trim().min(1).max(120),
+    description: z.string().trim().min(1).max(240),
+    supplier: z.string().trim().min(1).max(80),
+    available: z.number().int().min(0),
+    price: z.number().finite().min(0),
+    quantity: z.number().int().min(1),
+    category: z.string().trim().min(1).max(80)
+  }),
+  z.object({
+    mode: z.literal("removePart"),
+    actorUserId: z.string().trim().min(1),
+    jobId: z.string().trim().min(1),
+    partNumber: z.string().trim().min(1).max(120)
+  }),
+  z.object({
+    mode: z.literal("addLaborSession"),
+    actorUserId: z.string().trim().min(1),
+    jobId: z.string().trim().min(1),
+    technician: z.string().trim().min(1).max(120),
+    startDate: z.string().trim().min(1).max(40),
+    startTime: z.string().trim().min(1).max(40),
+    endDate: z.string().trim().max(40).default(""),
+    endTime: z.string().trim().max(40).default(""),
+    actualHours: z.string().trim().min(1).max(20),
+    creditedHours: z.string().trim().min(1).max(20),
+    override: z.string().trim().max(160).default("")
+  }),
+  z.object({
+    mode: z.literal("updateWarrantyClaim"),
+    actorUserId: z.string().trim().min(1),
+    jobId: z.string().trim().min(1),
+    warrantyClaimNumber: z.string().trim().max(80).default(""),
+    internalWarrantyNumber: z.string().trim().max(80).default(""),
+    failureDate: z.string().trim().max(40).default(""),
+    contentionCode: z.string().trim().max(80).default(""),
+    problemCode: z.string().trim().max(80).default(""),
+    problemDescription: z.string().trim().max(600).default(""),
+    claimType: z.string().trim().max(80).default(""),
+    status: z.string().trim().max(120).default(""),
+    deductible: z.number().finite().min(0),
+    failedPartNumber: z.string().trim().max(120).default(""),
+    actionTaken: z.string().trim().max(600).default(""),
+    reasonForDelay: z.string().trim().max(600).default(""),
+    carrierNumber: z.string().trim().max(80).default(""),
+    invoiceDate: z.string().trim().max(40).default(""),
+    invoiceNumber: z.string().trim().max(80).default(""),
+    dateFiledWithCarrier: z.string().trim().max(40).default("")
+  }),
+  z.object({
+    mode: z.literal("updateOrderType"),
+    actorUserId: z.string().trim().min(1),
+    orderType: serviceOrderTypeSchema
+  }),
+  z.object({
+    mode: z.literal("updateQueueRow"),
+    actorUserId: z.string().trim().min(1),
+    inDate: z.string().trim().min(1).max(20),
+    roNumber: z.string().trim().regex(/^\d{5,20}$/),
+    orderType: serviceOrderTypeSchema,
+    customerName: z.string().trim().min(1).max(120),
+    stockNumber: z.string().trim().min(1).max(80),
+    model: z.string().trim().min(1).max(120),
+    serviceWriter: z.string().trim().min(1).max(120),
+    roStatus: z.string().trim().min(1).max(120),
+    category: z.string().trim().min(1).max(120),
+    maker: z.string().trim().min(1).max(120),
+    note: z.string().trim().max(4000)
+  })
+]);
+const createServiceOrderSchema = z.object({
+  actorUserId: z.string().trim().min(1),
+  orderType: serviceOrderTypeSchema,
+  customerName: z.string().trim().min(1).max(120),
+  stockNumber: z.string().trim().max(80).default(""),
+  model: z.string().trim().max(120).default(""),
+  serviceWriter: z.string().trim().max(120).default(""),
+  maker: z.string().trim().max(120).default(""),
+  note: z.string().trim().max(4000).default("")
+});
+const duplicateServiceOrderSchema = z.object({
+  actorUserId: z.string().trim().min(1),
+  reason: z.string().trim().max(240).default("Follow-up repair")
+});
+const taskSlaPolicySchema = z.object({
+  workspaceId: workspaceSchema,
+  action: z.string().trim().min(1),
+  slaMinutes: z.number().int().min(5).max(24 * 60),
+  actorUserId: z.string().trim().min(1),
+  applyToOpenTasks: z.boolean().optional().default(true)
+});
+const taskSlaPolicyActionSchema = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("previewCopyToStore"),
+    actorUserId: z.string().trim().min(1),
+    targetStoreId: z.string().trim().min(1)
+  }),
+  z.object({
+    mode: z.literal("copyOneToStore"),
+    actorUserId: z.string().trim().min(1),
+    targetStoreId: z.string().trim().min(1),
+    workspaceId: workspaceSchema,
+    action: z.string().trim().min(1),
+    applyToOpenTasks: z.boolean().optional().default(true)
+  }),
+  z.object({
+    mode: z.literal("copyToStore"),
+    actorUserId: z.string().trim().min(1),
+    targetStoreId: z.string().trim().min(1),
+    applyToOpenTasks: z.boolean().optional().default(true)
+  }),
+  z.object({
+    mode: z.literal("resetAll"),
+    actorUserId: z.string().trim().min(1),
+    applyToOpenTasks: z.boolean().optional().default(true)
+  }),
+  z.object({
+    mode: z.literal("resetOne"),
+    actorUserId: z.string().trim().min(1),
+    workspaceId: workspaceSchema,
+    action: z.string().trim().min(1),
+    applyToOpenTasks: z.boolean().optional().default(true)
+  })
+]);
+const activityEntrySchema = z.object({
+  workspaceId: workspaceSchema,
+  label: z.string().trim().min(1),
+  detail: z.string().trim().min(1),
+  tone: activityToneSchema
+}).extend(actorContextSchema.shape);
+const workflowActionSchema = z.object({
+  workspaceId: workspaceSchema,
+  action: z.string().trim().min(1),
+  selectedRowId: z.string().trim().min(1).nullable().optional(),
+  detail: z.string().trim().min(1),
+  tone: activityToneSchema,
+  values: z.record(z.string(), z.string()).default({})
+}).extend(actorContextSchema.shape);
+
+const defaultTaskSlaPolicyCatalog = [
+  { workspaceId: "desktop", action: "Designer", slaMinutes: 90 },
+  { workspaceId: "desktop", action: "Store Status", slaMinutes: 60 },
+  { workspaceId: "service", action: "Duplicate", slaMinutes: 180 },
+  { workspaceId: "service", action: "Print", slaMinutes: 180 },
+  { workspaceId: "service", action: "Report", slaMinutes: 180 },
+  { workspaceId: "service", action: "Detail", slaMinutes: 180 },
+  { workspaceId: "parts", action: "Guide", slaMinutes: 240 },
+  { workspaceId: "sales", action: "Marketing", slaMinutes: 45 },
+  { workspaceId: "sales", action: "Send Message", slaMinutes: 45 },
+  { workspaceId: "analytics", action: "Forecast", slaMinutes: 90 },
+  { workspaceId: "analytics", action: "Exceptions", slaMinutes: 90 },
+  { workspaceId: "analytics", action: "Cross-Store View", slaMinutes: 90 },
+  { workspaceId: "website", action: "Lead Sync", slaMinutes: 30 },
+  { workspaceId: "website", action: "Open Queue", slaMinutes: 30 }
+] as const;
+
+const serviceUtilityTaskActions = ["Duplicate", "Print", "Report", "Detail"] as const;
+const serviceUtilityQaMarker = "QA";
+
+const taskSlaAuditActivityLabels = [
+  "SLA policy updated",
+  "SLA policy rolled out",
+  "SLA policy rollout received",
+  "SLA policy reset",
+  "SLA policy already aligned",
+  "SLA rollout already aligned"
+] as const;
+
+app.use(
+  cors({
+    credentials: true,
+    origin(origin, callback) {
+      if (!origin || isAllowedOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`Origin ${origin} is not allowed by CORS.`));
+    }
+  })
+);
+app.use(express.json());
+
+app.get("/api/health", (_request, response) => {
+  response.json({ status: "ok" });
+});
+
+app.post("/api/auth/login", async (request, response) => {
+  const parsed = loginSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter a valid email and password." });
+    return;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: {
+      email: parsed.data.email.toLowerCase()
+    },
+    include: {
+      dealerGroup: true,
+      userStores: {
+        include: {
+          store: {
+            include: {
+              dealerGroup: true
+            }
+          }
+        }
+      }
+    }
+  });
+
+  if (!user) {
+    response.status(401).json({
+      message: "User not found in the seeded demo directory."
+    });
+    return;
+  }
+
+  const stores = [...user.userStores]
+    .sort((left, right) => left.store.name.localeCompare(right.store.name))
+    .map(({ store }) => ({
+      id: store.id,
+      code: store.code,
+      name: store.name,
+      city: store.city,
+      state: store.state,
+      dealerGroupName: store.dealerGroup.name,
+      statusLine: `${store.city}, ${store.state} · ${store.dealerGroup.name}`
+    }));
+
+  response.json({
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      title: user.title,
+      avatarInitial: user.avatarInitial,
+      dealerGroupName: user.dealerGroup.name
+    },
+    stores
+  });
+});
+
+app.get("/api/stores/:storeId/dashboard", async (request, response) => {
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    include: {
+      dealerGroup: true,
+      modules: {
+        include: {
+          appModule: true
+        },
+        orderBy: {
+          priority: "asc"
+        }
+      },
+      websiteFeeds: {
+        orderBy: {
+          brand: "asc"
+        }
+      },
+      salesDeals: {
+        orderBy: {
+          openedAt: "desc"
+        }
+      },
+      serviceOrders: {
+        orderBy: {
+          inDate: "desc"
+        }
+      },
+      partsLines: {
+        orderBy: {
+          createdAt: "desc"
+        }
+      },
+      userStores: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              title: true,
+              avatarInitial: true
+            }
+          }
+        }
+      }
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  const onlineCount = store.modules.filter((moduleItem) => moduleItem.status === "Online").length;
+  const watchCount = store.modules.length - onlineCount;
+  const publishedUnits = store.websiteFeeds.reduce((sum, feed) => sum + feed.inventoryCount, 0);
+  const digitalLeads = store.websiteFeeds.reduce((sum, feed) => sum + feed.leadsToday, 0);
+  const openDeals = store.salesDeals.length;
+  const serviceQueue = store.serviceOrders.length;
+  const partsQueue = store.partsLines.length;
+
+  response.json({
+    store: {
+      id: store.id,
+      code: store.code,
+      name: store.name,
+      city: store.city,
+      state: store.state,
+      dealerGroupName: store.dealerGroup.name,
+      summary: `${store.name} is using a compact command surface for DMS, payroll, analytics, and website operations.`
+    },
+    navigation,
+    stats: [
+      {
+        label: "Module posture",
+        value: `${onlineCount}/${store.modules.length}`,
+        caption: watchCount === 0 ? "All seeded modules are live." : `${watchCount} module lanes still need attention.`
+      },
+      {
+        label: "Open deals",
+        value: openDeals.toString(),
+        caption: "Sales board rows currently active in the selected store."
+      },
+      {
+        label: "Service queue",
+        value: serviceQueue.toString(),
+        caption: "Repair-order lanes currently visible to service writers."
+      },
+      {
+        label: "Parts lines",
+        value: partsQueue.toString(),
+        caption: "Parts-order rows staged from active repair and stock work."
+      }
+    ],
+    modules: store.modules.map((moduleItem) => ({
+      code: moduleItem.appModule.code,
+      name: moduleItem.appModule.name,
+      category: moduleItem.appModule.category,
+      status: moduleItem.status,
+      description: moduleItem.appModule.description,
+      headline: moduleItem.headline,
+      ownerTeam: moduleItem.appModule.ownerTeam,
+      navGroup: moduleItem.appModule.navGroup
+    })),
+    websiteFeeds: store.websiteFeeds.map((feed) => ({
+      brand: feed.brand,
+      domain: feed.domain,
+      status: feed.status,
+      inventoryCount: feed.inventoryCount,
+      leadsToday: feed.leadsToday,
+      lastSyncLabel: formatMinutesAgo(feed.lastSyncAt)
+    })),
+    activity: [
+      {
+        label: "Operator posture",
+        detail: watchCount === 0 ? "All current module lanes are green." : `${watchCount} module lanes are still being mapped or tuned.`,
+        tone: watchCount === 0 ? "stable" : "attention"
+      },
+      {
+        label: "Website feed rail",
+        detail: `${publishedUnits} units are already positioned for live web merchandising across the selected store's publishing surfaces.`,
+        tone: "accent"
+      },
+      {
+        label: "Finance concept",
+        detail: "Payroll, comp plans, and deposit controls stay top-nav first instead of being buried under oversized dashboard widgets.",
+        tone: "neutral"
+      },
+      {
+        label: "Lead flow",
+        detail: `${digitalLeads} digital leads synced into the selected store's command surface today.`,
+        tone: "stable"
+      }
+    ],
+    operators: [...store.userStores]
+      .map(({ user }) => ({
+        id: user.id,
+        name: user.name,
+        title: user.title,
+        avatarInitial: user.avatarInitial
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name)),
+    workspaceCounts: {
+      sales: openDeals,
+      service: serviceQueue,
+      parts: partsQueue,
+      website: store.websiteFeeds.length
+    }
+  });
+});
+
+app.get("/api/stores/:storeId/workspaces/:workspaceId", async (request, response) => {
+  const parsed = workspaceSchema.safeParse(request.params.workspaceId);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Unknown workspace." });
+    return;
+  }
+
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    include: {
+      dealerGroup: true,
+      modules: {
+        include: {
+          appModule: true
+        },
+        orderBy: {
+          priority: "asc"
+        }
+      },
+      websiteFeeds: {
+        orderBy: {
+          brand: "asc"
+        }
+      },
+      salesDeals: {
+        orderBy: {
+          openedAt: "desc"
+        }
+      },
+      serviceOrders: {
+        orderBy: {
+          inDate: "desc"
+        }
+      },
+      partsLines: {
+        orderBy: {
+          createdAt: "desc"
+        }
+      }
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  const workspaceId = parsed.data;
+
+  if (workspaceId === "sales") {
+    response.json({
+      workspaceId,
+      title: "Leads, Quotes & Deals",
+      rows: store.salesDeals.map((row) => ({
+        id: row.id,
+        date: formatDate(row.openedAt),
+        worksheet: row.worksheet,
+        stock: row.stockNumber,
+        make: row.make,
+        model: row.model,
+        cashPrice: formatCurrency(row.cashPrice),
+        finalized: row.stage,
+        customer: row.customerName,
+        year: row.modelYear.toString(),
+        vin: row.vin,
+        tone: row.tone
+      }))
+    });
+    return;
+  }
+
+  if (workspaceId === "service") {
+    const rows = store.serviceOrders.map((row) => ({
+      ...formatServiceWorkspaceRow(row),
+      updatedAt: row.updatedAt
+    }));
+    const activities = await prisma.storeActivity.findMany({
+      where: {
+        storeId: store.id,
+        workspaceId: "service"
+      },
+      orderBy: {
+        createdAt: "desc"
+      },
+      take: 60
+    });
+
+    response.json({
+      workspaceId,
+      title: "Estimates & Repair Orders",
+      rows: rows.map(({ updatedAt: _updatedAt, ...row }) => row),
+      notifications: buildServiceWorkspaceNotifications(rows, activities)
+    });
+    return;
+  }
+
+  if (workspaceId === "parts") {
+    response.json({
+      workspaceId,
+      title: "Parts Ordering",
+      rows: store.partsLines.map((row) => ({
+        id: row.id,
+        partNumber: row.partNumber,
+        secondary: row.secondaryNumber,
+        description: row.description,
+        supplier: row.supplier,
+        category: row.category,
+        orderType: row.orderType,
+        quantity: row.quantity.toString(),
+        orderCost: formatCurrencyFromCents(row.orderCost),
+        source: row.source,
+        tone: row.tone
+      }))
+    });
+    return;
+  }
+
+  if (workspaceId === "website") {
+    response.json({
+      workspaceId,
+      title: "Website Feed",
+      rows: store.websiteFeeds.map((feed) => ({
+        id: feed.id,
+        brand: feed.brand,
+        domain: feed.domain,
+        status: feed.status,
+        inventoryCount: feed.inventoryCount,
+        leadsToday: feed.leadsToday,
+        lastSyncLabel: formatMinutesAgo(feed.lastSyncAt)
+      }))
+    });
+    return;
+  }
+
+  if (workspaceId === "audit") {
+    const relatedStores = await prisma.store.findMany({
+      where: {
+        dealerGroupId: store.dealerGroupId
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true
+      }
+    });
+    const storeLookup = new Map(relatedStores.map((item) => [item.id, item]));
+    const relatedStoreIds = relatedStores.map((item) => item.id);
+    const [activities, policyActivities, tasks, policies] = await Promise.all([
+      prisma.storeActivity.findMany({
+        where: {
+          storeId: {
+            in: relatedStoreIds
+          }
+        },
+        orderBy: {
+          createdAt: "desc"
+        },
+        take: 20
+      }),
+      prisma.storeActivity.findMany({
+        where: {
+          storeId: {
+            in: relatedStoreIds
+          },
+          label: {
+            in: [...taskSlaAuditActivityLabels]
+          }
+        },
+        orderBy: {
+          createdAt: "desc"
+        },
+        take: 8
+      }),
+      prisma.storeTask.findMany({
+        where: {
+          storeId: {
+            in: relatedStoreIds
+          }
+        },
+        include: {
+          comments: {
+            orderBy: {
+              createdAt: "desc"
+            },
+            take: 6
+          }
+        },
+        orderBy: {
+          updatedAt: "desc"
+        },
+        take: 20
+      }),
+      loadStoreTaskSlaPolicyEntries(store.id)
+    ]);
+    const recentAuditRows = [
+      ...activities.map((activity) => formatAuditActivityRow(activity, storeLookup.get(activity.storeId))),
+      ...tasks.map((task) => formatAuditTaskRow(task, storeLookup.get(task.storeId)))
+    ]
+      .sort(compareAuditRows)
+      .slice(0, 24);
+    const includedAuditRowIds = new Set(recentAuditRows.map((row) => row.id));
+    const pinnedPolicyRows = policyActivities
+      .map((activity) => formatAuditActivityRow(activity, storeLookup.get(activity.storeId)))
+      .filter((row) => !includedAuditRowIds.has(row.id))
+      .slice(0, 4);
+    const auditRows = [...recentAuditRows, ...pinnedPolicyRows]
+      .sort(compareAuditRows)
+      .map(({ sortBucket, sortScore, sortTime, ...row }) => row);
+
+    response.json({
+      workspaceId,
+      title: "Audit Trail",
+      rows: auditRows,
+      policies
+    });
+    return;
+  }
+
+  if (workspaceId === "analytics") {
+    response.json({
+      workspaceId,
+      title: "Executive Board",
+      rows: store.modules.map((moduleItem) => ({
+        id: moduleItem.id,
+        label: moduleItem.appModule.name,
+        status: moduleItem.status,
+        ownerTeam: moduleItem.appModule.ownerTeam,
+        headline: moduleItem.headline
+      }))
+    });
+    return;
+  }
+
+  response.json({
+    workspaceId,
+    title: "Desktop",
+    rows: store.modules.map((moduleItem) => ({
+      id: moduleItem.id,
+      module: moduleItem.appModule.name,
+      status: moduleItem.status,
+      headline: moduleItem.headline
+    }))
+  });
+});
+
+app.get("/api/stores/:storeId/service-orders/:serviceOrderId", async (request, response) => {
+  try {
+    const { storeId, serviceOrderId } = request.params;
+    const context = await loadServiceOrderDetailContext(storeId, serviceOrderId);
+
+    response.json({
+      row: context.row,
+      detail: context.detail,
+      partCatalog: context.partCatalog
+    });
+  } catch (error) {
+    if (error instanceof RequestError) {
+      response.status(error.statusCode).json({ message: error.message });
+      return;
+    }
+
+    response.status(500).json({ message: "Unable to load the service order." });
+  }
+});
+
+app.post("/api/stores/:storeId/service-orders", async (request, response) => {
+  try {
+    const { storeId } = request.params;
+    const parsedOrder = createServiceOrderSchema.safeParse(request.body);
+
+    if (!parsedOrder.success) {
+      response.status(400).json({ message: "Enter valid order details to create a service lane." });
+      return;
+    }
+
+    const actor = await resolveActorContext(storeId, parsedOrder.data.actorUserId);
+    const inDate = new Date();
+    const roNumber = await buildNextServiceRoNumber(storeId);
+    const initializedOrder = initializeServiceOrder({
+      id: randomUUID(),
+      inDate: formatDate(inDate),
+      roNumber,
+      orderType: parsedOrder.data.orderType,
+      customerName: parsedOrder.data.customerName,
+      stockNumber: parsedOrder.data.stockNumber,
+      model: parsedOrder.data.model,
+      serviceWriter: parsedOrder.data.serviceWriter || actor.actorName,
+      maker: parsedOrder.data.maker,
+      note: parsedOrder.data.note
+    });
+    const createdOrder = await prisma.serviceOrder.create({
+      data: {
+        id: initializedOrder.row.id,
+        inDate,
+        roNumber: initializedOrder.row.roNumber,
+        orderType: initializedOrder.row.orderType,
+        customerName: initializedOrder.row.customerName,
+        stockNumber: initializedOrder.row.stockNumber,
+        model: initializedOrder.row.model,
+        serviceWriter: initializedOrder.row.serviceWriter,
+        roStatus: initializedOrder.row.roStatus,
+        category: initializedOrder.row.category,
+        maker: initializedOrder.row.maker,
+        note: initializedOrder.row.note,
+        detailSnapshot: initializedOrder.detailSnapshot,
+        tone: initializedOrder.row.tone,
+        storeId
+      }
+    });
+    const activity = await recordStoreActivity(
+      storeId,
+      {
+        workspaceId: "service",
+        label: parsedOrder.data.orderType === "Estimate" ? "Estimate opened" : "Repair order opened",
+        detail: `RO ${createdOrder.roNumber} created for ${createdOrder.customerName}.`,
+        tone: "accent"
+      },
+      actor
+    );
+    const refreshedContext = await loadServiceOrderDetailContext(storeId, createdOrder.id);
+
+    response.status(201).json({
+      message: `${parsedOrder.data.orderType} ${createdOrder.roNumber} created.`,
+      row: refreshedContext.row,
+      detail: refreshedContext.detail,
+      partCatalog: refreshedContext.partCatalog,
+      activityEntry: formatStoreActivityEntry(activity)
+    });
+  } catch (error) {
+    if (error instanceof RequestError) {
+      response.status(error.statusCode).json({ message: error.message });
+      return;
+    }
+
+    response.status(500).json({ message: "Unable to create the service order." });
+  }
+});
+
+app.post("/api/stores/:storeId/service-orders/:serviceOrderId/duplicate", async (request, response) => {
+  try {
+    const { storeId, serviceOrderId } = request.params;
+    const parsedDuplicate = duplicateServiceOrderSchema.safeParse(request.body);
+
+    if (!parsedDuplicate.success) {
+      response.status(400).json({ message: "Enter a valid reason to duplicate the service lane." });
+      return;
+    }
+
+    const actor = await resolveActorContext(storeId, parsedDuplicate.data.actorUserId);
+    const sourceOrder = await prisma.serviceOrder.findFirst({
+      where: {
+        id: serviceOrderId,
+        storeId
+      }
+    });
+
+    if (!sourceOrder) {
+      response.status(404).json({ message: "The source service order could not be found." });
+      return;
+    }
+
+    const duplicateReason = parsedDuplicate.data.reason.trim() || "Follow-up repair";
+    const inDate = new Date();
+    const roNumber = await buildNextServiceRoNumber(storeId);
+    const initializedOrder = initializeServiceOrder({
+      id: randomUUID(),
+      inDate: formatDate(inDate),
+      roNumber,
+      orderType: sourceOrder.orderType === "Estimate" ? "Estimate" : "Repair Order",
+      customerName: sourceOrder.customerName,
+      stockNumber: sourceOrder.stockNumber,
+      model: sourceOrder.model,
+      serviceWriter: sourceOrder.serviceWriter || actor.actorName,
+      maker: sourceOrder.maker,
+      note: buildDuplicatedServiceOrderNote(sourceOrder.note, duplicateReason)
+    });
+    const createdOrder = await prisma.serviceOrder.create({
+      data: {
+        id: initializedOrder.row.id,
+        inDate,
+        roNumber: initializedOrder.row.roNumber,
+        orderType: initializedOrder.row.orderType,
+        customerName: initializedOrder.row.customerName,
+        stockNumber: initializedOrder.row.stockNumber,
+        model: initializedOrder.row.model,
+        serviceWriter: initializedOrder.row.serviceWriter,
+        roStatus: initializedOrder.row.roStatus,
+        category: initializedOrder.row.category,
+        maker: initializedOrder.row.maker,
+        note: initializedOrder.row.note,
+        detailSnapshot: initializedOrder.detailSnapshot,
+        tone: initializedOrder.row.tone,
+        storeId
+      }
+    });
+    const activity = await recordStoreActivity(
+      storeId,
+      {
+        workspaceId: "service",
+        label: sourceOrder.orderType === "Estimate" ? "Estimate duplicated" : "Repair order duplicated",
+        detail: `RO ${sourceOrder.roNumber} duplicated to RO ${createdOrder.roNumber} for ${createdOrder.customerName}. ${duplicateReason}.`,
+        tone: "accent"
+      },
+      actor
+    );
+    const refreshedContext = await loadServiceOrderDetailContext(storeId, createdOrder.id);
+
+    response.status(201).json({
+      message: `RO ${sourceOrder.roNumber} duplicated to ${createdOrder.roNumber}.`,
+      row: refreshedContext.row,
+      detail: refreshedContext.detail,
+      partCatalog: refreshedContext.partCatalog,
+      activityEntry: formatStoreActivityEntry(activity)
+    });
+  } catch (error) {
+    if (error instanceof RequestError) {
+      response.status(error.statusCode).json({ message: error.message });
+      return;
+    }
+
+    response.status(500).json({ message: "Unable to duplicate the service order." });
+  }
+});
+
+app.post("/api/stores/:storeId/service-orders/:serviceOrderId/actions", async (request, response) => {
+  try {
+    const { storeId, serviceOrderId } = request.params;
+    const parsedAction = serviceOrderDetailActionSchema.safeParse(request.body);
+
+    if (!parsedAction.success) {
+      response.status(400).json({ message: "Enter a valid service order action payload." });
+      return;
+    }
+
+    const actor = await resolveActorContext(storeId, parsedAction.data.actorUserId);
+    const context = await loadServiceOrderDetailContext(storeId, serviceOrderId);
+    const mutationResult = applyServiceOrderDetailMutation(
+      context.row,
+      context.detail,
+      mapServiceOrderMutation(parsedAction.data),
+      context.taskEntries,
+      context.activityEntries
+    );
+    const previousRoNumber = context.order.roNumber;
+    const nextRoNumber = mutationResult.rowPatch.roNumber ?? previousRoNumber;
+    const nextInDate = mutationResult.rowPatch.inDate ? parseUsDateInput(mutationResult.rowPatch.inDate) : null;
+
+    if (mutationResult.rowPatch.inDate && !nextInDate) {
+      response.status(400).json({ message: "Enter a valid in date in MM/DD/YYYY format." });
+      return;
+    }
+
+    const orderUpdateData: {
+      detailSnapshot: string;
+      inDate?: Date;
+      roNumber?: string;
+      orderType?: "Estimate" | "Repair Order";
+      customerName?: string;
+      stockNumber?: string;
+      model?: string;
+      serviceWriter?: string;
+      roStatus?: string;
+      category?: string;
+      maker?: string;
+      note?: string;
+      tone?: string;
+    } = {
+      detailSnapshot: serializeServiceOrderDetail(mutationResult.detail)
+    };
+
+    if (mutationResult.rowPatch.inDate && nextInDate) {
+      orderUpdateData.inDate = nextInDate;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(mutationResult.rowPatch, "roNumber")) {
+      orderUpdateData.roNumber = mutationResult.rowPatch.roNumber;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(mutationResult.rowPatch, "orderType")) {
+      orderUpdateData.orderType = mutationResult.rowPatch.orderType;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(mutationResult.rowPatch, "customerName")) {
+      orderUpdateData.customerName = mutationResult.rowPatch.customerName;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(mutationResult.rowPatch, "stockNumber")) {
+      orderUpdateData.stockNumber = mutationResult.rowPatch.stockNumber;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(mutationResult.rowPatch, "model")) {
+      orderUpdateData.model = mutationResult.rowPatch.model;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(mutationResult.rowPatch, "serviceWriter")) {
+      orderUpdateData.serviceWriter = mutationResult.rowPatch.serviceWriter;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(mutationResult.rowPatch, "roStatus")) {
+      orderUpdateData.roStatus = mutationResult.rowPatch.roStatus;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(mutationResult.rowPatch, "category")) {
+      orderUpdateData.category = mutationResult.rowPatch.category;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(mutationResult.rowPatch, "maker")) {
+      orderUpdateData.maker = mutationResult.rowPatch.maker;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(mutationResult.rowPatch, "note")) {
+      orderUpdateData.note = mutationResult.rowPatch.note;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(mutationResult.rowPatch, "tone")) {
+      orderUpdateData.tone = mutationResult.rowPatch.tone;
+    }
+
+    const updatedOrder = await prisma.serviceOrder.update({
+      where: {
+        id: context.order.id
+      },
+      data: orderUpdateData
+    });
+
+    if (nextRoNumber !== previousRoNumber) {
+      await rewriteServiceRoReferences(storeId, previousRoNumber, nextRoNumber);
+    }
+
+    const activity = await recordStoreActivity(
+      storeId,
+      {
+        workspaceId: "service",
+        label: mutationResult.activityLabel,
+        detail: mutationResult.activityDetail,
+        tone: mutationResult.activityTone
+      },
+      actor
+    );
+    const refreshedContext = await loadServiceOrderDetailContext(storeId, updatedOrder.id);
+
+    response.json({
+      message: mutationResult.message,
+      row: refreshedContext.row,
+      detail: refreshedContext.detail,
+      partCatalog: refreshedContext.partCatalog,
+      activityEntry: formatStoreActivityEntry(activity)
+    });
+  } catch (error) {
+    if (error instanceof RequestError) {
+      response.status(error.statusCode).json({ message: error.message });
+      return;
+    }
+
+    response.status(500).json({ message: error instanceof Error ? error.message : "Unable to update the service order." });
+  }
+});
+
+app.get("/api/stores/:storeId/activity", async (request, response) => {
+  const parsedQuery = activityFilterSchema.safeParse(request.query);
+
+  if (!parsedQuery.success) {
+    response.status(400).json({ message: "Unknown workspace." });
+    return;
+  }
+
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    select: {
+      id: true
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  const activity = await prisma.storeActivity.findMany({
+    where: {
+      storeId: store.id,
+      workspaceId: parsedQuery.data.workspaceId,
+      ...(parsedQuery.data.actorUserId ? { actorUserId: parsedQuery.data.actorUserId } : {})
+    },
+    orderBy: {
+      createdAt: "desc"
+    },
+    take: parsedQuery.data.limit ?? 8
+  });
+
+  response.json(activity.map(formatStoreActivityEntry));
+});
+
+app.get("/api/stores/:storeId/tasks", async (request, response) => {
+  const parsedQuery = taskFilterSchema.safeParse(request.query);
+
+  if (!parsedQuery.success) {
+    response.status(400).json({ message: "Unknown workspace." });
+    return;
+  }
+
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    select: {
+      id: true
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  const tasks = await prisma.storeTask.findMany({
+    where: {
+      storeId: store.id,
+      workspaceId: parsedQuery.data.workspaceId,
+      ...(parsedQuery.data.actorUserId
+        ? {
+            OR: [
+              { actorUserId: parsedQuery.data.actorUserId },
+              { assignedUserId: parsedQuery.data.actorUserId },
+              { lastUpdatedByUserId: parsedQuery.data.actorUserId },
+              { latestCommentByUserId: parsedQuery.data.actorUserId }
+            ]
+          }
+        : {})
+    },
+    include: {
+      comments: {
+        orderBy: {
+          createdAt: "desc"
+        },
+        take: 3
+      }
+    },
+  });
+
+  response.json(tasks.sort(compareStoreTasksForAttention).slice(0, parsedQuery.data.limit ?? 8).map(formatStoreTaskEntry));
+});
+
+app.post("/api/stores/:storeId/tasks/actions", async (request, response) => {
+  const parsedAction = taskActionSchema.safeParse(request.body);
+
+  if (!parsedAction.success) {
+    response.status(400).json({ message: "Enter a valid task queue action." });
+    return;
+  }
+
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    select: {
+      id: true,
+      name: true
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  const actor = await resolveActorContext(store.id, parsedAction.data.actorUserId);
+  const roPrefix = `${parsedAction.data.roNumber} ·`;
+  const qaTaskRows = await prisma.storeTask.findMany({
+    where: {
+      storeId: store.id,
+      workspaceId: "service",
+      action: {
+        in: [...serviceUtilityTaskActions]
+      },
+      detail: {
+        startsWith: roPrefix,
+        contains: serviceUtilityQaMarker
+      }
+    },
+    select: {
+      id: true
+    }
+  });
+  const deletedTaskIds = qaTaskRows.map((row) => row.id);
+
+  const [deletedActivities, deletedTasks] = await prisma.$transaction([
+    prisma.storeActivity.deleteMany({
+      where: {
+        storeId: store.id,
+        workspaceId: "service",
+        detail: {
+          startsWith: roPrefix,
+          contains: serviceUtilityQaMarker
+        }
+      }
+    }),
+    ...(deletedTaskIds.length > 0
+      ? [
+          prisma.storeTask.deleteMany({
+            where: {
+              id: {
+                in: deletedTaskIds
+              }
+            }
+          })
+        ]
+      : [prisma.storeTask.deleteMany({ where: { id: { in: [] } } })])
+  ]);
+
+  const didDeleteQaRows = deletedActivities.count > 0 || deletedTasks.count > 0;
+  const activity = didDeleteQaRows
+    ? await recordStoreActivity(
+        store.id,
+        {
+          workspaceId: "service",
+          label: "Demo QA cleared",
+          detail: `RO ${parsedAction.data.roNumber} cleared ${deletedTasks.count} QA utility task${deletedTasks.count === 1 ? "" : "s"} and ${deletedActivities.count} service activity row${deletedActivities.count === 1 ? "" : "s"}.`,
+          tone: "neutral"
+        },
+        actor
+      )
+    : null;
+
+  response.json({
+    message: didDeleteQaRows
+      ? `Removed ${deletedTasks.count} QA utility task${deletedTasks.count === 1 ? "" : "s"} from RO ${parsedAction.data.roNumber}.`
+      : `No demo QA utility tasks were found for RO ${parsedAction.data.roNumber}.`,
+    deletedTaskCount: deletedTasks.count,
+    deletedActivityCount: deletedActivities.count,
+    deletedTaskIds,
+    activityEntry: activity ? formatStoreActivityEntry(activity) : null
+  });
+});
+
+app.patch("/api/stores/:storeId/tasks/:taskId", async (request, response) => {
+  const parsedUpdate = taskStatusUpdateSchema.safeParse(request.body);
+
+  if (!parsedUpdate.success) {
+    response.status(400).json({ message: "Enter a valid task status update." });
+    return;
+  }
+
+  const task = await prisma.storeTask.findFirst({
+    where: {
+      id: request.params.taskId,
+      storeId: request.params.storeId
+    }
+  });
+
+  if (!task) {
+    response.status(404).json({ message: "Task not found." });
+    return;
+  }
+
+  const actor = await resolveActorContext(task.storeId, parsedUpdate.data.actorUserId);
+  const updatedTask = await prisma.storeTask.update({
+    where: {
+      id: task.id
+    },
+    data: {
+      status: parsedUpdate.data.status,
+      tone: resolveTaskTone(parsedUpdate.data.status),
+      completedAt: parsedUpdate.data.status === "Done" ? new Date() : null,
+      lastUpdatedByUserId: actor.actorUserId,
+      lastUpdatedByName: actor.actorName,
+      lastUpdatedByInitial: actor.actorInitial
+    }
+  });
+  const activity = await recordStoreActivity(
+    task.storeId,
+    {
+      workspaceId: task.workspaceId as z.infer<typeof workspaceSchema>,
+      label: `${task.action} moved to ${parsedUpdate.data.status}`,
+      detail: task.detail,
+      tone: resolveTaskTone(parsedUpdate.data.status)
+    },
+    actor
+  );
+
+  response.json({
+    message: `${task.action} marked ${parsedUpdate.data.status}.`,
+    taskEntry: formatStoreTaskEntry(await loadTaskForOutput(updatedTask.id)),
+    activityEntry: formatStoreActivityEntry(activity)
+  });
+});
+
+app.patch("/api/stores/:storeId/tasks/:taskId/assignee", async (request, response) => {
+  const parsedUpdate = taskAssigneeUpdateSchema.safeParse(request.body);
+
+  if (!parsedUpdate.success) {
+    response.status(400).json({ message: "Enter a valid task handoff update." });
+    return;
+  }
+
+  const task = await prisma.storeTask.findFirst({
+    where: {
+      id: request.params.taskId,
+      storeId: request.params.storeId
+    }
+  });
+
+  if (!task) {
+    response.status(404).json({ message: "Task not found." });
+    return;
+  }
+
+  const actor = await resolveActorContext(task.storeId, parsedUpdate.data.actorUserId);
+  const assignee = parsedUpdate.data.assigneeUserId ? await resolveActorContext(task.storeId, parsedUpdate.data.assigneeUserId) : null;
+  const updatedTask = await prisma.storeTask.update({
+    where: {
+      id: task.id
+    },
+    data: {
+      assignedUserId: assignee?.actorUserId ?? null,
+      assignedName: assignee?.actorName ?? null,
+      assignedInitial: assignee?.actorInitial ?? null,
+      lastUpdatedByUserId: actor.actorUserId,
+      lastUpdatedByName: actor.actorName,
+      lastUpdatedByInitial: actor.actorInitial
+    }
+  });
+  const activity = await recordStoreActivity(
+    task.storeId,
+    {
+      workspaceId: task.workspaceId as z.infer<typeof workspaceSchema>,
+      label: assignee ? `${task.action} handed to ${assignee.actorName}` : `${task.action} unassigned`,
+      detail: task.detail,
+      tone: assignee ? "accent" : "neutral"
+    },
+    actor
+  );
+
+  response.json({
+    message: assignee ? `${task.action} handed to ${assignee.actorName}.` : `${task.action} unassigned.`,
+    taskEntry: formatStoreTaskEntry(await loadTaskForOutput(updatedTask.id)),
+    activityEntry: formatStoreActivityEntry(activity)
+  });
+});
+
+app.post("/api/stores/:storeId/tasks/:taskId/comments", async (request, response) => {
+  const parsedNote = taskNoteSchema.safeParse(request.body);
+
+  if (!parsedNote.success) {
+    response.status(400).json({ message: "Enter a valid task note." });
+    return;
+  }
+
+  const task = await prisma.storeTask.findFirst({
+    where: {
+      id: request.params.taskId,
+      storeId: request.params.storeId
+    }
+  });
+
+  if (!task) {
+    response.status(404).json({ message: "Task not found." });
+    return;
+  }
+
+  const actor = await resolveActorContext(task.storeId, parsedNote.data.actorUserId);
+  const note = await recordStoreTaskComment(
+    task.id,
+    {
+      body: parsedNote.data.body,
+      kind: parsedNote.data.kind
+    },
+    actor
+  );
+  const updatedTask = await prisma.storeTask.update({
+    where: {
+      id: task.id
+    },
+    data: {
+      commentCount: {
+        increment: 1
+      },
+      latestCommentPreview: parsedNote.data.body,
+      latestCommentAt: note.createdAt,
+      latestCommentByUserId: actor.actorUserId,
+      latestCommentByName: actor.actorName,
+      latestCommentByInitial: actor.actorInitial,
+      lastUpdatedByUserId: actor.actorUserId,
+      lastUpdatedByName: actor.actorName,
+      lastUpdatedByInitial: actor.actorInitial,
+      ...(parsedNote.data.kind === "Resolution"
+        ? {
+            resolutionNote: parsedNote.data.body,
+            status: "Done",
+            tone: resolveTaskTone("Done"),
+            completedAt: new Date()
+          }
+        : {})
+    }
+  });
+  const activity = await recordStoreActivity(
+    task.storeId,
+    {
+      workspaceId: task.workspaceId as z.infer<typeof workspaceSchema>,
+      label: parsedNote.data.kind === "Resolution" ? `${task.action} resolved` : `${task.action} note added`,
+      detail: parsedNote.data.body,
+      tone: parsedNote.data.kind === "Resolution" ? "stable" : "neutral"
+    },
+    actor
+  );
+
+  response.json({
+    message: parsedNote.data.kind === "Resolution" ? `${task.action} resolved.` : "Task note saved.",
+    taskEntry: formatStoreTaskEntry(await loadTaskForOutput(updatedTask.id)),
+    activityEntry: formatStoreActivityEntry(activity)
+  });
+});
+
+app.post("/api/stores/:storeId/task-sla-policies", async (request, response) => {
+  const parsedPolicy = taskSlaPolicySchema.safeParse(request.body);
+
+  if (!parsedPolicy.success) {
+    response.status(400).json({ message: "Enter a valid SLA policy update." });
+    return;
+  }
+
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    select: {
+      id: true,
+      name: true
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  const actor = await resolveActorContext(store.id, parsedPolicy.data.actorUserId);
+  const policy = await prisma.storeTaskSlaPolicy.upsert({
+    where: {
+      storeId_workspaceId_action: {
+        storeId: store.id,
+        workspaceId: parsedPolicy.data.workspaceId,
+        action: parsedPolicy.data.action
+      }
+    },
+    create: {
+      storeId: store.id,
+      workspaceId: parsedPolicy.data.workspaceId,
+      action: parsedPolicy.data.action,
+      slaMinutes: parsedPolicy.data.slaMinutes,
+      updatedByUserId: actor.actorUserId,
+      updatedByName: actor.actorName,
+      updatedByInitial: actor.actorInitial
+    },
+    update: {
+      slaMinutes: parsedPolicy.data.slaMinutes,
+      updatedByUserId: actor.actorUserId,
+      updatedByName: actor.actorName,
+      updatedByInitial: actor.actorInitial
+    }
+  });
+
+  let retimedTaskCount = 0;
+
+  if (parsedPolicy.data.applyToOpenTasks) {
+    const openTasks = await prisma.storeTask.findMany({
+      where: {
+        storeId: store.id,
+        workspaceId: parsedPolicy.data.workspaceId,
+        action: parsedPolicy.data.action,
+        status: {
+          not: "Done"
+        }
+      },
+      select: {
+        id: true,
+        createdAt: true
+      }
+    });
+
+    retimedTaskCount = openTasks.length;
+
+    if (openTasks.length > 0) {
+      await prisma.$transaction(
+        openTasks.map((task) =>
+          prisma.storeTask.update({
+            where: {
+              id: task.id
+            },
+            data: {
+              slaMinutes: policy.slaMinutes,
+              dueAt: addMinutes(task.createdAt, policy.slaMinutes),
+              lastUpdatedByUserId: actor.actorUserId,
+              lastUpdatedByName: actor.actorName,
+              lastUpdatedByInitial: actor.actorInitial
+            }
+          })
+        )
+      );
+    }
+  }
+
+  const activity = await recordStoreActivity(
+    store.id,
+    {
+      workspaceId: "audit",
+      label: "SLA policy updated",
+      detail: `${parsedPolicy.data.action} now targets ${formatDurationMinutes(policy.slaMinutes)}.${retimedTaskCount > 0 ? ` ${retimedTaskCount} open task${retimedTaskCount === 1 ? "" : "s"} retimed.` : ""}`,
+      tone: "accent"
+    },
+    actor
+  );
+
+  response.json({
+    message: `${parsedPolicy.data.action} SLA saved for ${store.name}.`,
+    policyEntry: formatStoreTaskSlaPolicyEntry({
+      id: policy.id,
+      workspaceId: policy.workspaceId,
+      action: policy.action,
+      slaMinutes: policy.slaMinutes,
+      source: "Custom",
+      updatedByName: policy.updatedByName,
+      updatedAt: policy.updatedAt,
+      openTaskCount: retimedTaskCount
+    }),
+    retimedTaskCount,
+    activityEntry: formatStoreActivityEntry(activity)
+  });
+});
+
+app.post("/api/stores/:storeId/task-sla-policies/actions", async (request, response) => {
+  const parsedAction = taskSlaPolicyActionSchema.safeParse(request.body);
+
+  if (!parsedAction.success) {
+    response.status(400).json({ message: "Enter a valid SLA policy action." });
+    return;
+  }
+
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    select: {
+      id: true,
+      name: true,
+      dealerGroupId: true
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  const actor = await resolveActorContext(store.id, parsedAction.data.actorUserId);
+
+  if (parsedAction.data.mode === "previewCopyToStore") {
+    if (parsedAction.data.targetStoreId === store.id) {
+      response.status(400).json({ message: "Choose a different store for policy rollout." });
+      return;
+    }
+
+    const targetStore = await prisma.store.findUnique({
+      where: {
+        id: parsedAction.data.targetStoreId
+      },
+      select: {
+        id: true,
+        name: true,
+        dealerGroupId: true
+      }
+    });
+
+    if (!targetStore) {
+      response.status(404).json({ message: "Target store not found." });
+      return;
+    }
+
+    if (targetStore.dealerGroupId !== store.dealerGroupId) {
+      response.status(403).json({ message: "Choose a target store in the same dealer group." });
+      return;
+    }
+
+    await resolveActorContext(targetStore.id, parsedAction.data.actorUserId);
+
+    const [sourcePolicies, targetPolicies] = await Promise.all([
+      loadStoreTaskSlaPolicyEntries(store.id),
+      loadStoreTaskSlaPolicyEntries(targetStore.id)
+    ]);
+    const comparison = buildStoreTaskSlaPolicyCopyComparison(sourcePolicies, targetPolicies);
+    const changedRuleCount = comparison.filter((entry) => entry.changeType !== "unchanged").length;
+
+    response.json({
+      message: `${changedRuleCount} of ${comparison.length} SLA rules will change in ${targetStore.name}.`,
+      sourceStoreName: store.name,
+      targetStoreName: targetStore.name,
+      changedRuleCount,
+      totalRuleCount: comparison.length,
+      comparison
+    });
+    return;
+  }
+
+  if (parsedAction.data.mode === "copyOneToStore") {
+    if (parsedAction.data.targetStoreId === store.id) {
+      response.status(400).json({ message: "Choose a different store for policy rollout." });
+      return;
+    }
+
+    const targetStore = await prisma.store.findUnique({
+      where: {
+        id: parsedAction.data.targetStoreId
+      },
+      select: {
+        id: true,
+        name: true,
+        dealerGroupId: true
+      }
+    });
+
+    if (!targetStore) {
+      response.status(404).json({ message: "Target store not found." });
+      return;
+    }
+
+    if (targetStore.dealerGroupId !== store.dealerGroupId) {
+      response.status(403).json({ message: "Choose a target store in the same dealer group." });
+      return;
+    }
+
+    await resolveActorContext(targetStore.id, parsedAction.data.actorUserId);
+
+    const [sourcePolicies, targetPolicies] = await Promise.all([
+      loadStoreTaskSlaPolicyEntries(store.id),
+      loadStoreTaskSlaPolicyEntries(targetStore.id)
+    ]);
+    const policyKey = createTaskSlaPolicyKey(parsedAction.data.workspaceId, parsedAction.data.action);
+    const sourcePolicy = sourcePolicies.find((policy) => createTaskSlaPolicyKey(policy.workspaceId, policy.action) === policyKey);
+    const targetPolicy = targetPolicies.find((policy) => createTaskSlaPolicyKey(policy.workspaceId, policy.action) === policyKey);
+
+    if (!sourcePolicy) {
+      response.status(404).json({ message: "Policy entry not found in the source store." });
+      return;
+    }
+
+    const needsCreate = !targetPolicy || targetPolicy.source === "Default";
+    const needsUpdate = !needsCreate && targetPolicy.slaMinutes !== sourcePolicy.slaMinutes;
+    const changedRuleCount = needsCreate || needsUpdate ? 1 : 0;
+
+    if (needsCreate) {
+      await prisma.storeTaskSlaPolicy.create({
+        data: {
+          storeId: targetStore.id,
+          workspaceId: sourcePolicy.workspaceId,
+          action: sourcePolicy.action,
+          slaMinutes: sourcePolicy.slaMinutes,
+          updatedByUserId: actor.actorUserId,
+          updatedByName: actor.actorName,
+          updatedByInitial: actor.actorInitial
+        }
+      });
+    }
+
+    if (needsUpdate && targetPolicy?.source === "Custom") {
+      await prisma.storeTaskSlaPolicy.update({
+        where: {
+          id: targetPolicy.id
+        },
+        data: {
+          slaMinutes: sourcePolicy.slaMinutes,
+          updatedByUserId: actor.actorUserId,
+          updatedByName: actor.actorName,
+          updatedByInitial: actor.actorInitial
+        }
+      });
+    }
+
+    const retimedTaskCount = parsedAction.data.applyToOpenTasks && changedRuleCount > 0
+      ? await retimeOpenStoreTasks(
+          targetStore.id,
+          actor,
+          new Map([[policyKey, sourcePolicy.slaMinutes]]),
+          {
+            workspaceId: parsedAction.data.workspaceId,
+            action: parsedAction.data.action
+          }
+        )
+      : 0;
+
+    const activity = await recordStoreActivity(
+      store.id,
+      {
+        workspaceId: "audit",
+        label: changedRuleCount > 0 ? "SLA policy rolled out" : "SLA policy already aligned",
+        detail:
+          changedRuleCount > 0
+            ? `${sourcePolicy.action} synced to ${targetStore.name}.${retimedTaskCount > 0 ? ` ${retimedTaskCount} open task${retimedTaskCount === 1 ? "" : "s"} retimed.` : ""}`
+            : `${targetStore.name} already matches ${store.name} for ${sourcePolicy.action}.`,
+        tone: changedRuleCount > 0 ? "accent" : "stable"
+      },
+      actor
+    );
+
+    await recordStoreActivity(
+      targetStore.id,
+      {
+        workspaceId: "audit",
+        label: changedRuleCount > 0 ? "SLA policy rollout received" : "SLA policy already aligned",
+        detail:
+          changedRuleCount > 0
+            ? `${sourcePolicy.action} copied in from ${store.name} by ${actor.actorName}.${retimedTaskCount > 0 ? ` ${retimedTaskCount} open task${retimedTaskCount === 1 ? "" : "s"} retimed.` : ""}`
+            : `${sourcePolicy.action} already matches ${store.name}.`,
+        tone: changedRuleCount > 0 ? "accent" : "stable"
+      },
+      actor
+    );
+
+    response.json({
+      message: changedRuleCount > 0 ? `${sourcePolicy.action} copied to ${targetStore.name}.` : `${targetStore.name} already matches ${sourcePolicy.action}.`,
+      updatedPolicyCount: changedRuleCount,
+      retimedTaskCount,
+      activityEntry: formatStoreActivityEntry(activity)
+    });
+    return;
+  }
+
+  if (parsedAction.data.mode === "copyToStore") {
+    if (parsedAction.data.targetStoreId === store.id) {
+      response.status(400).json({ message: "Choose a different store for policy rollout." });
+      return;
+    }
+
+    const targetStore = await prisma.store.findUnique({
+      where: {
+        id: parsedAction.data.targetStoreId
+      },
+      select: {
+        id: true,
+        name: true,
+        dealerGroupId: true
+      }
+    });
+
+    if (!targetStore) {
+      response.status(404).json({ message: "Target store not found." });
+      return;
+    }
+
+    if (targetStore.dealerGroupId !== store.dealerGroupId) {
+      response.status(403).json({ message: "Choose a target store in the same dealer group." });
+      return;
+    }
+
+    await resolveActorContext(targetStore.id, parsedAction.data.actorUserId);
+
+    const [sourcePolicies, targetPolicies] = await Promise.all([
+      loadStoreTaskSlaPolicyEntries(store.id),
+      loadStoreTaskSlaPolicyEntries(targetStore.id)
+    ]);
+    const comparison = buildStoreTaskSlaPolicyCopyComparison(sourcePolicies, targetPolicies);
+    const policiesToCreate = comparison.filter((entry) => entry.changeType === "create");
+    const policiesToUpdate = comparison.filter((entry) => entry.changeType === "update");
+    const policyIdsToDelete = comparison.flatMap((entry) =>
+      entry.changeType === "remove" && entry.targetPolicyId ? [entry.targetPolicyId] : []
+    );
+    const changedRuleCount = policiesToCreate.length + policiesToUpdate.length + policyIdsToDelete.length;
+
+    if (changedRuleCount > 0) {
+      await prisma.$transaction([
+        ...(policyIdsToDelete.length > 0
+          ? [
+              prisma.storeTaskSlaPolicy.deleteMany({
+                where: {
+                  id: {
+                    in: policyIdsToDelete
+                  }
+                }
+              })
+            ]
+          : []),
+        ...policiesToUpdate.map((entry) =>
+          prisma.storeTaskSlaPolicy.update({
+            where: {
+              id: entry.targetPolicyId ?? ""
+            },
+            data: {
+              slaMinutes: entry.nextTargetSlaMinutes ?? 0,
+              updatedByUserId: actor.actorUserId,
+              updatedByName: actor.actorName,
+              updatedByInitial: actor.actorInitial
+            }
+          })
+        ),
+        ...(policiesToCreate.length > 0
+          ? [
+              prisma.storeTaskSlaPolicy.createMany({
+                data: policiesToCreate.map((entry) => ({
+                  storeId: targetStore.id,
+                  workspaceId: entry.workspaceId,
+                  action: entry.action,
+                  slaMinutes: entry.nextTargetSlaMinutes ?? entry.sourceStoreSlaMinutes ?? resolveDefaultTaskSlaMinutes(entry.workspaceId as z.infer<typeof workspaceSchema>, entry.action),
+                  updatedByUserId: actor.actorUserId,
+                  updatedByName: actor.actorName,
+                  updatedByInitial: actor.actorInitial
+                }))
+              })
+            ]
+          : [])
+      ]);
+    }
+
+    const retimedTaskCount = parsedAction.data.applyToOpenTasks && changedRuleCount > 0
+      ? await retimeOpenStoreTasks(
+          targetStore.id,
+          actor,
+          new Map(sourcePolicies.map((policy) => [createTaskSlaPolicyKey(policy.workspaceId, policy.action), policy.slaMinutes]))
+        )
+      : 0;
+
+    const activity = await recordStoreActivity(
+      store.id,
+      {
+        workspaceId: "audit",
+        label: changedRuleCount > 0 ? "SLA policy rollout" : "SLA rollout checked",
+        detail:
+          changedRuleCount > 0
+            ? `${changedRuleCount} policy rule${changedRuleCount === 1 ? "" : "s"} synced to ${targetStore.name}.${retimedTaskCount > 0 ? ` ${retimedTaskCount} open task${retimedTaskCount === 1 ? "" : "s"} retimed.` : ""}`
+            : `${targetStore.name} already matches ${store.name}.`,
+        tone: changedRuleCount > 0 ? "accent" : "stable"
+      },
+      actor
+    );
+
+    await recordStoreActivity(
+      targetStore.id,
+      {
+        workspaceId: "audit",
+        label: changedRuleCount > 0 ? "SLA policy rollout received" : "SLA rollout already aligned",
+        detail:
+          changedRuleCount > 0
+            ? `${store.name} rules copied in by ${actor.actorName}.${retimedTaskCount > 0 ? ` ${retimedTaskCount} open task${retimedTaskCount === 1 ? "" : "s"} retimed.` : ""}`
+            : `${store.name} already matches this store's policy stack.`,
+        tone: changedRuleCount > 0 ? "accent" : "stable"
+      },
+      actor
+    );
+
+    response.json({
+      message: changedRuleCount > 0 ? `${store.name} SLA policies copied to ${targetStore.name}.` : `${targetStore.name} already matches ${store.name}.`,
+      updatedPolicyCount: changedRuleCount,
+      retimedTaskCount,
+      activityEntry: formatStoreActivityEntry(activity)
+    });
+    return;
+  }
+
+  if (parsedAction.data.mode === "resetAll") {
+    const deletedPolicies = await prisma.storeTaskSlaPolicy.deleteMany({
+      where: {
+        storeId: store.id
+      }
+    });
+    const retimedTaskCount = parsedAction.data.applyToOpenTasks
+      ? await retimeOpenStoreTasks(store.id, actor)
+      : 0;
+    const activity = await recordStoreActivity(
+      store.id,
+      {
+        workspaceId: "audit",
+        label: "SLA policies reset",
+        detail: `${deletedPolicies.count} custom policy rule${deletedPolicies.count === 1 ? "" : "s"} cleared.${retimedTaskCount > 0 ? ` ${retimedTaskCount} open task${retimedTaskCount === 1 ? "" : "s"} retimed.` : ""}`,
+        tone: "neutral"
+      },
+      actor
+    );
+
+    response.json({
+      message: `${store.name} SLA policies reset to defaults.`,
+      updatedPolicyCount: deletedPolicies.count,
+      retimedTaskCount,
+      activityEntry: formatStoreActivityEntry(activity)
+    });
+    return;
+  }
+
+  const deletedPolicies = await prisma.storeTaskSlaPolicy.deleteMany({
+    where: {
+      storeId: store.id,
+      workspaceId: parsedAction.data.workspaceId,
+      action: parsedAction.data.action
+    }
+  });
+  const defaultSlaMinutes = resolveDefaultTaskSlaMinutes(parsedAction.data.workspaceId, parsedAction.data.action);
+  const retimedTaskCount = parsedAction.data.applyToOpenTasks
+    ? await retimeOpenStoreTasks(
+        store.id,
+        actor,
+        new Map([[createTaskSlaPolicyKey(parsedAction.data.workspaceId, parsedAction.data.action), defaultSlaMinutes]]),
+        {
+          workspaceId: parsedAction.data.workspaceId,
+          action: parsedAction.data.action
+        }
+      )
+    : 0;
+  const activity = await recordStoreActivity(
+    store.id,
+    {
+      workspaceId: "audit",
+      label: "SLA policy reset",
+      detail: `${parsedAction.data.action} returned to the default ${formatDurationMinutes(defaultSlaMinutes)} target.${retimedTaskCount > 0 ? ` ${retimedTaskCount} open task${retimedTaskCount === 1 ? "" : "s"} retimed.` : ""}`,
+      tone: deletedPolicies.count > 0 ? "neutral" : "stable"
+    },
+    actor
+  );
+
+  response.json({
+    message: `${parsedAction.data.action} SLA reset to the default target.`,
+    updatedPolicyCount: deletedPolicies.count,
+    retimedTaskCount,
+    activityEntry: formatStoreActivityEntry(activity)
+  });
+});
+
+app.post("/api/stores/:storeId/activity", async (request, response) => {
+  const parsedActivity = activityEntrySchema.safeParse(request.body);
+
+  if (!parsedActivity.success) {
+    response.status(400).json({ message: "Enter a valid activity entry." });
+    return;
+  }
+
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    select: {
+      id: true
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  const actor = await resolveActorContext(store.id, parsedActivity.data.actorUserId);
+  const activity = await recordStoreActivity(
+    store.id,
+    {
+      workspaceId: parsedActivity.data.workspaceId,
+      label: parsedActivity.data.label,
+      detail: parsedActivity.data.detail,
+      tone: parsedActivity.data.tone
+    },
+    actor
+  );
+  response.json(formatStoreActivityEntry(activity));
+});
+
+app.post("/api/stores/:storeId/workflow-actions", async (request, response) => {
+  const parsed = workflowActionSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter a valid workflow action." });
+    return;
+  }
+
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    select: {
+      id: true
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  const actor = await resolveActorContext(store.id, parsed.data.actorUserId);
+  const result = await applyWorkflowAction(store.id, parsed.data, actor);
+  const activity = await recordStoreActivity(
+    store.id,
+    {
+      workspaceId: parsed.data.workspaceId,
+      label: result.activityOverride?.label ?? parsed.data.action,
+      detail: result.activityOverride?.detail ?? parsed.data.detail,
+      tone: result.activityOverride?.tone ?? parsed.data.tone
+    },
+    actor
+  );
+
+  response.json({
+    ...result,
+    activityEntry: formatStoreActivityEntry(activity)
+  });
+});
+
+app.use(
+  (
+    error: unknown,
+    _request: express.Request,
+    response: express.Response,
+    _next: express.NextFunction
+  ) => {
+    console.error(error);
+
+    if (error instanceof RequestError) {
+      response.status(error.statusCode).json({ message: error.message });
+      return;
+    }
+
+    response.status(500).json({ message: "Unexpected server error." });
+  }
+);
+
+app.listen(port, () => {
+  console.log(`Marine cloud API listening on http://localhost:${port}`);
+});
+
+function formatMinutesAgo(date: Date) {
+  const elapsedMinutes = Math.max(1, Math.round((Date.now() - date.getTime()) / 60_000));
+
+  if (elapsedMinutes < 60) {
+    return `${elapsedMinutes} min ago`;
+  }
+
+  const elapsedHours = Math.round(elapsedMinutes / 60);
+  return `${elapsedHours} hr ago`;
+}
+
+function formatDate(date: Date) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric"
+  }).format(date);
+}
+
+function parseUsDateInput(value: string) {
+  const match = value.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+
+  if (!match) {
+    return null;
+  }
+
+  const [, monthText, dayText, yearText] = match;
+  const month = Number.parseInt(monthText, 10);
+  const day = Number.parseInt(dayText, 10);
+  const year = Number.parseInt(yearText, 10);
+  const parsedDate = new Date(year, month - 1, day);
+
+  if (
+    Number.isNaN(parsedDate.getTime()) ||
+    parsedDate.getFullYear() !== year ||
+    parsedDate.getMonth() !== month - 1 ||
+    parsedDate.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return parsedDate;
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0
+  }).format(value);
+}
+
+function formatCurrencyFromCents(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value / 100);
+}
+
+function formatClockTime(date: Date) {
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(date);
+}
+
+function formatStoreActivityEntry(activity: {
+  id: string;
+  label: string;
+  detail: string;
+  tone: string;
+  actorUserId: string | null;
+  actorName: string;
+  actorInitial: string;
+  createdAt: Date;
+}) {
+  return {
+    id: activity.id,
+    timeLabel: formatClockTime(activity.createdAt),
+    label: activity.label,
+    detail: activity.detail,
+    tone: activity.tone,
+    actorUserId: activity.actorUserId,
+    actorName: activity.actorName,
+    actorInitial: activity.actorInitial
+  };
+}
+
+function formatStoreTaskEntry(task: {
+  id: string;
+  workspaceId: string;
+  action: string;
+  detail: string;
+  status: string;
+  tone: string;
+  slaMinutes: number | null;
+  dueAt: Date | null;
+  completedAt: Date | null;
+  actorUserId: string | null;
+  actorName: string;
+  actorInitial: string;
+  assignedUserId: string | null;
+  assignedName: string | null;
+  assignedInitial: string | null;
+  lastUpdatedByUserId: string | null;
+  lastUpdatedByName: string;
+  lastUpdatedByInitial: string;
+  commentCount: number;
+  latestCommentPreview: string | null;
+  latestCommentAt: Date | null;
+  latestCommentByUserId: string | null;
+  latestCommentByName: string | null;
+  latestCommentByInitial: string | null;
+  resolutionNote: string | null;
+  comments: Array<{
+    id: string;
+    kind: string;
+    body: string;
+    authorUserId: string | null;
+    authorName: string;
+    authorInitial: string;
+    createdAt: Date;
+  }>;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  const timing = resolveTaskTiming(task);
+
+  return {
+    id: task.id,
+    timeLabel: formatClockTime(task.updatedAt),
+    action: task.action,
+    detail: task.detail,
+    status: task.status,
+    tone: task.status !== "Done" && timing.isOverdue ? "attention" : task.tone,
+    actorUserId: task.actorUserId,
+    actorName: task.actorName,
+    actorInitial: task.actorInitial,
+    assignedUserId: task.assignedUserId,
+    assignedName: task.assignedName ?? task.actorName,
+    assignedInitial: task.assignedInitial ?? task.actorInitial,
+    lastUpdatedByUserId: task.lastUpdatedByUserId,
+    lastUpdatedByName: task.lastUpdatedByName,
+    lastUpdatedByInitial: task.lastUpdatedByInitial,
+    ageLabel: timing.ageLabel,
+    slaLabel: timing.slaLabel,
+    breachLabel: timing.breachLabel,
+    isOverdue: timing.isOverdue,
+    commentCount: task.commentCount,
+    latestCommentPreview: task.latestCommentPreview,
+    latestCommentByUserId: task.latestCommentByUserId,
+    latestCommentByName: task.latestCommentByName,
+    latestCommentByInitial: task.latestCommentByInitial,
+    resolutionNote: task.resolutionNote,
+    notes: task.comments.map(formatStoreTaskCommentEntry)
+  };
+}
+
+function formatStoreTaskCommentEntry(comment: {
+  id: string;
+  kind: string;
+  body: string;
+  authorUserId: string | null;
+  authorName: string;
+  authorInitial: string;
+  createdAt: Date;
+}) {
+  return {
+    id: comment.id,
+    kind: comment.kind,
+    body: comment.body,
+    authorUserId: comment.authorUserId,
+    authorName: comment.authorName,
+    authorInitial: comment.authorInitial,
+    timeLabel: formatClockTime(comment.createdAt)
+  };
+}
+
+function formatServiceWorkspaceRow(order: {
+  id: string;
+  inDate: Date;
+  roNumber: string;
+  orderType: string;
+  customerName: string;
+  stockNumber: string;
+  model: string;
+  serviceWriter: string;
+  roStatus: string;
+  category: string;
+  maker: string;
+  note: string;
+  tone: string;
+}): ServiceOrderWorkspaceRow {
+  return {
+    id: order.id,
+    inDate: formatDate(order.inDate),
+    roNumber: order.roNumber,
+    orderType: order.orderType === "Estimate" ? "Estimate" : "Repair Order",
+    customerName: order.customerName,
+    stockNumber: order.stockNumber,
+    model: order.model,
+    serviceWriter: order.serviceWriter,
+    roStatus: order.roStatus,
+    category: order.category,
+    maker: order.maker,
+    note: order.note,
+    tone: order.tone
+  };
+}
+
+function mapServiceOrderMutation(
+  mutation: z.infer<typeof serviceOrderDetailActionSchema>
+): ServiceOrderDetailMutation {
+  switch (mutation.mode) {
+    case "createJob":
+      return {
+        mode: mutation.mode,
+        title: mutation.title,
+        unitLabel: mutation.unitLabel,
+        description: mutation.description,
+        technician: mutation.technician
+      };
+    case "updateJob":
+      return {
+        mode: mutation.mode,
+        jobId: mutation.jobId,
+        title: mutation.title,
+        customerApproval: mutation.customerApproval,
+        status: mutation.status,
+        appliance: mutation.appliance,
+        description: mutation.description,
+        resolution: mutation.resolution,
+        recommendations: mutation.recommendations,
+        technician: mutation.technician,
+        laborRate: mutation.laborRate,
+        chargeBy: mutation.chargeBy,
+        rate: mutation.rate,
+        quantity: mutation.quantity
+      };
+    case "addPart":
+      return {
+        mode: mutation.mode,
+        jobId: mutation.jobId,
+        partNumber: mutation.partNumber,
+        description: mutation.description,
+        supplier: mutation.supplier,
+        available: mutation.available,
+        price: mutation.price,
+        quantity: mutation.quantity,
+        category: mutation.category
+      };
+    case "removePart":
+      return {
+        mode: mutation.mode,
+        jobId: mutation.jobId,
+        partNumber: mutation.partNumber
+      };
+    case "addLaborSession":
+      return {
+        mode: mutation.mode,
+        jobId: mutation.jobId,
+        technician: mutation.technician,
+        startDate: mutation.startDate,
+        startTime: mutation.startTime,
+        endDate: mutation.endDate,
+        endTime: mutation.endTime,
+        actualHours: mutation.actualHours,
+        creditedHours: mutation.creditedHours,
+        override: mutation.override
+      };
+    case "updateWarrantyClaim":
+      return {
+        mode: mutation.mode,
+        jobId: mutation.jobId,
+        warrantyClaimNumber: mutation.warrantyClaimNumber,
+        internalWarrantyNumber: mutation.internalWarrantyNumber,
+        failureDate: mutation.failureDate,
+        contentionCode: mutation.contentionCode,
+        problemCode: mutation.problemCode,
+        problemDescription: mutation.problemDescription,
+        claimType: mutation.claimType,
+        status: mutation.status,
+        deductible: mutation.deductible,
+        failedPartNumber: mutation.failedPartNumber,
+        actionTaken: mutation.actionTaken,
+        reasonForDelay: mutation.reasonForDelay,
+        carrierNumber: mutation.carrierNumber,
+        invoiceDate: mutation.invoiceDate,
+        invoiceNumber: mutation.invoiceNumber,
+        dateFiledWithCarrier: mutation.dateFiledWithCarrier
+      };
+    case "updateOrderType":
+      return {
+        mode: mutation.mode,
+        orderType: mutation.orderType
+      };
+    case "updateQueueRow":
+      return {
+        mode: mutation.mode,
+        inDate: mutation.inDate,
+        roNumber: mutation.roNumber,
+        orderType: mutation.orderType,
+        customerName: mutation.customerName,
+        stockNumber: mutation.stockNumber,
+        model: mutation.model,
+        serviceWriter: mutation.serviceWriter,
+        roStatus: mutation.roStatus,
+        category: mutation.category,
+        maker: mutation.maker,
+        note: mutation.note
+      };
+  }
+}
+
+async function loadServiceOrderDetailContext(storeId: string, serviceOrderId: string) {
+  const order = await prisma.serviceOrder.findFirst({
+    where: {
+      id: serviceOrderId,
+      storeId
+    }
+  });
+
+  if (!order) {
+    throw new RequestError(404, "Service order not found.");
+  }
+
+  const [tasks, activities, partsCatalogRows] = await Promise.all([
+    prisma.storeTask.findMany({
+      where: {
+        storeId,
+        workspaceId: "service",
+        detail: {
+          contains: order.roNumber
+        }
+      },
+      orderBy: {
+        updatedAt: "desc"
+      },
+      take: 20,
+      include: {
+        comments: {
+          orderBy: {
+            createdAt: "desc"
+          },
+          take: 3
+        }
+      }
+    }),
+    prisma.storeActivity.findMany({
+      where: {
+        storeId,
+        workspaceId: "service",
+        detail: {
+          contains: order.roNumber
+        }
+      },
+      orderBy: {
+        createdAt: "desc"
+      },
+      take: 20
+    }),
+    prisma.partsOrderLine.findMany({
+      where: {
+        storeId
+      },
+      orderBy: {
+        updatedAt: "desc"
+      },
+      take: 40
+    })
+  ]);
+
+  const row = formatServiceWorkspaceRow(order);
+  const taskEntries = tasks.map((task) => formatStoreTaskEntry(task)) as ServiceOrderTaskEntry[];
+  const activityEntries = activities.map((activity) => formatStoreActivityEntry(activity)) as ServiceOrderActivityEntry[];
+
+  return {
+    order,
+    row,
+    detail: resolveServiceOrderDetail(order.detailSnapshot, row, taskEntries, activityEntries),
+    taskEntries,
+    activityEntries,
+    partCatalog: buildServiceOrderPartCatalog(partsCatalogRows)
+  };
+}
+
+async function buildNextServiceRoNumber(storeId: string) {
+  const existingOrders = await prisma.serviceOrder.findMany({
+    where: {
+      storeId
+    },
+    select: {
+      roNumber: true
+    }
+  });
+  const maxRoNumber = existingOrders.reduce((currentMax, order) => {
+    const numericValue = Number.parseInt(order.roNumber.replace(/\D/g, ""), 10);
+
+    return Number.isFinite(numericValue) ? Math.max(currentMax, numericValue) : currentMax;
+  }, 100000);
+
+  return String(maxRoNumber + 1);
+}
+
+function buildDuplicatedServiceOrderNote(baseNote: string, reason: string) {
+  const trimmedBaseNote = baseNote.trim();
+  const trimmedReason = reason.trim();
+
+  if (!trimmedBaseNote) {
+    return `Follow-up request: ${trimmedReason}`.slice(0, 4000);
+  }
+
+  if (!trimmedReason) {
+    return trimmedBaseNote.slice(0, 4000);
+  }
+
+  return `${trimmedBaseNote}\nFollow-up request: ${trimmedReason}`.slice(0, 4000);
+}
+
+async function rewriteServiceRoReferences(storeId: string, previousRoNumber: string, nextRoNumber: string) {
+  const [tasks, activities] = await Promise.all([
+    prisma.storeTask.findMany({
+      where: {
+        storeId,
+        workspaceId: "service",
+        detail: {
+          contains: previousRoNumber
+        }
+      },
+      select: {
+        id: true,
+        detail: true
+      }
+    }),
+    prisma.storeActivity.findMany({
+      where: {
+        storeId,
+        workspaceId: "service",
+        detail: {
+          contains: previousRoNumber
+        }
+      },
+      select: {
+        id: true,
+        detail: true
+      }
+    })
+  ]);
+
+  await Promise.all([
+    ...tasks.map((task) =>
+      prisma.storeTask.update({
+        where: {
+          id: task.id
+        },
+        data: {
+          detail: task.detail.replaceAll(previousRoNumber, nextRoNumber)
+        }
+      })
+    ),
+    ...activities.map((activity) =>
+      prisma.storeActivity.update({
+        where: {
+          id: activity.id
+        },
+        data: {
+          detail: activity.detail.replaceAll(previousRoNumber, nextRoNumber)
+        }
+      })
+    )
+  ]);
+}
+
+async function recordStoreActivity(
+  storeId: string,
+  activity: {
+    workspaceId: z.infer<typeof workspaceSchema>;
+    label: string;
+    detail: string;
+    tone: z.infer<typeof activityToneSchema>;
+  },
+  actor: {
+    actorUserId: string;
+    actorName: string;
+    actorInitial: string;
+  }
+) {
+  return prisma.storeActivity.create({
+    data: {
+      storeId,
+      workspaceId: activity.workspaceId,
+      label: activity.label,
+      detail: activity.detail,
+      tone: activity.tone,
+      actorUserId: actor.actorUserId,
+      actorName: actor.actorName,
+      actorInitial: actor.actorInitial
+    }
+  });
+}
+
+async function recordStoreTask(
+  storeId: string,
+  task: {
+    workspaceId: z.infer<typeof workspaceSchema>;
+    action: string;
+    detail: string;
+    values: Record<string, string>;
+  },
+  actor: {
+    actorUserId: string;
+    actorName: string;
+    actorInitial: string;
+  }
+) {
+  const createdAt = new Date();
+  const existingPolicy = await prisma.storeTaskSlaPolicy.findUnique({
+    where: {
+      storeId_workspaceId_action: {
+        storeId,
+        workspaceId: task.workspaceId,
+        action: task.action
+      }
+    },
+    select: {
+      slaMinutes: true
+    }
+  });
+  const slaMinutes = existingPolicy?.slaMinutes ?? resolveDefaultTaskSlaMinutes(task.workspaceId, task.action);
+
+  return prisma.storeTask.create({
+    data: {
+      createdAt,
+      storeId,
+      workspaceId: task.workspaceId,
+      action: task.action,
+      detail: task.detail,
+      tone: resolveTaskTone("Queued"),
+      slaMinutes,
+      dueAt: addMinutes(createdAt, slaMinutes),
+      actorUserId: actor.actorUserId,
+      actorName: actor.actorName,
+      actorInitial: actor.actorInitial,
+      assignedUserId: actor.actorUserId,
+      assignedName: actor.actorName,
+      assignedInitial: actor.actorInitial,
+      lastUpdatedByUserId: actor.actorUserId,
+      lastUpdatedByName: actor.actorName,
+      lastUpdatedByInitial: actor.actorInitial,
+      payloadSnapshot: JSON.stringify(task.values)
+    }
+  });
+}
+
+async function recordStoreTaskComment(
+  taskId: string,
+  note: {
+    kind: z.infer<typeof taskNoteKindSchema>;
+    body: string;
+  },
+  actor: {
+    actorUserId: string;
+    actorName: string;
+    actorInitial: string;
+  }
+) {
+  return prisma.storeTaskComment.create({
+    data: {
+      taskId,
+      kind: note.kind,
+      body: note.body,
+      authorUserId: actor.actorUserId,
+      authorName: actor.actorName,
+      authorInitial: actor.actorInitial
+    }
+  });
+}
+
+async function loadTaskForOutput(taskId: string) {
+  const task = await prisma.storeTask.findUnique({
+    where: {
+      id: taskId
+    },
+    include: {
+      comments: {
+        orderBy: {
+          createdAt: "desc"
+        },
+        take: 3
+      }
+    }
+  });
+
+  if (!task) {
+    throw new RequestError(404, "Task not found.");
+  }
+
+  return task;
+}
+
+async function applyWorkflowAction(
+  storeId: string,
+  input: z.infer<typeof workflowActionSchema>,
+  actor: {
+    actorUserId: string;
+    actorName: string;
+    actorInitial: string;
+  }
+) {
+  if (input.workspaceId === "sales") {
+    const selectedDeal = input.selectedRowId
+      ? await prisma.salesDeal.findFirst({
+          where: {
+            id: input.selectedRowId,
+            storeId
+          }
+        })
+      : null;
+
+    if (["New Lead", "New Quote"].includes(input.action)) {
+      const unitParts = splitUnitLabel(input.values.unit || `${selectedDeal?.make ?? "PENDING"} ${selectedDeal?.model ?? "UNIT"}`);
+      const worksheet = await resolveUniqueWorksheet(storeId, input.values.worksheet);
+      const createdDeal = await prisma.salesDeal.create({
+        data: {
+          openedAt: new Date(),
+          worksheet,
+          stockNumber: normalizeWorkflowText(selectedDeal?.stockNumber, "PENDING"),
+          make: unitParts.make,
+          model: unitParts.model,
+          cashPrice: selectedDeal?.cashPrice ?? parseCurrencyToWholeDollars(input.values.targetPrice),
+          stage: input.action === "New Lead" ? "Lead" : "Quote",
+          customerName: normalizeWorkflowText(input.values.customerName, "Prospect"),
+          modelYear: selectedDeal?.modelYear ?? new Date().getFullYear(),
+          vin: normalizeWorkflowText(selectedDeal?.vin, "PENDING-HIN"),
+          tone: input.action === "New Lead" ? "violet" : "lime",
+          storeId
+        }
+      });
+
+      return {
+        workspaceId: input.workspaceId,
+        focusRowId: createdDeal.id,
+        message: `${input.action} saved.`
+      };
+    }
+
+    if (input.action === "New Deal") {
+      if (selectedDeal) {
+        const unitParts = splitUnitLabel(input.values.unit || `${selectedDeal.make} ${selectedDeal.model}`);
+        const updatedDeal = await prisma.salesDeal.update({
+          where: {
+            id: selectedDeal.id
+          },
+          data: {
+            worksheet: await resolveUniqueWorksheet(storeId, input.values.worksheet, selectedDeal.id),
+            make: unitParts.make,
+            model: unitParts.model,
+            stage: "Open",
+            customerName: normalizeWorkflowText(input.values.customerName, selectedDeal.customerName),
+            tone: "teal"
+          }
+        });
+
+        return {
+          workspaceId: input.workspaceId,
+          focusRowId: updatedDeal.id,
+          message: "Deal saved."
+        };
+      }
+
+      const unitParts = splitUnitLabel(input.values.unit || "PENDING UNIT");
+      const createdDeal = await prisma.salesDeal.create({
+        data: {
+          openedAt: new Date(),
+          worksheet: await resolveUniqueWorksheet(storeId, input.values.worksheet),
+          stockNumber: "PENDING",
+          make: unitParts.make,
+          model: unitParts.model,
+          cashPrice: 0,
+          stage: "Open",
+          customerName: normalizeWorkflowText(input.values.customerName, "Prospect"),
+          modelYear: new Date().getFullYear(),
+          vin: "PENDING-HIN",
+          tone: "teal",
+          storeId
+        }
+      });
+
+      return {
+        workspaceId: input.workspaceId,
+        focusRowId: createdDeal.id,
+        message: "Deal saved."
+      };
+    }
+
+    if (input.action === "Take Deposit") {
+      if (!selectedDeal) {
+        throw new RequestError(400, "Select a sales row before posting a deposit.");
+      }
+
+      const updatedDeal = await prisma.salesDeal.update({
+        where: {
+          id: selectedDeal.id
+        },
+        data: {
+          stage: "Deposit",
+          tone: "gold"
+        }
+      });
+
+      return {
+        workspaceId: input.workspaceId,
+        focusRowId: updatedDeal.id,
+        message: "Deposit posted."
+      };
+    }
+  }
+
+  if (input.workspaceId === "service") {
+    const selectedOrder = input.selectedRowId
+      ? await prisma.serviceOrder.findFirst({
+          where: {
+            id: input.selectedRowId,
+            storeId
+          }
+        })
+      : null;
+
+    if (input.action === "Print") {
+      if (!selectedOrder) {
+        throw new RequestError(400, "Select a service row before queueing a print packet.");
+      }
+
+      const task = await recordStoreTask(
+        storeId,
+        {
+          workspaceId: input.workspaceId,
+          action: input.action,
+          detail: `${selectedOrder.roNumber} · ${normalizeWorkflowText(input.values.documentType, "RO Jacket")} · ${normalizeWorkflowText(input.values.destination, "Front Desk")}`,
+          values: {
+            roNumber: selectedOrder.roNumber,
+            customerName: selectedOrder.customerName,
+            stockNumber: selectedOrder.stockNumber,
+            ...input.values
+          }
+        },
+        actor
+      );
+
+      return {
+        workspaceId: input.workspaceId,
+        focusRowId: selectedOrder.id,
+        message: "Print queued in task list.",
+        taskEntry: formatStoreTaskEntry(await loadTaskForOutput(task.id))
+      };
+    }
+
+    if (input.action === "Duplicate") {
+      if (!selectedOrder) {
+        throw new RequestError(400, "Select a service row before duplicating an RO shell.");
+      }
+
+      const sourceRo = normalizeWorkflowText(input.values.sourceRo, selectedOrder.roNumber);
+      const reason = normalizeWorkflowText(input.values.reason, "Follow-up repair");
+      const task = await recordStoreTask(
+        storeId,
+        {
+          workspaceId: input.workspaceId,
+          action: input.action,
+          detail: `${selectedOrder.roNumber} · Source ${sourceRo} · ${reason}`,
+          values: {
+            ...input.values,
+            sourceRo,
+            roNumber: selectedOrder.roNumber,
+            customerName: selectedOrder.customerName,
+            stockNumber: selectedOrder.stockNumber,
+            serviceWriter: selectedOrder.serviceWriter
+          }
+        },
+        actor
+      );
+
+      return {
+        workspaceId: input.workspaceId,
+        focusRowId: selectedOrder.id,
+        message: "Duplicate queued in task list.",
+        taskEntry: formatStoreTaskEntry(await loadTaskForOutput(task.id))
+      };
+    }
+
+    if (input.action === "Report") {
+      if (!selectedOrder) {
+        throw new RequestError(400, "Select a service row before queueing a service report.");
+      }
+
+      const reportName = normalizeWorkflowText(input.values.reportName, "Open ROs");
+      const reportWindow = normalizeWorkflowText(input.values.window, "Today");
+      const task = await recordStoreTask(
+        storeId,
+        {
+          workspaceId: input.workspaceId,
+          action: input.action,
+          detail: `${selectedOrder.roNumber} · ${reportName} · ${reportWindow}`,
+          values: {
+            ...input.values,
+            reportName,
+            window: reportWindow,
+            roNumber: selectedOrder.roNumber,
+            customerName: selectedOrder.customerName,
+            stockNumber: selectedOrder.stockNumber,
+            serviceWriter: selectedOrder.serviceWriter
+          }
+        },
+        actor
+      );
+
+      return {
+        workspaceId: input.workspaceId,
+        focusRowId: selectedOrder.id,
+        message: "Report queued in task list.",
+        taskEntry: formatStoreTaskEntry(await loadTaskForOutput(task.id))
+      };
+    }
+
+    if (input.action === "Detail") {
+      if (!selectedOrder) {
+        throw new RequestError(400, "Select a service row before staging an RO detail packet.");
+      }
+
+      const roNumber = normalizeWorkflowText(input.values.roNumber, selectedOrder.roNumber);
+      const owner = normalizeWorkflowText(input.values.owner, selectedOrder.serviceWriter);
+      const note = normalizeWorkflowText(input.values.note, selectedOrder.note);
+      const task = await recordStoreTask(
+        storeId,
+        {
+          workspaceId: input.workspaceId,
+          action: input.action,
+          detail: `${roNumber} · ${owner} · ${note}`,
+          values: {
+            ...input.values,
+            roNumber,
+            owner,
+            note,
+            customerName: selectedOrder.customerName,
+            stockNumber: selectedOrder.stockNumber,
+            serviceWriter: selectedOrder.serviceWriter
+          }
+        },
+        actor
+      );
+
+      return {
+        workspaceId: input.workspaceId,
+        focusRowId: selectedOrder.id,
+        message: "Detail packet queued in task list.",
+        taskEntry: formatStoreTaskEntry(await loadTaskForOutput(task.id))
+      };
+    }
+
+    if (["New Estimate", "New Repair Order"].includes(input.action)) {
+      const inDate = new Date();
+      const roNumber = createNumericRecordId("35");
+      const orderType = input.action === "New Estimate" ? "Estimate" : "Repair Order";
+      const customerName = normalizeWorkflowText(input.values.customerName, "Walk-in Customer");
+      const stockNumber = normalizeWorkflowText(input.values.stockNumber, selectedOrder?.stockNumber ?? "PENDING");
+      const model = normalizeWorkflowText(input.values.unit, selectedOrder?.model ?? "Pending Model");
+      const serviceWriter = normalizeWorkflowText(selectedOrder?.serviceWriter, "Service Desk");
+      const roStatus = input.action === "New Estimate" ? "Estimate" : "Not Started";
+      const category = input.action === "New Estimate" ? "Estimate" : "Fresh Intake";
+      const maker = normalizeWorkflowText(selectedOrder?.maker, "Pending");
+      const note = normalizeWorkflowText(input.values.concern, "New service intake staged.");
+      const tone = input.action === "New Estimate" ? "teal" : "salmon";
+      const createdOrder = await prisma.serviceOrder.create({
+        data: {
+          inDate,
+          roNumber,
+          orderType,
+          customerName,
+          stockNumber,
+          model,
+          serviceWriter,
+          roStatus,
+          category,
+          maker,
+          note,
+          detailSnapshot: serializeServiceOrderDetail(
+            resolveServiceOrderDetail(
+              null,
+              {
+                id: `pending-${roNumber}`,
+                inDate: formatDate(inDate),
+                roNumber,
+                orderType,
+                customerName,
+                stockNumber,
+                model,
+                serviceWriter,
+                roStatus,
+                category,
+                maker,
+                note,
+                tone
+              },
+              [],
+              []
+            )
+          ),
+          tone,
+          storeId
+        }
+      });
+
+      return {
+        workspaceId: input.workspaceId,
+        focusRowId: createdOrder.id,
+        message: `${input.action} saved.`
+      };
+    }
+  }
+
+  if (input.workspaceId === "parts") {
+    const selectedPart = input.selectedRowId
+      ? await prisma.partsOrderLine.findFirst({
+          where: {
+            id: input.selectedRowId,
+            storeId
+          }
+        })
+      : null;
+
+    if (input.action === "Purchase Order") {
+      const partNumber = normalizeWorkflowText(input.values.partNumber, selectedPart?.partNumber ?? "PENDING-PART");
+      const createdLine = await prisma.partsOrderLine.create({
+        data: {
+          partNumber,
+          secondaryNumber: normalizeWorkflowText(selectedPart?.secondaryNumber, partNumber),
+          description: normalizeWorkflowText(selectedPart?.description, "Staged purchase order line"),
+          supplier: normalizeWorkflowText(input.values.supplier, selectedPart?.supplier ?? "MM"),
+          category: normalizeWorkflowText(selectedPart?.category, "PO"),
+          orderType: "PO",
+          quantity: parseIntegerValue(input.values.quantity, 1),
+          orderCost: selectedPart?.orderCost ?? 0,
+          source: `PURCHASEORDER-${Date.now()}`,
+          tone: "teal",
+          storeId
+        }
+      });
+
+      return {
+        workspaceId: input.workspaceId,
+        focusRowId: createdLine.id,
+        message: "Purchase order saved."
+      };
+    }
+
+    if (input.action === "Delete Selected") {
+      if (!selectedPart) {
+        throw new RequestError(400, "Select a parts row before removing it.");
+      }
+
+      await prisma.partsOrderLine.delete({
+        where: {
+          id: selectedPart.id
+        }
+      });
+
+      return {
+        workspaceId: input.workspaceId,
+        focusRowId: null,
+        message: "Parts line removed."
+      };
+    }
+  }
+
+  if (input.workspaceId === "website" && input.action === "Publish Feed") {
+    const feeds = await prisma.websiteFeed.findMany({
+      where: {
+        storeId
+      },
+      orderBy: {
+        brand: "asc"
+      }
+    });
+
+    if (feeds.length === 0) {
+      throw new RequestError(400, "No website feeds are available for this store.");
+    }
+
+    const normalizedBrand = input.values.brand?.trim().toLowerCase();
+    const matchingFeeds = normalizedBrand
+      ? feeds.filter((feed) => {
+          const brand = feed.brand.toLowerCase();
+          const domain = feed.domain.toLowerCase();
+
+          return brand.includes(normalizedBrand) || domain.includes(normalizedBrand);
+        })
+      : [];
+    const targetFeeds = matchingFeeds.length > 0 ? matchingFeeds : feeds;
+
+    await prisma.websiteFeed.updateMany({
+      where: {
+        id: {
+          in: targetFeeds.map((feed) => feed.id)
+        }
+      },
+      data: {
+        status: "Publishing",
+        lastSyncAt: new Date()
+      }
+    });
+
+    const publishPlan = resolveWorkflowActionPlan({
+      workspaceId: "website",
+      action: input.action,
+      values: input.values
+    });
+
+    return {
+      workspaceId: input.workspaceId,
+      focusRowId: targetFeeds[0]?.id ?? null,
+      message: publishPlan?.message ?? "Website feed publish queued.",
+      activityOverride: publishPlan
+        ? {
+            label: publishPlan.activityLabel,
+            detail: publishPlan.activityDetail,
+            tone: publishPlan.activityTone
+          }
+        : undefined
+    };
+  }
+
+  if (
+    input.workspaceId === "desktop" ||
+    input.workspaceId === "service" ||
+    input.workspaceId === "parts" ||
+    input.workspaceId === "sales" ||
+    input.workspaceId === "analytics" ||
+    input.workspaceId === "website" ||
+    input.workspaceId === "audit"
+  ) {
+    const plannedAction = resolveWorkflowActionPlan({
+      workspaceId: input.workspaceId,
+      action: input.action,
+      values: input.values
+    });
+
+    if (plannedAction) {
+      const task = await recordStoreTask(
+        storeId,
+        {
+          workspaceId: input.workspaceId,
+          action: input.action,
+          detail: plannedAction.detail,
+          values: input.values
+        },
+        actor
+      );
+
+      return {
+        workspaceId: input.workspaceId,
+        focusRowId: input.selectedRowId ?? null,
+        message: plannedAction.message,
+        taskEntry: formatStoreTaskEntry(await loadTaskForOutput(task.id)),
+        activityOverride: {
+          label: plannedAction.activityLabel,
+          detail: plannedAction.activityDetail,
+          tone: plannedAction.activityTone
+        }
+      };
+    }
+  }
+
+  const task = await recordStoreTask(storeId, {
+    workspaceId: input.workspaceId,
+    action: input.action,
+    detail: input.detail,
+    values: input.values
+  }, actor);
+
+  return {
+    workspaceId: input.workspaceId,
+    focusRowId: input.selectedRowId ?? null,
+    message: `${input.action} queued in task list.`,
+    taskEntry: formatStoreTaskEntry(await loadTaskForOutput(task.id))
+  };
+}
+
+async function resolveActorContext(storeId: string, actorUserId: string) {
+  const actor = await prisma.user.findFirst({
+    where: {
+      id: actorUserId,
+      userStores: {
+        some: {
+          storeId
+        }
+      }
+    },
+    select: {
+      id: true,
+      name: true,
+      avatarInitial: true
+    }
+  });
+
+  if (!actor) {
+    throw new RequestError(403, "Operator is not assigned to this store.");
+  }
+
+  return {
+    actorUserId: actor.id,
+    actorName: actor.name,
+    actorInitial: actor.avatarInitial
+  };
+}
+
+function resolveTaskTone(status: z.infer<typeof taskStatusSchema>): z.infer<typeof activityToneSchema> {
+  if (status === "In Progress") {
+    return "accent";
+  }
+
+  if (status === "Blocked") {
+    return "attention";
+  }
+
+  if (status === "Done") {
+    return "stable";
+  }
+
+  return "neutral";
+}
+
+function resolveDefaultTaskSlaMinutes(workspaceId: z.infer<typeof workspaceSchema>, action: string) {
+  const exactPolicy = defaultTaskSlaPolicyCatalog.find(
+    (policy) => policy.workspaceId === workspaceId && policy.action === action
+  );
+
+  if (exactPolicy) {
+    return exactPolicy.slaMinutes;
+  }
+
+  if (workspaceId === "sales") {
+    return 120;
+  }
+
+  if (workspaceId === "service") {
+    return 180;
+  }
+
+  if (workspaceId === "parts") {
+    return 240;
+  }
+
+  if (workspaceId === "website") {
+    return 60;
+  }
+
+  return 90;
+}
+
+function addMinutes(date: Date, minutes: number) {
+  return new Date(date.getTime() + minutes * 60_000);
+}
+
+function formatDurationMinutes(minutes: number) {
+  const safeMinutes = Math.max(1, Math.round(minutes));
+
+  if (safeMinutes < 60) {
+    return `${safeMinutes} min`;
+  }
+
+  const hours = Math.floor(safeMinutes / 60);
+  const remainingMinutes = safeMinutes % 60;
+
+  if (hours < 24) {
+    return remainingMinutes === 0 ? `${hours}h` : `${hours}h ${remainingMinutes}m`;
+  }
+
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  return remainingHours === 0 ? `${days}d` : `${days}d ${remainingHours}h`;
+}
+
+function resolveTaskTiming(task: {
+  workspaceId: string;
+  action: string;
+  createdAt: Date;
+  dueAt: Date | null;
+  slaMinutes: number | null;
+  completedAt: Date | null;
+}) {
+  const effectiveSlaMinutes = task.slaMinutes ?? resolveDefaultTaskSlaMinutes(task.workspaceId as z.infer<typeof workspaceSchema>, task.action);
+  const effectiveDueAt = task.dueAt ?? addMinutes(task.createdAt, effectiveSlaMinutes);
+  const closingTime = task.completedAt ?? new Date();
+  const ageMinutes = Math.max(1, Math.round((closingTime.getTime() - task.createdAt.getTime()) / 60_000));
+
+  if (task.completedAt) {
+    const lateMinutes = Math.max(0, Math.round((task.completedAt.getTime() - effectiveDueAt.getTime()) / 60_000));
+
+    return {
+      ageLabel: formatDurationMinutes(ageMinutes),
+      ageMinutes,
+      breachLabel: lateMinutes > 0 ? `Closed ${formatDurationMinutes(lateMinutes)} late` : "Closed within SLA",
+      isOverdue: lateMinutes > 0,
+      overdueMinutes: lateMinutes,
+      slaLabel: formatDurationMinutes(effectiveSlaMinutes)
+    };
+  }
+
+  const remainingMinutes = Math.round((effectiveDueAt.getTime() - Date.now()) / 60_000);
+  const overdueMinutes = Math.max(0, -remainingMinutes);
+
+  return {
+    ageLabel: formatDurationMinutes(ageMinutes),
+    ageMinutes,
+    breachLabel:
+      overdueMinutes > 0
+        ? `${formatDurationMinutes(overdueMinutes)} overdue`
+        : `${formatDurationMinutes(Math.max(1, remainingMinutes))} remaining`,
+    isOverdue: overdueMinutes > 0,
+    overdueMinutes,
+    slaLabel: formatDurationMinutes(effectiveSlaMinutes)
+  };
+}
+
+function resolveTaskAttentionRank(task: {
+  status: string;
+  workspaceId: string;
+  action: string;
+  createdAt: Date;
+  dueAt: Date | null;
+  slaMinutes: number | null;
+  completedAt: Date | null;
+}) {
+  const timing = resolveTaskTiming(task);
+
+  if (task.status === "Blocked" && timing.isOverdue) {
+    return 5;
+  }
+
+  if (task.status === "In Progress" && timing.isOverdue) {
+    return 4;
+  }
+
+  if (task.status === "Queued" && timing.isOverdue) {
+    return 3;
+  }
+
+  if (task.status === "Blocked") {
+    return 2;
+  }
+
+  if (task.status === "In Progress") {
+    return 1;
+  }
+
+  return 0;
+}
+
+function compareStoreTasksForAttention(
+  left: {
+    status: string;
+    workspaceId: string;
+    action: string;
+    createdAt: Date;
+    dueAt: Date | null;
+    slaMinutes: number | null;
+    completedAt: Date | null;
+    updatedAt: Date;
+  },
+  right: {
+    status: string;
+    workspaceId: string;
+    action: string;
+    createdAt: Date;
+    dueAt: Date | null;
+    slaMinutes: number | null;
+    completedAt: Date | null;
+    updatedAt: Date;
+  }
+) {
+  const leftTiming = resolveTaskTiming(left);
+  const rightTiming = resolveTaskTiming(right);
+  const attentionDelta = resolveTaskAttentionRank(right) - resolveTaskAttentionRank(left);
+
+  if (attentionDelta !== 0) {
+    return attentionDelta;
+  }
+
+  if (rightTiming.overdueMinutes !== leftTiming.overdueMinutes) {
+    return rightTiming.overdueMinutes - leftTiming.overdueMinutes;
+  }
+
+  return right.updatedAt.getTime() - left.updatedAt.getTime();
+}
+
+function formatAuditActivityRow(
+  activity: {
+    id: string;
+    storeId: string;
+    workspaceId: string;
+    label: string;
+    detail: string;
+    tone: string;
+    actorName: string;
+    createdAt: Date;
+  },
+  relatedStore: {
+    id: string;
+    code: string;
+    name: string;
+  } | undefined
+) {
+  return {
+    id: `activity-${activity.id}`,
+    kind: "Activity" as const,
+    taskId: null,
+    storeName: relatedStore?.name ?? "Unknown Store",
+    storeCode: relatedStore?.code ?? "-",
+    workspaceId: activity.workspaceId,
+    workspaceLabel: resolveWorkspaceTitle(activity.workspaceId),
+    status: "Logged",
+    summary: activity.label,
+    detail: activity.detail,
+    tone: activity.tone,
+    operatorName: activity.actorName,
+    assigneeName: "-",
+    ageLabel: "-",
+    slaLabel: "-",
+    breachLabel: "-",
+    commentCount: 0,
+    latestCommentPreview: null,
+    resolutionNote: null,
+    timeLabel: `${formatDate(activity.createdAt)} ${formatClockTime(activity.createdAt)}`,
+    taskDetail: null,
+    sortBucket: 0,
+    sortScore: 0,
+    sortTime: activity.createdAt.getTime()
+  };
+}
+
+function formatAuditTaskRow(
+  task: {
+    id: string;
+    storeId: string;
+    workspaceId: string;
+    action: string;
+    detail: string;
+    status: string;
+    tone: string;
+    createdAt: Date;
+    updatedAt: Date;
+    dueAt: Date | null;
+    slaMinutes: number | null;
+    completedAt: Date | null;
+    commentCount: number;
+    latestCommentPreview: string | null;
+    latestCommentByName: string | null;
+    latestCommentByInitial: string | null;
+    resolutionNote: string | null;
+    payloadSnapshot: string;
+    actorInitial: string;
+    lastUpdatedByName: string;
+    lastUpdatedByInitial: string;
+    assignedName: string | null;
+    assignedInitial: string | null;
+    actorName: string;
+    comments: Array<{
+      id: string;
+      kind: string;
+      body: string;
+      authorUserId: string | null;
+      authorName: string;
+      authorInitial: string;
+      createdAt: Date;
+    }>;
+  },
+  relatedStore: {
+    id: string;
+    code: string;
+    name: string;
+  } | undefined
+) {
+  const timing = resolveTaskTiming(task);
+  const attentionRank = resolveTaskAttentionRank(task);
+
+  return {
+    id: `task-${task.id}`,
+    kind: "Task" as const,
+    taskId: task.id,
+    storeName: relatedStore?.name ?? "Unknown Store",
+    storeCode: relatedStore?.code ?? "-",
+    workspaceId: task.workspaceId,
+    workspaceLabel: resolveWorkspaceTitle(task.workspaceId),
+    status: task.status,
+    summary: task.action,
+    detail: task.detail,
+    tone: attentionRank >= 3 ? "attention" : task.tone,
+    operatorName: task.lastUpdatedByName,
+    assigneeName: task.assignedName ?? task.actorName,
+    ageLabel: timing.ageLabel,
+    slaLabel: timing.slaLabel,
+    breachLabel: timing.breachLabel,
+    commentCount: task.commentCount,
+    latestCommentPreview: task.latestCommentPreview,
+    resolutionNote: task.resolutionNote,
+    timeLabel: `${formatDate(task.updatedAt)} ${formatClockTime(task.updatedAt)}`,
+    taskDetail: {
+      actorName: task.actorName,
+      actorInitial: task.actorInitial,
+      assignedName: task.assignedName ?? task.actorName,
+      assignedInitial: task.assignedInitial ?? task.actorInitial,
+      completedAtLabel: task.completedAt ? `${formatDate(task.completedAt)} ${formatClockTime(task.completedAt)}` : null,
+      createdAtLabel: `${formatDate(task.createdAt)} ${formatClockTime(task.createdAt)}`,
+      dueAtLabel: task.dueAt ? `${formatDate(task.dueAt)} ${formatClockTime(task.dueAt)}` : null,
+      lastUpdatedByInitial: task.lastUpdatedByInitial,
+      lastUpdatedByName: task.lastUpdatedByName,
+      latestCommentByInitial: task.latestCommentByInitial,
+      latestCommentByName: task.latestCommentByName,
+      notes: task.comments.map(formatStoreTaskCommentEntry),
+      snapshotFields: formatTaskSnapshotFields(task.payloadSnapshot),
+      updatedAtLabel: `${formatDate(task.updatedAt)} ${formatClockTime(task.updatedAt)}`
+    },
+    sortBucket: attentionRank > 0 ? 2 : 1,
+    sortScore: attentionRank * 10_000 + timing.overdueMinutes,
+    sortTime: task.updatedAt.getTime()
+  };
+}
+
+function buildStoreTaskSlaPolicyEntries(
+  policyOverrides: Array<{
+    id: string;
+    workspaceId: string;
+    action: string;
+    slaMinutes: number;
+    updatedByName: string;
+    updatedAt: Date;
+  }>,
+  openTaskCounts: Array<{
+    workspaceId: string;
+    action: string;
+    _count: {
+      _all: number;
+    };
+  }>,
+  currentStoreTasks: Array<{
+    workspaceId: string;
+    action: string;
+  }>
+) {
+  const policyKeys = new Map<string, { workspaceId: string; action: string }>();
+  const policyOverridesByKey = new Map(
+    policyOverrides.map((policy) => [createTaskSlaPolicyKey(policy.workspaceId, policy.action), policy])
+  );
+  const openTaskCountsByKey = new Map(
+    openTaskCounts.map((entry) => [createTaskSlaPolicyKey(entry.workspaceId, entry.action), entry._count._all])
+  );
+
+  defaultTaskSlaPolicyCatalog.forEach((policy) => {
+    policyKeys.set(createTaskSlaPolicyKey(policy.workspaceId, policy.action), {
+      workspaceId: policy.workspaceId,
+      action: policy.action
+    });
+  });
+
+  currentStoreTasks.forEach((task) => {
+    policyKeys.set(createTaskSlaPolicyKey(task.workspaceId, task.action), {
+      workspaceId: task.workspaceId,
+      action: task.action
+    });
+  });
+
+  policyOverrides.forEach((policy) => {
+    policyKeys.set(createTaskSlaPolicyKey(policy.workspaceId, policy.action), {
+      workspaceId: policy.workspaceId,
+      action: policy.action
+    });
+  });
+
+  return [...policyKeys.values()]
+    .sort((left, right) => {
+      const workspaceDelta = resolveWorkspaceTitle(left.workspaceId).localeCompare(resolveWorkspaceTitle(right.workspaceId));
+
+      if (workspaceDelta !== 0) {
+        return workspaceDelta;
+      }
+
+      return left.action.localeCompare(right.action);
+    })
+    .map((entry) => {
+      const key = createTaskSlaPolicyKey(entry.workspaceId, entry.action);
+      const override = policyOverridesByKey.get(key);
+
+      return formatStoreTaskSlaPolicyEntry({
+        id: override?.id ?? key,
+        workspaceId: entry.workspaceId,
+        action: entry.action,
+        slaMinutes: override?.slaMinutes ?? resolveDefaultTaskSlaMinutes(entry.workspaceId as z.infer<typeof workspaceSchema>, entry.action),
+        source: override ? "Custom" : "Default",
+        updatedByName: override?.updatedByName ?? null,
+        updatedAt: override?.updatedAt ?? null,
+        openTaskCount: openTaskCountsByKey.get(key) ?? 0
+      });
+    });
+}
+
+async function loadStoreTaskSlaPolicyEntries(storeId: string) {
+  const [policyOverrides, openTaskCounts, currentStoreTasks] = await Promise.all([
+    prisma.storeTaskSlaPolicy.findMany({
+      where: {
+        storeId
+      },
+      orderBy: [
+        {
+          workspaceId: "asc"
+        },
+        {
+          action: "asc"
+        }
+      ]
+    }),
+    prisma.storeTask.groupBy({
+      by: ["workspaceId", "action"],
+      where: {
+        storeId,
+        status: {
+          not: "Done"
+        }
+      },
+      _count: {
+        _all: true
+      }
+    }),
+    prisma.storeTask.groupBy({
+      by: ["workspaceId", "action"],
+      where: {
+        storeId
+      },
+      _count: {
+        _all: true
+      }
+    })
+  ]);
+
+  return buildStoreTaskSlaPolicyEntries(
+    policyOverrides,
+    openTaskCounts,
+    currentStoreTasks.map((task) => ({
+      workspaceId: task.workspaceId,
+      action: task.action
+    }))
+  );
+}
+
+function buildStoreTaskSlaPolicyCopyComparison(
+  sourcePolicies: Array<ReturnType<typeof formatStoreTaskSlaPolicyEntry>>,
+  targetPolicies: Array<ReturnType<typeof formatStoreTaskSlaPolicyEntry>>
+) {
+  const sourcePoliciesByKey = new Map(sourcePolicies.map((policy) => [createTaskSlaPolicyKey(policy.workspaceId, policy.action), policy]));
+  const targetPoliciesByKey = new Map(targetPolicies.map((policy) => [createTaskSlaPolicyKey(policy.workspaceId, policy.action), policy]));
+  const policyKeys = new Map<string, { workspaceId: string; action: string }>();
+
+  sourcePolicies.forEach((policy) => {
+    policyKeys.set(createTaskSlaPolicyKey(policy.workspaceId, policy.action), {
+      workspaceId: policy.workspaceId,
+      action: policy.action
+    });
+  });
+
+  targetPolicies.forEach((policy) => {
+    if (policy.source === "Custom") {
+      policyKeys.set(createTaskSlaPolicyKey(policy.workspaceId, policy.action), {
+        workspaceId: policy.workspaceId,
+        action: policy.action
+      });
+    }
+  });
+
+  return [...policyKeys.values()]
+    .sort((left, right) => {
+      const workspaceDelta = resolveWorkspaceTitle(left.workspaceId).localeCompare(resolveWorkspaceTitle(right.workspaceId));
+
+      if (workspaceDelta !== 0) {
+        return workspaceDelta;
+      }
+
+      return left.action.localeCompare(right.action);
+    })
+    .map((entry) => {
+      const key = createTaskSlaPolicyKey(entry.workspaceId, entry.action);
+      const sourcePolicy = sourcePoliciesByKey.get(key) ?? null;
+      const targetPolicy = targetPoliciesByKey.get(key) ?? null;
+      const nextTargetSlaMinutes = sourcePolicy?.slaMinutes ?? null;
+      const nextTargetSlaLabel = sourcePolicy?.slaLabel ?? null;
+      const nextTargetSource = sourcePolicy ? "Custom" : null;
+      let changeType: "create" | "update" | "remove" | "unchanged" = "unchanged";
+
+      if (!sourcePolicy) {
+        changeType = targetPolicy?.source === "Custom" ? "remove" : "unchanged";
+      } else if (!targetPolicy || targetPolicy.source === "Default") {
+        changeType = "create";
+      } else if (targetPolicy.slaMinutes !== sourcePolicy.slaMinutes) {
+        changeType = "update";
+      }
+
+      return {
+        workspaceId: entry.workspaceId,
+        workspaceLabel: resolveWorkspaceTitle(entry.workspaceId),
+        action: entry.action,
+        sourceStoreSlaMinutes: sourcePolicy?.slaMinutes ?? null,
+        sourceStoreSlaLabel: sourcePolicy?.slaLabel ?? null,
+        sourceStoreSource: sourcePolicy?.source ?? null,
+        targetStoreSlaMinutes: targetPolicy?.slaMinutes ?? null,
+        targetStoreSlaLabel: targetPolicy?.slaLabel ?? null,
+        targetStoreSource: targetPolicy?.source ?? null,
+        targetPolicyId: targetPolicy?.source === "Custom" ? targetPolicy.id : null,
+        nextTargetSlaMinutes,
+        nextTargetSlaLabel,
+        nextTargetSource,
+        changeType
+      };
+    });
+}
+
+async function retimeOpenStoreTasks(
+  storeId: string,
+  actor: {
+    actorUserId: string;
+    actorName: string;
+    actorInitial: string;
+  },
+  policyOverridesByKey?: Map<string, number>,
+  filter?: {
+    workspaceId?: string;
+    action?: string;
+  }
+) {
+  const openTasks = await prisma.storeTask.findMany({
+    where: {
+      storeId,
+      status: {
+        not: "Done"
+      },
+      ...(filter?.workspaceId ? { workspaceId: filter.workspaceId } : {}),
+      ...(filter?.action ? { action: filter.action } : {})
+    },
+    select: {
+      id: true,
+      createdAt: true,
+      workspaceId: true,
+      action: true
+    }
+  });
+
+  if (openTasks.length === 0) {
+    return 0;
+  }
+
+  await prisma.$transaction(
+    openTasks.map((task) => {
+      const slaMinutes =
+        policyOverridesByKey?.get(createTaskSlaPolicyKey(task.workspaceId, task.action)) ??
+        resolveDefaultTaskSlaMinutes(task.workspaceId as z.infer<typeof workspaceSchema>, task.action);
+
+      return prisma.storeTask.update({
+        where: {
+          id: task.id
+        },
+        data: {
+          slaMinutes,
+          dueAt: addMinutes(task.createdAt, slaMinutes),
+          lastUpdatedByUserId: actor.actorUserId,
+          lastUpdatedByName: actor.actorName,
+          lastUpdatedByInitial: actor.actorInitial
+        }
+      });
+    })
+  );
+
+  return openTasks.length;
+}
+
+function formatStoreTaskSlaPolicyEntry(policy: {
+  id: string;
+  workspaceId: string;
+  action: string;
+  slaMinutes: number;
+  source: "Custom" | "Default";
+  updatedByName: string | null;
+  updatedAt: Date | null;
+  openTaskCount: number;
+}) {
+  return {
+    id: policy.id,
+    workspaceId: policy.workspaceId,
+    workspaceLabel: resolveWorkspaceTitle(policy.workspaceId),
+    action: policy.action,
+    slaMinutes: policy.slaMinutes,
+    slaLabel: formatDurationMinutes(policy.slaMinutes),
+    source: policy.source,
+    updatedByName: policy.updatedByName,
+    updatedAtLabel: policy.updatedAt ? `${formatDate(policy.updatedAt)} ${formatClockTime(policy.updatedAt)}` : null,
+    openTaskCount: policy.openTaskCount
+  };
+}
+
+function createTaskSlaPolicyKey(workspaceId: string, action: string) {
+  return `${workspaceId}:${action}`;
+}
+
+function formatTaskSnapshotFields(payloadSnapshot: string) {
+  try {
+    const parsedSnapshot = JSON.parse(payloadSnapshot) as Record<string, string>;
+
+    return Object.entries(parsedSnapshot)
+      .filter(([, value]) => Boolean(value?.trim()))
+      .map(([key, value]) => ({
+        label: formatTaskSnapshotLabel(key),
+        value
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function formatTaskSnapshotLabel(key: string) {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function compareAuditRows(
+  left: { sortBucket: number; sortScore: number; sortTime: number },
+  right: { sortBucket: number; sortScore: number; sortTime: number }
+) {
+  if (right.sortBucket !== left.sortBucket) {
+    return right.sortBucket - left.sortBucket;
+  }
+
+  if (right.sortScore !== left.sortScore) {
+    return right.sortScore - left.sortScore;
+  }
+
+  return right.sortTime - left.sortTime;
+}
+
+function resolveWorkspaceTitle(workspaceId: string) {
+  const lookup: Record<string, string> = {
+    desktop: "Desktop",
+    sales: "Leads, Quotes & Deals",
+    service: "Estimates & Repair Orders",
+    parts: "Parts Ordering",
+    analytics: "Executive Board",
+    website: "Website Feed",
+    audit: "Audit Trail"
+  };
+
+  return lookup[workspaceId] ?? "Workspace";
+}
+
+async function resolveUniqueWorksheet(storeId: string, requestedWorksheet?: string, currentDealId?: string) {
+  const trimmedWorksheet = requestedWorksheet?.trim();
+
+  if (trimmedWorksheet) {
+    const existingDeal = await prisma.salesDeal.findFirst({
+      where: {
+        storeId,
+        worksheet: trimmedWorksheet
+      },
+      select: {
+        id: true
+      }
+    });
+
+    if (!existingDeal || existingDeal.id === currentDealId) {
+      return trimmedWorksheet;
+    }
+  }
+
+  return createNumericRecordId("60");
+}
+
+function normalizeWorkflowText(value: string | null | undefined, fallback: string) {
+  return value?.trim() || fallback;
+}
+
+function parseIntegerValue(value: string | undefined, fallback: number) {
+  const parsedValue = Number.parseInt(value ?? "", 10);
+
+  if (Number.isNaN(parsedValue) || parsedValue <= 0) {
+    return fallback;
+  }
+
+  return parsedValue;
+}
+
+function parseCurrencyToWholeDollars(value: string | undefined) {
+  const numericValue = Number.parseFloat((value ?? "").replace(/[^0-9.\-]/g, ""));
+
+  if (Number.isNaN(numericValue) || numericValue < 0) {
+    return 0;
+  }
+
+  return Math.round(numericValue);
+}
+
+function splitUnitLabel(unitLabel: string) {
+  const trimmedValue = unitLabel.trim();
+
+  if (!trimmedValue) {
+    return {
+      make: "PENDING",
+      model: "UNIT"
+    };
+  }
+
+  const [make, ...modelParts] = trimmedValue.split(/\s+/);
+
+  return {
+    make,
+    model: modelParts.join(" ") || "UNIT"
+  };
+}
+
+function createNumericRecordId(prefix: string) {
+  return `${prefix}${Date.now().toString().slice(-4)}`;
+}
+
+class RequestError extends Error {
+  statusCode: number;
+
+  constructor(statusCode: number, message: string) {
+    super(message);
+    this.name = "RequestError";
+    this.statusCode = statusCode;
+  }
+}

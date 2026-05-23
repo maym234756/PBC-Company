@@ -1,0 +1,457 @@
+import type {
+  ActivityLogEntry,
+  CommandTone,
+  DashboardPayload,
+  LoginPayload,
+  ServiceWorkspaceRow,
+  TaskNoteKind,
+  TaskQueueEntry,
+  TaskSlaPolicyEntry,
+  TaskSlaPolicySource,
+  TaskStatus,
+  WorkspaceId,
+  WorkspacePayload
+} from "./types";
+
+export interface CreateActivityRequest {
+  workspaceId: WorkspaceId;
+  label: string;
+  detail: string;
+  tone: CommandTone;
+  actorUserId: string;
+}
+
+export interface WorkflowActionRequest {
+  workspaceId: WorkspaceId;
+  action: string;
+  selectedRowId?: string | null;
+  detail: string;
+  tone: CommandTone;
+  actorUserId: string;
+  values: Record<string, string>;
+}
+
+export interface WorkflowActionResponse {
+  workspaceId: WorkspaceId;
+  focusRowId: string | null;
+  message: string;
+  activityEntry: ActivityLogEntry;
+  taskEntry?: TaskQueueEntry;
+}
+
+export interface UpdateTaskStatusRequest {
+  status: TaskStatus;
+  actorUserId: string;
+}
+
+export interface UpdateTaskResponse {
+  message: string;
+  taskEntry: TaskQueueEntry;
+  activityEntry: ActivityLogEntry;
+}
+
+export interface UpdateTaskAssigneeRequest {
+  actorUserId: string;
+  assigneeUserId: string | null;
+}
+
+export interface CreateTaskNoteRequest {
+  actorUserId: string;
+  body: string;
+  kind: TaskNoteKind;
+}
+
+export interface CleanupServiceUtilityQaRequest {
+  actorUserId: string;
+  roNumber: string;
+}
+
+export interface CleanupServiceUtilityQaResponse {
+  message: string;
+  deletedTaskCount: number;
+  deletedActivityCount: number;
+  deletedTaskIds: string[];
+  activityEntry: ActivityLogEntry | null;
+}
+
+export interface ServiceOrderPartCatalogEntry {
+  partNumber: string;
+  description: string;
+  supplier: string;
+  category: string;
+  price: number;
+}
+
+export interface ServiceOrderDetailResponse {
+  row: ServiceWorkspaceRow;
+  detail: unknown;
+  partCatalog: ServiceOrderPartCatalogEntry[];
+}
+
+export interface CreateServiceOrderRequest {
+  actorUserId: string;
+  orderType: "Estimate" | "Repair Order";
+  customerName: string;
+  stockNumber: string;
+  model: string;
+  serviceWriter: string;
+  maker: string;
+  note: string;
+}
+
+export interface DuplicateServiceOrderRequest {
+  actorUserId: string;
+  reason: string;
+}
+
+export type ServiceOrderActionRequest =
+  | {
+      mode: "createJob";
+      actorUserId: string;
+      title: string;
+      unitLabel: string;
+      description: string;
+      technician: string;
+    }
+  | {
+      mode: "updateJob";
+      actorUserId: string;
+      jobId: string;
+      title: string;
+      customerApproval: string;
+      status: string;
+      appliance: string;
+      description: string;
+      resolution: string;
+      recommendations: string;
+      technician: string;
+      laborRate: string;
+      chargeBy: string;
+      rate: number;
+      quantity: number;
+    }
+  | {
+      mode: "addPart";
+      actorUserId: string;
+      jobId: string;
+      partNumber: string;
+      description: string;
+      supplier: string;
+      available: number;
+      price: number;
+      quantity: number;
+      category: string;
+    }
+  | {
+      mode: "removePart";
+      actorUserId: string;
+      jobId: string;
+      partNumber: string;
+    }
+  | {
+      mode: "addLaborSession";
+      actorUserId: string;
+      jobId: string;
+      technician: string;
+      startDate: string;
+      startTime: string;
+      endDate: string;
+      endTime: string;
+      actualHours: string;
+      creditedHours: string;
+      override: string;
+    }
+  | {
+      mode: "updateWarrantyClaim";
+      actorUserId: string;
+      jobId: string;
+      warrantyClaimNumber: string;
+      internalWarrantyNumber: string;
+      failureDate: string;
+      contentionCode: string;
+      problemCode: string;
+      problemDescription: string;
+      claimType: string;
+      status: string;
+      deductible: number;
+      failedPartNumber: string;
+      actionTaken: string;
+      reasonForDelay: string;
+      carrierNumber: string;
+      invoiceDate: string;
+      invoiceNumber: string;
+      dateFiledWithCarrier: string;
+    }
+  | {
+      mode: "updateOrderType";
+      actorUserId: string;
+      orderType: "Estimate" | "Repair Order";
+    }
+  | {
+      mode: "updateQueueRow";
+      actorUserId: string;
+      inDate: string;
+      roNumber: string;
+      orderType: "Estimate" | "Repair Order";
+      customerName: string;
+      stockNumber: string;
+      model: string;
+      serviceWriter: string;
+      roStatus: string;
+      category: string;
+      maker: string;
+      note: string;
+    };
+
+export interface ServiceOrderActionResponse extends ServiceOrderDetailResponse {
+  message: string;
+  activityEntry: ActivityLogEntry;
+}
+
+export interface CreateServiceOrderResponse extends ServiceOrderDetailResponse {
+  message: string;
+  activityEntry: ActivityLogEntry;
+}
+
+export interface UpdateTaskSlaPolicyRequest {
+  workspaceId: WorkspaceId;
+  action: string;
+  slaMinutes: number;
+  actorUserId: string;
+  applyToOpenTasks?: boolean;
+}
+
+export interface UpdateTaskSlaPolicyResponse {
+  message: string;
+  policyEntry: TaskSlaPolicyEntry;
+  retimedTaskCount: number;
+  activityEntry: ActivityLogEntry;
+}
+
+export interface PreviewTaskSlaPolicyCopyRequest {
+  actorUserId: string;
+  targetStoreId: string;
+}
+
+export type TaskSlaPolicyCopyPreviewChangeType = "create" | "update" | "remove" | "unchanged";
+
+export interface TaskSlaPolicyCopyPreviewEntry {
+  workspaceId: WorkspaceId;
+  workspaceLabel: string;
+  action: string;
+  sourceStoreSlaMinutes: number | null;
+  sourceStoreSlaLabel: string | null;
+  sourceStoreSource: TaskSlaPolicySource | null;
+  targetStoreSlaMinutes: number | null;
+  targetStoreSlaLabel: string | null;
+  targetStoreSource: TaskSlaPolicySource | null;
+  nextTargetSlaMinutes: number | null;
+  nextTargetSlaLabel: string | null;
+  nextTargetSource: "Custom" | null;
+  changeType: TaskSlaPolicyCopyPreviewChangeType;
+}
+
+export interface TaskSlaPolicyCopyPreviewResponse {
+  message: string;
+  sourceStoreName: string;
+  targetStoreName: string;
+  changedRuleCount: number;
+  totalRuleCount: number;
+  comparison: TaskSlaPolicyCopyPreviewEntry[];
+}
+
+export type TaskSlaPolicyActionRequest =
+  | {
+      mode: "copyOneToStore";
+      actorUserId: string;
+      targetStoreId: string;
+      workspaceId: WorkspaceId;
+      action: string;
+      applyToOpenTasks?: boolean;
+    }
+  | {
+      mode: "copyToStore";
+      actorUserId: string;
+      targetStoreId: string;
+      applyToOpenTasks?: boolean;
+    }
+  | {
+      mode: "resetAll";
+      actorUserId: string;
+      applyToOpenTasks?: boolean;
+    }
+  | {
+      mode: "resetOne";
+      actorUserId: string;
+      workspaceId: WorkspaceId;
+      action: string;
+      applyToOpenTasks?: boolean;
+    };
+
+export interface TaskSlaPolicyActionResponse {
+  message: string;
+  updatedPolicyCount: number;
+  retimedTaskCount: number;
+  activityEntry: ActivityLogEntry;
+}
+
+const defaultApiBaseUrl =
+  typeof window === "undefined"
+    ? "http://localhost:4000/api"
+    : `http://${window.location.hostname}:4000/api`;
+
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? defaultApiBaseUrl).replace(/\/$/, "");
+
+export async function login(email: string, password: string) {
+  return request<LoginPayload>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password })
+  });
+}
+
+export async function getDashboard(storeId: string) {
+  return request<DashboardPayload>(`/stores/${storeId}/dashboard`);
+}
+
+export async function getWorkspace(storeId: string, workspaceId: WorkspaceId) {
+  return request<WorkspacePayload>(`/stores/${storeId}/workspaces/${workspaceId}`);
+}
+
+export async function getActivityLog(storeId: string, workspaceId: WorkspaceId, actorUserId?: string, limit?: number) {
+  const params = new URLSearchParams({ workspaceId });
+
+  if (actorUserId) {
+    params.set("actorUserId", actorUserId);
+  }
+
+  if (limit) {
+    params.set("limit", `${limit}`);
+  }
+
+  return request<ActivityLogEntry[]>(`/stores/${storeId}/activity?${params.toString()}`);
+}
+
+export async function getTaskQueue(storeId: string, workspaceId: WorkspaceId, actorUserId?: string, limit?: number) {
+  const params = new URLSearchParams({ workspaceId });
+
+  if (actorUserId) {
+    params.set("actorUserId", actorUserId);
+  }
+
+  if (limit) {
+    params.set("limit", `${limit}`);
+  }
+
+  return request<TaskQueueEntry[]>(`/stores/${storeId}/tasks?${params.toString()}`);
+}
+
+export async function createActivityLog(storeId: string, payload: CreateActivityRequest) {
+  return request<ActivityLogEntry>(`/stores/${storeId}/activity`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function submitWorkflowAction(storeId: string, payload: WorkflowActionRequest) {
+  return request<WorkflowActionResponse>(`/stores/${storeId}/workflow-actions`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateTaskStatus(storeId: string, taskId: string, payload: UpdateTaskStatusRequest) {
+  return request<UpdateTaskResponse>(`/stores/${storeId}/tasks/${taskId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateTaskAssignee(storeId: string, taskId: string, payload: UpdateTaskAssigneeRequest) {
+  return request<UpdateTaskResponse>(`/stores/${storeId}/tasks/${taskId}/assignee`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function createTaskNote(storeId: string, taskId: string, payload: CreateTaskNoteRequest) {
+  return request<UpdateTaskResponse>(`/stores/${storeId}/tasks/${taskId}/comments`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function cleanupServiceUtilityQaTasks(storeId: string, payload: CleanupServiceUtilityQaRequest) {
+  return request<CleanupServiceUtilityQaResponse>(`/stores/${storeId}/tasks/actions`, {
+    method: "POST",
+    body: JSON.stringify({
+      mode: "cleanupServiceUtilityQa",
+      ...payload
+    })
+  });
+}
+
+export async function getServiceOrderDetail(storeId: string, serviceOrderId: string) {
+  return request<ServiceOrderDetailResponse>(`/stores/${storeId}/service-orders/${serviceOrderId}`);
+}
+
+export async function createServiceOrder(storeId: string, payload: CreateServiceOrderRequest) {
+  return request<CreateServiceOrderResponse>(`/stores/${storeId}/service-orders`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function duplicateServiceOrder(storeId: string, serviceOrderId: string, payload: DuplicateServiceOrderRequest) {
+  return request<CreateServiceOrderResponse>(`/stores/${storeId}/service-orders/${serviceOrderId}/duplicate`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateServiceOrderDetail(storeId: string, serviceOrderId: string, payload: ServiceOrderActionRequest) {
+  return request<ServiceOrderActionResponse>(`/stores/${storeId}/service-orders/${serviceOrderId}/actions`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateTaskSlaPolicy(storeId: string, payload: UpdateTaskSlaPolicyRequest) {
+  return request<UpdateTaskSlaPolicyResponse>(`/stores/${storeId}/task-sla-policies`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function previewTaskSlaPolicyCopy(storeId: string, payload: PreviewTaskSlaPolicyCopyRequest) {
+  return request<TaskSlaPolicyCopyPreviewResponse>(`/stores/${storeId}/task-sla-policies/actions`, {
+    method: "POST",
+    body: JSON.stringify({
+      mode: "previewCopyToStore",
+      ...payload
+    })
+  });
+}
+
+export async function runTaskSlaPolicyAction(storeId: string, payload: TaskSlaPolicyActionRequest) {
+  return request<TaskSlaPolicyActionResponse>(`/stores/${storeId}/task-sla-policies/actions`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+async function request<T>(path: string, init?: RequestInit) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers ?? {})
+    }
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(payload?.message ?? "Request failed.");
+  }
+
+  return response.json() as Promise<T>;
+}

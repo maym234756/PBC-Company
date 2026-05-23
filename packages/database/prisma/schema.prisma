@@ -1,0 +1,277 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model DealerGroup {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String
+  users       User[]
+  stores      Store[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model User {
+  id            String      @id @default(cuid())
+  email         String      @unique
+  name          String
+  title         String
+  avatarInitial String
+  dealerGroupId String
+  dealerGroup   DealerGroup @relation(fields: [dealerGroupId], references: [id])
+  userStores    UserStore[]
+  activities    StoreActivity[] @relation("StoreActivityActor")
+  tasks         StoreTask[] @relation("StoreTaskActor")
+  assignedTasks StoreTask[] @relation("StoreTaskAssignee")
+  updatedTasks  StoreTask[] @relation("StoreTaskUpdatedBy")
+  taskComments  StoreTaskComment[] @relation("StoreTaskCommentAuthor")
+  latestCommentedTasks StoreTask[] @relation("StoreTaskLatestCommentBy")
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model Store {
+  id            String        @id @default(cuid())
+  code          String        @unique
+  name          String
+  city          String
+  state         String
+  dealerGroupId String
+  dealerGroup   DealerGroup   @relation(fields: [dealerGroupId], references: [id])
+  userStores    UserStore[]
+  modules       StoreModule[]
+  activities    StoreActivity[]
+  tasks         StoreTask[]
+  taskSlaPolicies StoreTaskSlaPolicy[]
+  salesDeals    SalesDeal[]
+  serviceOrders ServiceOrder[]
+  partsLines    PartsOrderLine[]
+  websiteFeeds  WebsiteFeed[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model UserStore {
+  id      String @id @default(cuid())
+  userId  String
+  storeId String
+  user    User   @relation(fields: [userId], references: [id])
+  store   Store  @relation(fields: [storeId], references: [id])
+
+  @@unique([userId, storeId])
+}
+
+model AppModule {
+  id           String        @id @default(cuid())
+  code         String        @unique
+  name         String
+  category     String
+  description  String
+  ownerTeam    String
+  navGroup     String
+  storeModules StoreModule[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model StoreModule {
+  id          String    @id @default(cuid())
+  status      String
+  headline    String
+  priority    Int
+  storeId     String
+  appModuleId String
+  store       Store     @relation(fields: [storeId], references: [id])
+  appModule   AppModule @relation(fields: [appModuleId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([storeId, appModuleId])
+}
+
+model WebsiteFeed {
+  id             String   @id @default(cuid())
+  brand          String
+  domain         String
+  status         String
+  inventoryCount Int
+  leadsToday     Int
+  lastSyncAt     DateTime
+  storeId        String
+  store          Store    @relation(fields: [storeId], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([storeId, brand])
+}
+
+model SalesDeal {
+  id           String   @id @default(cuid())
+  openedAt     DateTime
+  worksheet    String
+  stockNumber  String
+  make         String
+  model        String
+  cashPrice    Int
+  stage        String
+  customerName String
+  modelYear    Int
+  vin          String
+  tone         String
+  storeId      String
+  store        Store    @relation(fields: [storeId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([storeId, worksheet])
+  @@index([storeId, openedAt])
+}
+
+model ServiceOrder {
+  id            String   @id @default(cuid())
+  inDate        DateTime
+  roNumber      String
+  orderType     String   @default("Repair Order")
+  customerName  String
+  stockNumber   String
+  model         String
+  serviceWriter String
+  roStatus      String
+  category      String
+  maker         String
+  note          String
+  detailSnapshot String?
+  tone          String
+  storeId       String
+  store         Store    @relation(fields: [storeId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([storeId, roNumber])
+  @@index([storeId, inDate])
+}
+
+model PartsOrderLine {
+  id              String   @id @default(cuid())
+  partNumber      String
+  secondaryNumber String
+  description     String
+  supplier        String
+  category        String
+  orderType       String
+  quantity        Int
+  orderCost       Int
+  source          String
+  tone            String
+  storeId         String
+  store           Store    @relation(fields: [storeId], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([storeId, partNumber, source])
+  @@index([storeId, partNumber])
+}
+
+model StoreActivity {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  label        String
+  detail       String
+  tone         String
+  actorUserId  String?
+  actorUser    User?     @relation("StoreActivityActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorName    String    @default("Operator")
+  actorInitial String    @default("OP")
+  storeId      String
+  store        Store     @relation(fields: [storeId], references: [id])
+  createdAt    DateTime  @default(now())
+
+  @@index([storeId, workspaceId, createdAt])
+  @@index([actorUserId, storeId, createdAt])
+}
+
+model StoreTask {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  action          String
+  detail          String
+  status          String    @default("Queued")
+  tone            String
+  slaMinutes      Int?
+  dueAt           DateTime?
+  completedAt     DateTime?
+  actorUserId     String?
+  actorUser       User?     @relation("StoreTaskActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorName       String
+  actorInitial    String
+  assignedUserId  String?
+  assignedUser    User?     @relation("StoreTaskAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  assignedName    String?
+  assignedInitial String?
+  lastUpdatedByUserId String?
+  lastUpdatedByUser   User?  @relation("StoreTaskUpdatedBy", fields: [lastUpdatedByUserId], references: [id], onDelete: SetNull)
+  lastUpdatedByName   String @default("Operator")
+  lastUpdatedByInitial String @default("OP")
+  commentCount     Int       @default(0)
+  latestCommentPreview String?
+  latestCommentAt  DateTime?
+  latestCommentByUserId String?
+  latestCommentByUser   User? @relation("StoreTaskLatestCommentBy", fields: [latestCommentByUserId], references: [id], onDelete: SetNull)
+  latestCommentByName   String?
+  latestCommentByInitial String?
+  resolutionNote   String?
+  payloadSnapshot String
+  storeId         String
+  store           Store     @relation(fields: [storeId], references: [id])
+  comments        StoreTaskComment[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([storeId, workspaceId, createdAt])
+  @@index([storeId, workspaceId, status, updatedAt])
+  @@index([actorUserId, storeId, updatedAt])
+  @@index([assignedUserId, storeId, updatedAt])
+  @@index([lastUpdatedByUserId, storeId, updatedAt])
+  @@index([latestCommentByUserId, storeId, updatedAt])
+  @@index([dueAt, status, updatedAt])
+}
+
+model StoreTaskComment {
+  id            String    @id @default(cuid())
+  kind          String
+  body          String
+  taskId        String
+  task          StoreTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorUserId  String?
+  authorUser    User?     @relation("StoreTaskCommentAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
+  authorName    String    @default("Operator")
+  authorInitial String    @default("OP")
+  createdAt     DateTime  @default(now())
+
+  @@index([taskId, createdAt])
+  @@index([authorUserId, createdAt])
+}
+
+model StoreTaskSlaPolicy {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  action           String
+  slaMinutes       Int
+  updatedByUserId  String?
+  updatedByName    String   @default("Operator")
+  updatedByInitial String   @default("OP")
+  storeId          String
+  store            Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([storeId, workspaceId, action])
+  @@index([storeId, workspaceId, updatedAt])
+}

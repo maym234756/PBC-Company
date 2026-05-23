@@ -1,0 +1,1388 @@
+Premier Boating Centers / Ocean Marine Group Proprietary Marine Cloud Platform Analysis
+Prepared: 2026-05-20
+
+Company assessed:
+Premier Boating Centers and Ocean Marine Group
+
+Project assessed:
+A fully proprietary, cloud-based marine dealer operating system built from scratch by Premier Boating Centers and Ocean Marine Group, inspired by:
+- CRM concepts commonly associated with Salesforce
+- Marine DMS, inventory, and service concepts commonly associated with Lightspeed
+- Accounting and financial workflow concepts commonly associated with QuickBooks
+- Boat merchandising, inventory publishing, and digital retail concepts from the current Premier Boating Centers and Ocean Marine Group websites
+- Dashboard, drill-down, KPI, and executive reporting concepts commonly associated with Power BI
+
+Purpose of this document:
+Provide a blunt, operator-level estimate of what it would actually take to build this into a serious proprietary cloud platform, including hours, manpower, timeline, cost, recommended technical base, and what users would actually see at three budget levels.
+
+Important scope clarification:
+This is not an integration program.
+This is not a middleware layer.
+This is not an orchestration shell over existing vendor software.
+
+You are talking about building your own cloud platform that absorbs the concepts and functions of multiple established software categories inside one proprietary system owned by Premier Boating Centers and Ocean Marine Group.
+
+That changes the economics materially.
+
+--------------------------------------------------
+1. Executive Summary
+--------------------------------------------------
+
+Short version:
+- This is no longer a systems-integration project.
+- This is a multi-suite internal product build.
+- You are effectively replacing categories of software, not connecting them.
+
+Blunt conclusion:
+- Bare minimum proprietary internal operating core: about $3.8M to $5.2M
+- Strong recommended production build: about $7.4M to $9.4M
+- Full completed proprietary marine operating cloud: about $13.0M to $18.5M
+
+Best practical base-case budget:
+- Plan around $7.8M to $8.4M if you want a serious internal platform that can actually run Premier Boating Centers and Ocean Marine Group operations instead of acting like an expensive prototype.
+
+Best practical base-case timeline:
+- 18 to 24 months
+
+Best practical base-case team:
+- 15 to 19 core delivery people, plus business-side owners from sales, service, accounting, digital, and store leadership
+
+Critical escalation note:
+- If by QuickBooks-like functions you truly mean a full in-house accounting platform with general ledger, accounts payable, accounts receivable, bank reconciliation, period close, audit controls, and tax-grade workflow depth, add roughly $2.5M to $5.0M and 9 to 15 months beyond the recommended production build.
+
+If someone asked for the most defensible short answer:
+- Building your own marine operating cloud from scratch is realistically a $7M to $9M internal program before you start acting like a commercial software vendor.
+- If you insist on deep feature parity across CRM, DMS, finance, websites, dashboards, service, and workflow, it can move into the low-to-mid eight figures.
+
+--------------------------------------------------
+2. What This Scope Actually Means
+--------------------------------------------------
+
+When you say you are not integrating Salesforce, Lightspeed, QuickBooks, your websites, or Power BI, and instead you want the concepts and functions rebuilt in your own cloud, you are really saying all of the following:
+
+1. Build your own CRM and customer activity system
+- leads
+- customers
+- opportunities
+- tasking
+- follow-up
+- history
+- attribution
+
+2. Build your own marine inventory and merchandising system
+- unit records
+- specifications
+- pricing
+- photos and media
+- publish / unpublish workflow
+- sold / inbound / used / brokerage / hold states
+
+3. Build your own deal workflow system
+- quote flow
+- trade handling
+- milestone tracking
+- document readiness
+- delivery handoff
+- exception queues
+
+4. Build your own service and after-sale workflow layer
+- service status
+- sold-unit prep
+- delivery blockers
+- after-sale follow-up
+- operational coordination between departments
+
+5. Build your own finance and accounting-oriented module set
+- deposits
+- posting states
+- operational-to-financial handoff
+- reconciliation workflows
+- financial reporting logic
+- possibly more if you want true in-house accounting depth
+
+6. Build your own website and digital retail operating layer
+- inventory publishing
+- lead forms
+- content governance
+- merchandising workflows
+- attribution capture
+
+7. Build your own analytics and executive reporting layer
+- KPI logic
+- drill-down dashboards
+- exports
+- forecast views
+- exception management
+
+8. Build your own admin, security, audit, and configuration layer
+- users
+- roles
+- permissions
+- store configuration
+- workflow rules
+- audit history
+
+That is product creation.
+It is not just software assembly.
+
+--------------------------------------------------
+3. Harsh Reality
+--------------------------------------------------
+
+This scope is much harder than the earlier integration-first assumption.
+
+Why:
+- Vendor software has spent years solving edge cases that you now inherit.
+- Every operational exception becomes your design problem.
+- Every audit trail, approval state, and data relationship must be defined by you.
+- Every screen, workflow, and report must be intentionally built rather than mapped from an external system.
+
+The hardest parts are not just engineering:
+- deciding which business rules are standard across Premier Boating Centers and Ocean Marine Group
+- deciding what accounting depth belongs inside this platform versus outside it
+- deciding which concepts to imitate and which ones to deliberately leave out
+- migrating current data and getting users to trust a completely new internal system
+
+Most programs like this fail for one of five reasons:
+- leadership tries to clone too much from too many products
+- the company does not standardize operating rules before development starts
+- accounting and control requirements are discovered too late
+- data migration and cleanup are treated like a minor side task
+- the company funds build cost but not long-term product ownership
+
+The hardest single decision now:
+- Is this an internal operating system for Premier Boating Centers and Ocean Marine Group only?
+- Or is this supposed to become a reusable commercial platform for outside dealerships later?
+
+Those are not the same project.
+
+This analysis assumes the rational path:
+- internal-first build
+- multi-store support for Premier and Ocean
+- strong production quality
+- no attempt to become an external SaaS vendor on day one
+
+If you want outside-dealer productization from the start:
+- add roughly 25 percent to 40 percent to budget
+- add roughly 6 to 12 months
+- add materially more QA, tenancy, configurability, support, and documentation cost
+
+--------------------------------------------------
+4. What You Are Actually Building
+--------------------------------------------------
+
+At the business level, this project is a proprietary marine operating cloud with seven major pillars.
+
+1. Customer and CRM pillar
+- lead capture
+- contact and account management
+- opportunity management
+- follow-up tasks and reminders
+- activity history
+- attribution and source tracking
+
+2. Inventory and merchandising pillar
+- boat inventory records
+- specs and configuration details
+- pricing and status controls
+- media and content management
+- publish / unpublish and listing governance
+
+3. Deal desk and delivery pillar
+- quote and proposal workflow
+- trade and appraisal handling
+- stage progression
+- delivery readiness tracking
+- exception and stall management
+
+4. Service and post-sale pillar
+- prep and service blocker visibility
+- sold-unit readiness workflow
+- service follow-up coordination
+- after-sale retention triggers
+
+5. Finance and accounting pillar
+- deposit and transaction states
+- operational-to-financial handoff
+- reconciliation workflow
+- management financial views
+- optional deeper accounting engine depending on scope
+
+6. Executive analytics pillar
+- KPI dashboards
+- drill-down reporting
+- cross-store comparison
+- forecast and exception views
+- performance trend analysis
+
+7. Platform administration pillar
+- user and role management
+- store configuration
+- workflow rules
+- audit history
+- notification and document settings
+
+--------------------------------------------------
+5. Recommended Platform Base
+--------------------------------------------------
+
+Recommended base:
+Azure-centric proprietary cloud platform built as a modular monolith first, not a microservices-first experiment.
+
+Recommended stack direction:
+- Frontend: React or Next.js web application
+- Backend: .NET 8 recommended for enterprise workflow depth, finance-oriented reliability, and long-term maintainability
+- Architecture style: modular monolith with clear domain boundaries for CRM, inventory, deals, service, finance, analytics, and admin
+- Primary database: PostgreSQL or Azure SQL
+- Search and indexing: Azure AI Search or Elastic / OpenSearch equivalent for fast record and inventory search
+- Workflow and events: Azure Service Bus plus scheduled jobs and durable workflow execution
+- File and document storage: Azure Blob Storage
+- Reporting layer: proprietary dashboard, KPI, and drill-down experience backed by a data warehouse or semantic model; do not try to clone the full Power BI product
+- Analytics store: Fabric, Synapse, or warehouse-backed reporting model depending on scale and reporting complexity
+- Identity and access: Microsoft Entra ID with application-level RBAC
+- Monitoring and observability: Application Insights, centralized logs, alerting, and audit dashboards
+
+Why this is the best base:
+- one codebase and one operational data model
+- simpler governance than splitting the system into too many services too early
+- strong enterprise identity and security path
+- a clean path for internal dashboards, exports, and executive reporting without pretending you need to rebuild a generic BI authoring suite
+
+What this base gives you:
+- one cloud login experience
+- one data model across Premier and Ocean
+- one admin and permission model
+- one workflow and notification foundation
+- one website publishing and inventory control foundation
+- one analytics and dashboard foundation
+
+What this base does not magically solve:
+- product scope bloat
+- bad legacy data
+- weak store process discipline
+- accounting policy disagreement
+- user adoption risk
+
+What you should not do:
+- do not try to recreate Salesforce, Lightspeed, QuickBooks, and Power BI feature-for-feature
+- do not start with microservices unless there is a proven scale reason
+- do not build a generic report-builder product if your real need is strong executive dashboards, filters, exports, and drill-downs
+
+--------------------------------------------------
+6. Core Assumptions Behind the Numbers
+--------------------------------------------------
+
+These estimates assume:
+- internal use by Premier Boating Centers and Ocean Marine Group
+- multi-store support with role-based permissions
+- serious production standards, not a demo
+- responsive web application as the primary interface
+- data migration from current systems into the new proprietary platform
+- a modular monolith approach rather than a heavily distributed service mesh
+- your own equivalents of the named platform concepts are being built into the new cloud
+
+These estimates do not assume:
+- a public marketplace product sold externally at launch
+- native iOS and Android products as first-class programs from day one
+- payroll, tax filing, and every small-business accounting feature under the sun
+- a full generic self-service BI authoring platform for arbitrary report design by every user
+- a public API platform for external partners on day one
+
+Blended labor rate assumptions used for planning:
+- Product director / product lead: $150 to $190 per hour
+- Business analyst / domain analyst: $135 to $175 per hour
+- Solution architect / chief architect: $190 to $235 per hour
+- Engineering lead / engineering manager: $170 to $215 per hour
+- Backend domain engineer: $145 to $190 per hour
+- Frontend engineer: $135 to $175 per hour
+- Data / analytics engineer: $145 to $190 per hour
+- DevOps / SRE / security engineer: $155 to $200 per hour
+- QA / test automation: $100 to $140 per hour
+- UX/UI designer: $115 to $155 per hour
+- Delivery manager / PM: $120 to $155 per hour
+- Accounting domain consultant: $160 to $220 per hour
+
+Non-labor items included in all-in budgets:
+- cloud environments during build
+- CI/CD, monitoring, and developer tooling
+- security tooling and scanning
+- search and document infrastructure
+- migration tooling and cutover support
+- training, pilot rollout, and launch support
+- reasonable contingency
+
+Non-labor items not fully included because they vary too much:
+- large e-sign volume costs
+- payment processing costs if payment features are added
+- telephony or contact-center tooling if you want it inside the platform
+- AI usage costs if you later layer AI assistance on top
+- travel-heavy multi-site rollout programs
+
+Critical accounting warning:
+- If you require a true in-house accounting platform with general ledger, AP, AR, bank reconciliation, multi-entity close, fixed assets, and audit-grade controls inside your own cloud, that becomes a separate major workstream.
+- Add roughly 4,000 to 8,500 hours and roughly $900,000 to $2,200,000 beyond the core internal operating system depending on scope depth.
+- Add more again if payroll or tax filing is expected.
+
+--------------------------------------------------
+7. Delivery Team by Role
+--------------------------------------------------
+
+Bare minimum proprietary team shape:
+- 1 product owner / business lead
+- 1 business analyst
+- 1 solution architect
+- 1 engineering lead
+- 3 backend domain engineers
+- 2 frontend engineers
+- 0.75 data / analytics engineer
+- 1 QA engineer
+- 0.5 DevOps / security engineer
+- 0.5 UX/UI designer
+- 0.5 delivery manager
+- 0.25 accounting domain consultant
+
+Recommended production team shape:
+- 1 product director
+- 2 business analysts / domain analysts
+- 1 chief architect
+- 1 engineering manager
+- 5 backend domain engineers
+- 3 frontend engineers
+- 1.5 data / analytics engineers
+- 2 QA / test engineers
+- 1 DevOps / SRE engineer
+- 1 UX/UI lead
+- 1 delivery manager
+- 0.5 security / compliance specialist
+- 0.5 accounting domain consultant
+
+Full completed team shape:
+- 1 product director
+- 3 business analysts / domain analysts
+- 1 chief architect
+- 2 engineering managers
+- 7 backend domain engineers
+- 4 frontend engineers
+- 2 data / analytics engineers
+- 3 QA / test engineers
+- 1.5 DevOps / SRE / security engineers
+- 1.5 UX/UI designers
+- 1 PMO / delivery lead
+- 1 training / rollout lead
+- 1 accounting domain consultant
+
+Business-side staffing you still need regardless of budget:
+- executive sponsor
+- sales operations lead
+- service operations lead
+- accounting / controller lead
+- digital / website lead
+- store managers and pilot users for UAT
+- legal or compliance reviewer for document and control flows if finance scope is meaningful
+
+Without these business-side owners, the engineering team can still produce a technically sound platform that fails operationally.
+
+--------------------------------------------------
+8. Bare Minimum Proprietary Build
+--------------------------------------------------
+
+Definition:
+This is the minimum credible proprietary internal platform if your goal is to stop relying on outside software categories for the core operating experience. It is not small. It is simply the smallest version that still qualifies as a true from-scratch internal product rather than a glorified dashboard.
+
+What users would actually see in the bare minimum version:
+- one internal cloud portal
+- your own customer and lead records
+- your own inventory records and website listing controls
+- your own deal pipeline and follow-up workflows
+- your own basic sold-unit readiness and service blocker views
+- your own management dashboards, drill-downs, and exports
+- admin screens for users, roles, stores, workflow settings, and content rules
+
+What users would not get yet:
+- deep parts and service management
+- full general ledger or full standalone accounting package depth
+- heavy marketing automation breadth
+- mature native mobile apps
+- a generic report-builder product for arbitrary analytics authoring
+
+Bare minimum workstream hours and labor cost:
+
+1. Discovery, operating model, and product architecture
+- Hours: 900
+- Labor cost: $157,500
+
+2. UX/UI and design system
+- Hours: 700
+- Labor cost: $91,000
+
+3. Platform core, auth, RBAC, store model, and audit baseline
+- Hours: 1,800
+- Labor cost: $297,000
+
+4. Customer, lead, and CRM module
+- Hours: 2,600
+- Labor cost: $403,000
+
+5. Inventory, merchandising, and website CMS module
+- Hours: 3,200
+- Labor cost: $496,000
+
+6. Deal workflow, quote, and delivery readiness module
+- Hours: 2,800
+- Labor cost: $448,000
+
+7. Service and sold-unit readiness baseline module
+- Hours: 1,400
+- Labor cost: $210,000
+
+8. Finance and operational accounting baseline module
+- Hours: 1,300
+- Labor cost: $214,500
+
+9. Analytics, dashboards, and exports layer
+- Hours: 1,200
+- Labor cost: $186,000
+
+10. Data migration, import tools, and master-data mapping
+- Hours: 1,000
+- Labor cost: $145,000
+
+11. QA, UAT, and regression support
+- Hours: 2,200
+- Labor cost: $264,000
+
+12. DevOps, security, release pipeline, and environments
+- Hours: 1,200
+- Labor cost: $204,000
+
+13. PM, training, launch support, and pilot management
+- Hours: 1,500
+- Labor cost: $202,500
+
+Bare minimum totals:
+- Total labor hours: 21,800
+- Total labor cost: about $3,318,500
+- Non-labor, tooling, cloud, migration support, and contingency: about $560,000 to $1,150,000
+- All-in build budget: about $3,878,500 to $4,468,500
+- Safer planning range: $3.8M to $5.2M
+
+Bare minimum timeline:
+- 14 to 18 months
+
+Bare minimum manpower:
+- 10 to 13 core delivery people at one time
+
+Who this tier is for:
+- A company that truly wants to own the core operating experience but is willing to accept limited depth in finance, service, mobile, and analytics sophistication at launch.
+
+Main benefit of this tier:
+- You stop depending on outside products for the most visible daily operating workflows.
+
+Main weakness of this tier:
+- The platform is yours, but it still lacks depth in several areas that mature vendor products have spent years refining.
+
+--------------------------------------------------
+9. Recommended Production Build
+--------------------------------------------------
+
+Definition:
+This is the strongest practical recommendation. It is the first level where the platform becomes a serious internal operating system rather than an underbuilt internal tool.
+
+What users would actually see in the recommended production version:
+- everything in the bare minimum tier
+- stronger role-based workspaces for sales, management, service, accounting, and digital teams
+- better deal-stage workflow, approvals, document readiness, and handoff tracking
+- richer website merchandising and inventory governance
+- stronger service coordination and after-sale workflow visibility
+- deeper financial control states and reconciliation workflow
+- better executive dashboards, KPI drill-down, and exception management
+- stronger audit, admin, and workflow-rule configuration
+
+What users still would not fully get:
+- full public-market SaaS product readiness for outside dealers
+- full payroll and tax platform depth
+- feature-complete clone-level parity with every vendor concept you admire
+- heavy native mobile product breadth
+
+Recommended production workstream hours and labor cost:
+
+1. Enterprise discovery, operating model, and product definition
+- Hours: 1,500
+- Labor cost: $270,000
+
+2. UX/UI, design system, and role-based experience design
+- Hours: 1,200
+- Labor cost: $162,000
+
+3. Platform core, workflow engine, admin model, and audit depth
+- Hours: 3,200
+- Labor cost: $544,000
+
+4. CRM, customer intelligence, and lead management suite
+- Hours: 4,500
+- Labor cost: $720,000
+
+5. Inventory, merchandising, website, and content suite
+- Hours: 5,200
+- Labor cost: $832,000
+
+6. Deal desk, quote, trade, and delivery workflow suite
+- Hours: 4,500
+- Labor cost: $742,500
+
+7. Service operations and after-sale coordination suite
+- Hours: 2,800
+- Labor cost: $434,000
+
+8. Finance, reconciliation, and accounting-control suite
+- Hours: 3,200
+- Labor cost: $544,000
+
+9. Analytics warehouse, KPI model, dashboards, and drill-down layer
+- Hours: 2,400
+- Labor cost: $384,000
+
+10. Documents, notifications, templates, and workflow automation
+- Hours: 1,800
+- Labor cost: $279,000
+
+11. Data migration, cutover tooling, and master-data governance
+- Hours: 1,800
+- Labor cost: $261,000
+
+12. QA, automation, performance testing, and UAT
+- Hours: 4,000
+- Labor cost: $500,000
+
+13. DevOps, SRE, security hardening, and release operations
+- Hours: 2,200
+- Labor cost: $385,000
+
+14. PM, BA, training, rollout management, and launch support
+- Hours: 2,600
+- Labor cost: $364,000
+
+Recommended production totals:
+- Total labor hours: 40,900
+- Total labor cost: about $6,421,500
+- Non-labor, tooling, cloud, migration support, and contingency: about $1,300,000 to $2,200,000
+- All-in build budget: about $7,721,500 to $8,621,500
+- Safer planning range: $7.4M to $9.4M
+
+Recommended production timeline:
+- 18 to 24 months
+
+Recommended production manpower:
+- 15 to 19 core delivery people at one time
+
+Who this tier is for:
+- A company that wants to truly run Premier Boating Centers and Ocean Marine Group on an internally owned operating system rather than renting the core workflows from outside vendors.
+
+Main benefit of this tier:
+- The platform becomes the daily control center for the business, not just a reporting layer.
+
+Main weakness of this tier:
+- This is a serious product program with serious long-term ownership cost. You do not get to treat it like a one-time project and walk away.
+
+--------------------------------------------------
+10. Full Completed Proprietary Build
+--------------------------------------------------
+
+Definition:
+This is the level where you are building a genuinely deep internal product suite with broad operational control, stronger finance depth, richer service support, stronger analytics, and more mature delivery discipline.
+
+What users would actually see in the full completed version:
+- everything in the recommended production tier
+- deeper customer intelligence and activity history
+- richer inventory workflow, digital retail, and merchandising governance
+- more complete deal desk, document, approval, and delivery orchestration
+- deeper service and parts-adjacent operations support
+- stronger finance and accounting workflow depth
+- more mature mobile or mobile-friendly task workflows
+- more advanced executive reporting, forecasting, and exception management
+- deeper governance, configuration, and audit capability across stores and business units
+
+What the full completed version still may not include unless explicitly funded as additional product tracks:
+- payroll engine
+- tax filing engine
+- public developer ecosystem or app marketplace
+- fully generic BI authoring environment comparable to a full enterprise analytics product
+
+Full completed workstream hours and labor cost:
+
+1. Enterprise product strategy, governance, and operating-model redesign
+- Hours: 2,400
+- Labor cost: $444,000
+
+2. UX/UI across desktop, tablet, and higher role complexity
+- Hours: 2,000
+- Labor cost: $280,000
+
+3. Platform core, automation framework, workflow engine, and audit platform
+- Hours: 5,200
+- Labor cost: $910,000
+
+4. CRM and customer intelligence suite
+- Hours: 8,000
+- Labor cost: $1,320,000
+
+5. Inventory, digital retail, merchandising, and website suite
+- Hours: 9,000
+- Labor cost: $1,485,000
+
+6. Deal desk, document, approval, and delivery suite
+- Hours: 7,500
+- Labor cost: $1,275,000
+
+7. Service operations, readiness, and parts-adjacent workflow suite
+- Hours: 5,500
+- Labor cost: $880,000
+
+8. Finance and accounting suite
+- Hours: 6,500
+- Labor cost: $1,137,500
+
+9. Analytics, forecasting, KPI semantic model, and executive drill-down suite
+- Hours: 4,000
+- Labor cost: $660,000
+
+10. Mobile-friendly task workflows and field execution features
+- Hours: 2,500
+- Labor cost: $387,500
+
+11. Migration, cutover, data governance, and historical import tooling
+- Hours: 3,000
+- Labor cost: $450,000
+
+12. QA, security testing, performance, compliance support, and release orchestration
+- Hours: 7,000
+- Labor cost: $910,000
+
+13. DevOps, SRE, disaster recovery, and operational tooling
+- Hours: 3,500
+- Labor cost: $630,000
+
+14. PMO, BA, training, change management, and rollout programs
+- Hours: 4,500
+- Labor cost: $652,500
+
+Full completed totals:
+- Total labor hours: 70,600
+- Total labor cost: about $11,421,500
+- Non-labor, tooling, cloud, migration support, and contingency: about $2,000,000 to $4,000,000
+- All-in build budget: about $13,421,500 to $15,421,500
+- Safer planning range: $13.0M to $18.5M
+
+Full completed timeline:
+- 26 to 36 months
+
+Full completed manpower:
+- 22 to 28 core delivery people at one time
+
+Who this tier is for:
+- An organization that wants to own a true internal strategic platform and is willing to fund it like a long-term product business.
+
+Main benefit of this tier:
+- You materially reduce dependence on outside software categories across customer operations, merchandising, workflow, service, and finance.
+
+Main weakness of this tier:
+- Once you own this much software, you also own every defect, every enhancement backlog, every security obligation, and every business-user expectation attached to it.
+
+--------------------------------------------------
+11. What the Proprietary Base Platform Gives You Broken Down
+--------------------------------------------------
+
+If you fund the recommended base platform correctly, this is what you get regardless of whether you stop at the recommended production tier or keep going deeper.
+
+1. Identity and access base
+- single sign-on
+- store-level permissions
+- role-based workspaces
+- audit trail of user actions
+
+2. Shared business domain base
+- one customer model
+- one inventory model
+- one deal and delivery model
+- one store and user model
+
+3. Workflow and automation base
+- task creation and assignment
+- approval states
+- exception queues
+- notifications and reminders
+
+4. Website and merchandising base
+- inventory publishing rules
+- media and content governance
+- listing lifecycle controls
+- lead capture handling
+
+5. Analytics and reporting base
+- KPI logic in one place
+- executive dashboards
+- drill-down reporting
+- exports and scheduled reporting
+
+6. Platform operations base
+- environments
+- deployment pipelines
+- monitoring and alerting
+- backups and recovery posture
+
+What the proprietary base does not give you without more funding:
+- deep service or parts sophistication
+- payroll and tax engine depth
+- generic self-service report builder parity with large analytics products
+- external product-market readiness for outside dealers
+- every edge case already solved by long-established vendor software
+
+--------------------------------------------------
+12. What Drives Cost Up Fast
+--------------------------------------------------
+
+These are the biggest budget multipliers.
+
+1. Trying to clone every admired feature
+- copying concepts is reasonable
+- copying everything is how scope explodes
+
+2. Building true in-house accounting depth
+- ledger, reconciliation, close, controls, and auditability are expensive and unforgiving
+
+3. Deep service and parts workflow ambition
+- service operations contain ugly edge cases that are easy to underestimate
+
+4. Over-customizing for each store or manager
+- every local exception becomes long-term product debt
+
+5. Trying to build your own generic analytics authoring tool
+- fixed dashboards and filters are much cheaper than building a mini BI company inside your company
+
+6. Native mobile product scope
+- mobile multiplies design, QA, deployment, and support work
+
+7. Public SaaS ambitions too early
+- making the platform saleable outside your own company adds tenancy, configurability, onboarding, and support burden fast
+
+8. Weak data migration discipline
+- if legacy data is messy, users will blame the new platform for the old mess
+
+--------------------------------------------------
+13. Ongoing Annual Cost After Launch
+--------------------------------------------------
+
+Bare minimum annual run-rate:
+- Roughly $900,000 to $1,400,000
+
+Recommended production annual run-rate:
+- Roughly $1,600,000 to $2,600,000
+
+Full completed annual run-rate:
+- Roughly $3,000,000 to $4,800,000
+
+What this includes:
+- ongoing engineering and bug fixes
+- roadmap enhancements
+- cloud hosting, storage, search, and monitoring
+- analytics maintenance
+- QA and release operations
+- support, onboarding, and rollout support for new teams or stores
+
+What this means in plain English:
+- if you can barely afford the build, you probably cannot afford the platform long term
+- the moment you own this software, you own a permanent internal product organization
+
+--------------------------------------------------
+14. Recommended Path
+--------------------------------------------------
+
+If the goal is success rather than ego, the recommended path is:
+
+1. Build the recommended production tier first
+- it is the strongest value zone
+- it is expensive enough to be real
+- it is still controlled enough to avoid turning into a vanity rewrite of every vendor feature on day one
+
+2. Keep the platform internal-first
+- build for Premier Boating Centers and Ocean Marine Group first
+- do not fund external SaaS ambitions until the internal platform is proven
+
+3. Limit phase 1 to the highest-value operational pillars
+- CRM and lead workflow
+- inventory and website merchandising
+- deal desk and delivery workflow
+- executive dashboards
+- essential finance controls and reconciliation visibility
+
+4. Treat full accounting depth as a separate executive decision
+- finance-grade software has a different failure profile than sales or dashboard software
+
+5. Treat rollout and training as part of the product
+- user trust is part of the build cost, not an afterthought
+
+--------------------------------------------------
+15. Final Operator Opinion
+--------------------------------------------------
+
+If you want the blunt answer under the clarified scope:
+
+- Bare minimum proprietary internal platform: about $3.8M to $5.2M
+- Strong recommended production build: about $7.4M to $9.4M
+- Full completed strategic internal platform: about $13.0M to $18.5M
+
+Best realistic base-case planning number:
+- About $7.8M to $8.4M
+
+Best realistic base-case schedule:
+- About 18 to 24 months
+
+Best realistic base-case staffing:
+- About 15 to 19 core people, plus serious business-side ownership
+
+Most important strategic truth:
+- You are no longer merging software.
+- You are becoming a software owner.
+
+That is a very different commitment.
+
+If Premier Boating Centers and Ocean Marine Group want a proprietary internal operating cloud that genuinely absorbs CRM, DMS-style workflow, website merchandising, service coordination, dashboarding, and finance controls, it can absolutely be done.
+
+It just needs to be funded and governed like an internal product company, not like a short-lived IT project.
+
+--------------------------------------------------
+Appendix A. What Users Would See by Role and by Budget Level
+--------------------------------------------------
+
+This section goes deeper than the tier summaries. It describes the actual day-to-day user experience by department under the proprietary-build assumption.
+
+1. Salesperson / Internet Sales / BDC user
+
+Bare minimum experience:
+- one internal lead queue owned by your platform
+- customer records and follow-up tasks owned by your platform
+- inventory search and unit availability from your platform
+- simple deal-stage visibility and stalled-deal alerts
+
+Recommended production experience:
+- role-based home screen with personal pipeline, overdue actions, hot leads, and delivery blockers
+- richer customer history and activity timeline
+- guided stage progression with required next actions and approvals
+- better cross-store visibility into substitute units and availability
+
+Full completed experience:
+- full sales workspace with deeper history, richer approvals, stronger handoff control, and more complete delivery readiness visibility
+- stronger field-task and mobile-friendly workflow support if funded
+- stronger accountability and audit trail across the entire customer journey
+
+2. General Manager / Store Manager user
+
+Bare minimum experience:
+- dashboard with lead volume, pipeline, aging, unit status, and basic exceptions
+- visibility into who is not following up and which units are stalled
+
+Recommended production experience:
+- store command center showing conversion, aging, inventory turn, service blockers, and delivery readiness
+- drill-down from KPI to underlying records
+- stronger oversight of cross-department handoffs
+
+Full completed experience:
+- cross-store management cockpit with margin trends, operational heat maps, forecast views, and exception prioritization
+- stronger approval and escalation workflows
+- better performance accountability by store, team, and user
+
+3. Service Manager / Service Coordinator user
+
+Bare minimum experience:
+- sold-unit readiness snapshot
+- visibility into units blocked by prep or service state
+- simple alerts when service delays impact delivery
+
+Recommended production experience:
+- better coordination across prep, service, delivery, and sales
+- clearer queue visibility for blocked units and readiness issues
+- stronger linkage between service work and customer promise dates
+
+Full completed experience:
+- deeper service operations workspace with richer queue control, visibility by status, and stronger after-sale coordination
+- better trend reporting around readiness and repeat issues
+
+4. Accounting / Controller office user
+
+Bare minimum experience:
+- exception visibility for deposit mismatch, missing handoff items, and operational-financial discrepancies
+- simple financial status indicators rather than full accounting control
+
+Recommended production experience:
+- reconciliation queues and stronger visibility into what operations says happened versus what finance recognizes
+- better period-close support and exception routing
+- stronger audit trail for who changed financially relevant states
+
+Full completed experience:
+- deeper operational-to-financial workbench with stronger controls, approvals, and reconciliation depth
+- more meaningful accounting workflow ownership inside the platform
+
+5. Marketing / Website operations user
+
+Bare minimum experience:
+- inventory publishing controls
+- lead form management
+- basic content and image readiness views
+
+Recommended production experience:
+- better campaign attribution, listing quality control, and content governance
+- stronger visibility into how listing quality affects lead generation and sales outcomes
+
+Full completed experience:
+- richer merchandising control, content governance, pricing workflow support, and deeper digital retail analytics
+
+6. Executive / Owner / Regional leadership user
+
+Bare minimum experience:
+- one executive dashboard with topline leads, inventory, and pipeline metrics
+
+Recommended production experience:
+- multi-store KPI views, drill-down reporting, forecast support, and stronger exception management
+
+Full completed experience:
+- true executive command center with richer cross-functional visibility, forecasting, margin direction, and operational bottleneck analysis
+
+--------------------------------------------------
+Appendix B. Detailed Delivery Roadmap for the Recommended Production Build
+--------------------------------------------------
+
+This is the best practical roadmap if the goal is to build something serious without trying to clone every admired vendor feature at once.
+
+Phase 0. Executive alignment and product charter
+- Duration: 3 to 4 weeks
+- Goal: lock scope boundaries, success metrics, and platform intent
+- Key outputs:
+- internal-only versus future external-product posture decided
+- executive sponsor and product owner named
+- pilot stores selected
+- feature categories explicitly excluded from phase 1 documented
+
+Phase 1. Current-state process mapping and future-state operating model
+- Duration: 5 to 7 weeks
+- Goal: standardize how Premier and Ocean should actually operate before building too much software
+- Key outputs:
+- common status definitions across stores
+- role maps for sales, service, accounting, marketing, and leadership
+- prioritized phase-1 feature set
+- workflow and policy decisions documented
+
+Phase 2. Architecture, data model, and design system foundation
+- Duration: 5 to 7 weeks
+- Goal: establish the technical and UX base
+- Key outputs:
+- modular domain boundaries defined
+- identity and RBAC model defined
+- shared business data model defined
+- design system and UI patterns established
+
+Phase 3. CRM, inventory, and website foundation
+- Duration: 10 to 14 weeks
+- Goal: deliver the core records and merchandising foundation
+- Key outputs:
+- customer and lead module baseline
+- inventory and unit model baseline
+- website publishing and content controls baseline
+- basic admin configuration and audit support
+
+Phase 4. Deal desk, workflow, and executive dashboard foundation
+- Duration: 10 to 14 weeks
+- Goal: make the platform useful for daily operations and management
+- Key outputs:
+- deal-stage workflow
+- tasking and reminders
+- exception queues
+- first executive dashboards and drill-downs
+
+Phase 5. Service coordination and finance-control baseline
+- Duration: 8 to 12 weeks
+- Goal: add the operational depth required for real daily use
+- Key outputs:
+- service and readiness workflows
+- delivery blockers and handoff tracking
+- reconciliation and finance-control visibility
+- stronger document and notification support
+
+Phase 6. QA hardening, migration rehearsal, UAT, and pilot launch
+- Duration: 8 to 10 weeks
+- Goal: prove the platform survives real users and real data
+- Key outputs:
+- regression coverage
+- migration rehearsal completed
+- pilot user sign-off
+- training material and launch runbook completed
+
+Phase 7. Stabilization, cleanup, and rollout wave 2 planning
+- Duration: 6 to 8 weeks
+- Goal: fix what real usage exposes before broader rollout
+- Key outputs:
+- workflow cleanup
+- performance tuning
+- defect burn-down
+- phase-2 backlog for deeper finance, service, mobile, or reporting scope
+
+--------------------------------------------------
+Appendix C. Staffing Ramp and Monthly Burn for the Recommended Production Build
+--------------------------------------------------
+
+The team should ramp, peak, and then taper into stabilization. A serious program does not run with the same staffing shape every month.
+
+Months 1 to 3
+- Active team size: about 8 to 9.5 FTE
+- Indicative monthly burn: about $200,000 to $260,000
+- Focus: product definition, process mapping, architecture, and design system
+
+Months 4 to 6
+- Active team size: about 12 to 14 FTE
+- Indicative monthly burn: about $300,000 to $380,000
+- Focus: platform core, CRM foundation, inventory foundation, website foundation
+
+Months 7 to 12
+- Active team size: about 15 to 18 FTE
+- Indicative monthly burn: about $370,000 to $470,000
+- Focus: heavy feature build across CRM, inventory, workflows, dashboards, and admin
+
+Months 13 to 16
+- Active team size: about 16 to 19 FTE
+- Indicative monthly burn: about $390,000 to $490,000
+- Focus: service baseline, finance baseline, QA expansion, migration tooling, rollout prep
+
+Months 17 to 20
+- Active team size: about 13 to 16 FTE
+- Indicative monthly burn: about $320,000 to $420,000
+- Focus: hardening, migration rehearsal, UAT, launch support
+
+Months 21 to 24
+- Active team size: about 9 to 12 FTE
+- Indicative monthly burn: about $220,000 to $320,000
+- Focus: stabilization, defect reduction, performance tuning, wave-2 planning
+
+What this means financially:
+- a proprietary build is not one flat monthly number
+- cash burn peaks once multiple product suites, QA, migration, and rollout support overlap
+- if leadership wants lower monthly burn, the timeline will lengthen and delivery risk will rise
+
+--------------------------------------------------
+Appendix D. Detailed Product Breakdown by Suite
+--------------------------------------------------
+
+This is where internal product builds usually get underestimated.
+
+1. Customer and CRM suite
+
+Typical scope:
+- leads
+- contacts
+- accounts
+- opportunities
+- activities
+- tasks
+- attribution
+- reminders and ownership
+
+Where teams get burned:
+- duplicate customer identity rules are more complex than expected
+- follow-up edge cases multiply quickly
+- managers want dozens of exceptions and custom statuses
+
+Planning difficulty:
+- Medium to high
+
+Indicative effort:
+- Bare minimum: about 2,600 hours
+- Recommended production: about 4,500 hours
+- Full completed: about 8,000 hours
+
+2. Inventory, website, and merchandising suite
+
+Typical scope:
+- unit records
+- specs
+- photos and media
+- publishing rules
+- pricing controls
+- listing governance
+- content readiness
+
+Where teams get burned:
+- inventory content quality varies wildly
+- publishing edge cases accumulate fast
+- merchandising teams want flexibility that creates operational chaos if unchecked
+
+Planning difficulty:
+- High
+
+Indicative effort:
+- Bare minimum: about 3,200 hours
+- Recommended production: about 5,200 hours
+- Full completed: about 9,000 hours
+
+3. Deal desk and delivery suite
+
+Typical scope:
+- stage workflow
+- trade handling
+- approvals
+- quote states
+- delivery readiness
+- exception routing
+
+Where teams get burned:
+- sales teams want shortcuts while managers want control
+- edge cases pile up around incomplete deals and last-minute changes
+- document readiness logic becomes more complicated than expected
+
+Planning difficulty:
+- High
+
+Indicative effort:
+- Bare minimum: about 2,800 hours
+- Recommended production: about 4,500 hours
+- Full completed: about 7,500 hours
+
+4. Service and after-sale suite
+
+Typical scope:
+- prep status
+- delivery blockers
+- service coordination
+- after-sale follow-up
+- readiness workflows
+
+Where teams get burned:
+- real service operations have ugly exception paths
+- parts, labor, timing, and promise dates create constant edge cases
+- teams discover they actually wanted more of a service platform than they first admitted
+
+Planning difficulty:
+- High
+
+Indicative effort:
+- Bare minimum: about 1,400 hours
+- Recommended production: about 2,800 hours
+- Full completed: about 5,500 hours
+
+5. Finance and accounting-control suite
+
+Typical scope:
+- deposits
+- financial states
+- reconciliation workflow
+- operational-to-financial handoff
+- approvals and controls
+
+Where teams get burned:
+- financial exceptions are unforgiving
+- controllers want stronger controls once they see the system can influence financially relevant states
+- audit and close requirements grow quietly
+
+Planning difficulty:
+- High to very high
+
+Indicative effort:
+- Bare minimum: about 1,300 hours
+- Recommended production: about 3,200 hours
+- Full completed: about 6,500 hours
+
+6. Analytics and executive reporting suite
+
+Typical scope:
+- KPI model
+- dashboards
+- drill-down
+- exports
+- forecast support
+- exception views
+
+Where teams get burned:
+- definitions for gross profit, status, and performance differ by department
+- users ask for a generic analytics builder when what they really need is better operational reporting discipline
+
+Planning difficulty:
+- Medium to high
+
+Indicative effort:
+- Bare minimum: about 1,200 hours
+- Recommended production: about 2,400 hours
+- Full completed: about 4,000 hours
+
+7. Platform and administration suite
+
+Typical scope:
+- users
+- roles
+- stores
+- workflow rules
+- audit history
+- notifications
+- templates
+
+Where teams get burned:
+- configuration needs grow as soon as different stores want different behavior
+- permission edge cases become constant if the model is not designed correctly early
+
+Planning difficulty:
+- Medium to high
+
+Indicative effort:
+- Bare minimum: about 3,000 hours combined across platform-core and admin work
+- Recommended production: about 5,000 hours combined across platform-core and admin work
+- Full completed: about 8,700 hours combined across platform-core and admin work
+
+Product reality in one sentence:
+- The cost is not in making the first screens appear; the cost is in making the domain behavior correct, durable, auditable, and trusted.
+
+--------------------------------------------------
+Appendix E. Data Migration and Master Data Cleanup You Cannot Skip
+--------------------------------------------------
+
+This work is mandatory under a proprietary-build model because the new platform becomes the new system of record for daily operations.
+
+Core data domains that usually need cleanup:
+- customer duplicates and household matching
+- inventory naming and categorization
+- salesperson and store ownership mapping
+- stage and status definitions
+- historical lead source taxonomy
+- financially relevant references and handoff states
+
+Low-complexity migration environment:
+- Extra hours: about 200 to 400
+- Extra cost: about $40,000 to $85,000
+
+Medium-complexity migration environment:
+- Extra hours: about 600 to 1,100
+- Extra cost: about $120,000 to $220,000
+
+High-complexity migration environment:
+- Extra hours: about 1,400 to 2,500
+- Extra cost: about $280,000 to $520,000
+
+If leadership refuses to fund this work:
+- users will distrust the new platform quickly
+- reporting credibility will collapse
+- adoption will slow because teams will keep arguing about whether the system is wrong or the data was wrong before it ever arrived
+
+--------------------------------------------------
+Appendix F. Indicative Non-Labor and Vendor Cost Stack
+--------------------------------------------------
+
+These costs are directionally useful and should be considered separately from pure labor.
+
+One-time program-side costs during build:
+
+1. Cloud environments, developer infrastructure, storage, and lower environments
+- Bare minimum: about $60,000 to $120,000
+- Recommended production: about $140,000 to $260,000
+- Full completed: about $280,000 to $520,000
+
+2. Security scanning, observability, testing, and developer tooling
+- Bare minimum: about $40,000 to $90,000
+- Recommended production: about $90,000 to $180,000
+- Full completed: about $180,000 to $350,000
+
+3. Search, document generation, email, SMS, and workflow-support services
+- Bare minimum: about $40,000 to $120,000
+- Recommended production: about $90,000 to $220,000
+- Full completed: about $180,000 to $420,000
+
+4. Migration support, training material, rollout prep, and enablement
+- Bare minimum: about $80,000 to $180,000
+- Recommended production: about $180,000 to $360,000
+- Full completed: about $350,000 to $700,000
+
+5. Contingency reserve
+- Practical planning rule: reserve about 10 percent to 15 percent of program labor for unknowns if the scope is still moving
+
+Annual external stack after go-live, separate from internal staffing:
+
+1. Azure application, database, storage, search, and runtime
+- Bare minimum: about $140,000 to $260,000 annually
+- Recommended production: about $250,000 to $450,000 annually
+- Full completed: about $450,000 to $900,000 annually
+
+2. Monitoring, security, backup, and recovery tooling
+- Bare minimum: about $50,000 to $120,000 annually
+- Recommended production: about $100,000 to $220,000 annually
+- Full completed: about $180,000 to $380,000 annually
+
+3. Communication, document, e-sign, or payment-support services where used
+- Bare minimum: about $40,000 to $140,000 annually
+- Recommended production: about $90,000 to $260,000 annually
+- Full completed: about $180,000 to $520,000 annually
+
+4. Analytics compute and storage
+- Bare minimum: about $40,000 to $100,000 annually
+- Recommended production: about $90,000 to $220,000 annually
+- Full completed: about $180,000 to $420,000 annually
+
+Financial reality:
+- You save outside-software dependence over time, but you replace it with internal engineering and cloud ownership cost.
+- Owning the platform does not make software cost disappear. It shifts the cost into people, cloud, and continuous product ownership.
+
+--------------------------------------------------
+Appendix G. Go / No-Go Questions Before Funding a Serious Build
+--------------------------------------------------
+
+These questions should be answered before approving a major budget.
+
+1. Is this truly internal-only for Premier and Ocean, or do you secretly expect a future commercial SaaS product?
+
+2. How much accounting depth is really in scope?
+- operational finance visibility only
+- reconciliation workflow
+- or a real accounting engine
+
+3. Which features are explicitly excluded from phase 1?
+- if the answer is vague, scope will sprawl
+
+4. Which stores will be pilot stores?
+- choose stores important enough to matter but disciplined enough not to sabotage the pilot
+
+5. What operating rules will be standardized across Premier and Ocean before build starts?
+- statuses
+- approvals
+- ownership rules
+- exception handling
+
+6. Who is the executive owner when sales, service, accounting, and digital disagree?
+- if every department has veto power, the build will stall
+
+7. What must be measurably better 90 days after pilot launch?
+- follow-up speed
+- inventory quality
+- delivery readiness
+- reconciliation exceptions
+- management reporting time
+
+8. What features are admired in outside products but not worth cloning?
+- this answer matters more than the list of features you want
+
+Practical rule:
+- If these answers are vague, the company is not ready for the recommended production build no matter how much money is available.
+
+--------------------------------------------------
+Appendix H. Best Practical Recommendation After the Clarified Scope
+--------------------------------------------------
+
+If this were my money and my operating risk, the recommendation would be:
+
+1. Build the recommended production tier first
+- it is the strongest value zone
+- it creates a real proprietary operating cloud without drifting into a feature-by-feature vanity clone of every external product
+
+2. Keep the platform internal-first
+- prove it inside Premier and Ocean before entertaining external product ambitions
+
+3. Separate accounting depth from general operational ambition
+- do not accidentally become an accounting-software company unless that is a deliberate executive decision
+
+4. Fund migration, training, and rollout as first-class workstreams
+- a proprietary platform only matters if users trust it and can operate through it every day
+
+5. Define what you will not build
+- this is one of the most important controls in the entire program
