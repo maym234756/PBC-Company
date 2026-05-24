@@ -13225,6 +13225,91 @@ function createActionWorkflow(workspaceId: WorkspaceId, tool: string, context: W
         ],
         buildDetail: (values) => summarizeWorkflowValues(values, ["queueScope", "ownerFocus", "note"])
       });
+    case "desktop:Designer":
+      return createWorkflowState({
+        title: "Dashboard Designer",
+        description: `Open the desktop widget builder to add, arrange, and customize dashboard widgets for ${context.storeName}.`,
+        commandLabel: tool,
+        primaryActionLabel: "Open Designer",
+        tone: "neutral",
+        fields: [
+          {
+            key: "action",
+            label: "Designer Action",
+            control: "select",
+            defaultValue: "New Widget",
+            options: ["New Widget", "New View", "Duplicate View", "Reset Layout"]
+          },
+          {
+            key: "widgetType",
+            label: "Widget Type",
+            control: "select",
+            defaultValue: "Scoreboard",
+            options: ["Scoreboard", "Trend Line", "Lane Graph", "Module Board", "Signal List", "Activity Feed", "Report Table", "Gauge Row", "Funnel Steps"]
+          },
+          { key: "note", label: "Designer Note", control: "textarea", defaultValue: "", placeholder: "What should this dashboard show?" }
+        ],
+        buildDetail: (values) => summarizeWorkflowValues(values, ["action", "widgetType", "note"])
+      });
+    case "desktop:Store Status":
+      return createWorkflowState({
+        title: "Store Status",
+        description: `Review store-level operating posture, roster context, and shift notes from the desktop shell.`,
+        commandLabel: tool,
+        primaryActionLabel: "Open Store Status",
+        tone: "neutral",
+        fields: [
+          {
+            key: "storeView",
+            label: "Store View",
+            control: "select",
+            defaultValue: "Store Status Board",
+            options: ["Store Status Board", "Store Summary", "Store Roster", "Shift Notes"]
+          },
+          { key: "ownerFocus", label: "Owner Focus", control: "text", defaultValue: "Store leadership", placeholder: "Who is reviewing this?" },
+          { key: "window", label: "Window", control: "select", defaultValue: "Today", options: ["Today", "This Week", "Current Shift"] }
+        ],
+        buildDetail: (values) => summarizeWorkflowValues(values, ["storeView", "ownerFocus", "window"])
+      });
+    case "desktop:Workspace Tools":
+      return createWorkflowState({
+        title: "Workspace Tools",
+        description: `Workspace Tools is the operator's personal command center for configuring and managing the desktop environment. Use it to control window layout, manage alerts and follow-up prompts, review store operations at a glance, and set up personal preferences and quick-launch shortcuts.`,
+        commandLabel: tool,
+        primaryActionLabel: "Open Workspace Tools",
+        tone: "neutral",
+        fields: [
+          {
+            key: "toolSection",
+            label: "Tool Section",
+            control: "select",
+            defaultValue: "Window Control",
+            options: ["Window Control", "Alerts & Notices", "Store Operations", "Setup"]
+          },
+          {
+            key: "action",
+            label: "Action",
+            control: "select",
+            defaultValue: "Pinned Windows",
+            options: [
+              "Pinned Windows",
+              "Window Layout Presets",
+              "Workspace Reset",
+              "Notifications",
+              "Follow-Up Prompts",
+              "Exception Inbox",
+              "Store Summary",
+              "Store Roster",
+              "Shift Notes",
+              "Preferences",
+              "Personal Shortcuts",
+              "Quick Launch Setup"
+            ]
+          },
+          { key: "note", label: "Operator Note", control: "textarea", defaultValue: "", placeholder: "What needs attention?" }
+        ],
+        buildDetail: (values) => summarizeWorkflowValues(values, ["toolSection", "action", "note"])
+      });
     case "desktop:Application Workspace Surface":
       return createWorkflowState({
         title: "Application Workspace Surface",

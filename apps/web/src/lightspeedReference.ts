@@ -1757,7 +1757,7 @@ export const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
     id: "desktop",
     title: "Desktop",
     subtitle: "Compact command surface for multi-department operators",
-    tools: ["Designer", "Refresh", "Store Status"]
+    tools: ["Designer", "Refresh", "Store Status", "Workspace Tools"]
   },
   service: {
     id: "service",
