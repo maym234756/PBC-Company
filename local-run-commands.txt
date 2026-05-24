@@ -1,0 +1,50 @@
+PBC-Company Local Run Commands
+
+Important:
+- This project cannot be started from the VS Code GitHub virtual filesystem view.
+- Clone the repository to a local folder on your machine first.
+- Run all commands below from a local terminal in the cloned repo.
+
+Example local path:
+C:\Users\<your-user>\source\repos\PBC-Company
+
+Step 1: Open a terminal in the project root
+Run these commands in PowerShell after changing into the repo root:
+
+cd C:\Users\<your-user>\source\repos\PBC-Company
+npm install
+npm run dev
+
+What the root dev command does:
+- Pushes the Prisma schema to the local database
+- Seeds the database
+- Builds the shared database package
+- Starts the web app and API together
+
+URLs after startup:
+- Web app: http://localhost:5173
+- API: http://localhost:4000
+
+If you want to run the pieces manually instead of using the root dev script:
+
+From the repo root:
+cd C:\Users\<your-user>\source\repos\PBC-Company
+npm install
+npm run db:push
+npm run db:seed
+npm run build -w @marine-cloud/database
+
+Then start the API from the repo root:
+npm run dev -w @marine-cloud/api
+
+Open a second terminal in the same repo root and start the web app:
+npm run dev -w @marine-cloud/web
+
+Optional direct workspace paths:
+- API package path: C:\Users\<your-user>\source\repos\PBC-Company\apps\api
+- Web package path: C:\Users\<your-user>\source\repos\PBC-Company\apps\web
+- Database package path: C:\Users\<your-user>\source\repos\PBC-Company\packages\database
+
+Notes:
+- The root-level commands are the simplest way to launch the full app.
+- If port 5173 or 4000 is already in use, free the port or change the app config before starting.

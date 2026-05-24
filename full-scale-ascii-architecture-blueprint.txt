@@ -1,0 +1,222 @@
+        PBC-COMPANY | FULL-SCALE ASCII ARCHITECT BLUEPRINT | SINGLE MASTER DIAGRAM
+===============================================================================================
+
+                                        INTERNET / OPERATOR ACCESS
+                                                   |
+                                                   v
++-------------------------------------------------------------------------------------------------------------+
+|                                        OPERATOR BROWSER (DESKTOP)                                          |
+|-------------------------------------------------------------------------------------------------------------|
+|  URL: /dashboard/:storeId/:workspaceId                                                                      |
+|  Session: marine-cloud-session (sessionStorage)                                                             |
+|  Surface: top-tabs mega menu + workflow panel + task rail + activity rail + workspace grid                |
++-------------------------------------------------------------------------------------------------------------+
+                                                   |
+                                                   | HTTP JSON (fetch)
+                                                   v
++-------------------------------------------------------------------------------------------------------------+
+|                                      WEB APP | apps/web (React + Vite)                                     |
+|-------------------------------------------------------------------------------------------------------------|
+|  ENTRY                                                                                                      |
+|   - src/main.tsx  -> bootstraps App                                                                         |
+|   - src/App.tsx   -> routes + session restore                                                               |
+|                                                                                                             |
+|  ROUTING                                                                                                    |
+|   /                                 -> LoginPage                                                            |
+|   /dashboard/:storeId               -> redirect to desktop                                                  |
+|   /dashboard/:storeId/:workspaceId  -> DashboardPage                                                        |
+|                                                                                                             |
+|  CORE UI                                                                                                    |
+|   - pages/LoginPage.tsx           (login + store selection modal)                                           |
+|   - pages/DashboardPage.tsx       (workspace shell, commands, detail interactions)                         |
+|   - components/TopTabs.tsx        (deep nested menu rendering)                                              |
+|   - components/StoreSelectModal.tsx                                                                          |
+|                                                                                                             |
+|  MENU + INTENT LAYER                                                                                        |
+|   - src/lightspeedReference.ts      (navigation trees, workspace definitions)                              |
+|   - src/workspaceMenuIntents.ts     (menu leaf -> workflow intent mapping)                                 |
+|                                                                                                             |
+|  CLIENT API FACADE                                                                                          |
+|   - src/api.ts                                                                                            |
+|      login()                                                                                                 |
+|      getDashboard(), getWorkspace()                                                                          |
+|      getActivityLog(), getTaskQueue()                                                                        |
+|      submitWorkflowAction(), createActivityLog()                                                             |
+|      updateTaskStatus(), updateTaskAssignee(), createTaskNote()                                              |
+|      getServiceOrderDetail(), createServiceOrder(), duplicateServiceOrder(), updateServiceOrderDetail()     |
+|      updateTaskSlaPolicy(), previewTaskSlaPolicyCopy(), runTaskSlaPolicyAction()                            |
++-------------------------------------------------------------------------------------------------------------+
+                                                   |
+                                                   | requests to /api/*
+                                                   v
++-------------------------------------------------------------------------------------------------------------+
+|                                  API APP | apps/api (Express + Zod + Prisma)                               |
+|-------------------------------------------------------------------------------------------------------------|
+|  SERVER ENTRY                                                                                                |
+|   - src/server.ts                                                                                            |
+|   - CORS origin guard + JSON middleware + centralized error handler                                          |
+|                                                                                                             |
+|  ROUTES (EXTERNAL CONTRACT)                                                                                 |
+|   HEALTH + AUTH                                                                                              |
+|    GET    /api/health                                                                                        |
+|    POST   /api/auth/login                                                                                    |
+|                                                                                                             |
+|   STORE SNAPSHOTS                                                                                           |
+|    GET    /api/stores/:storeId/dashboard                                                                     |
+|    GET    /api/stores/:storeId/workspaces/:workspaceId                                                       |
+|                                                                                                             |
+|   SERVICE ORDER DOMAIN                                                                                      |
+|    GET    /api/stores/:storeId/service-orders/:serviceOrderId                                                |
+|    POST   /api/stores/:storeId/service-orders                                                                |
+|    POST   /api/stores/:storeId/service-orders/:serviceOrderId/duplicate                                     |
+|    POST   /api/stores/:storeId/service-orders/:serviceOrderId/actions                                       |
+|                                                                                                             |
+|   TASK / ACTIVITY DOMAIN                                                                                    |
+|    GET    /api/stores/:storeId/activity                                                                      |
+|    POST   /api/stores/:storeId/activity                                                                      |
+|    GET    /api/stores/:storeId/tasks                                                                         |
+|    POST   /api/stores/:storeId/tasks/actions                                                                 |
+|    PATCH  /api/stores/:storeId/tasks/:taskId                                                                 |
+|    PATCH  /api/stores/:storeId/tasks/:taskId/assignee                                                        |
+|    POST   /api/stores/:storeId/tasks/:taskId/comments                                                        |
+|                                                                                                             |
+|   SLA POLICY DOMAIN                                                                                         |
+|    POST   /api/stores/:storeId/task-sla-policies                                                             |
+|    POST   /api/stores/:storeId/task-sla-policies/actions                                                     |
+|                                                                                                             |
+|   WORKFLOW EXECUTION                                                                                         |
+|    POST   /api/stores/:storeId/workflow-actions                                                              |
+|                                                                                                             |
+|  ORCHESTRATION + DOMAIN HELPERS                                                                             |
+|   - applyWorkflowAction()                                                                                    |
+|      sales: lead/quote/deal/deposit transitions                                                              |
+|      service: print/duplicate/report/detail/new estimate/new RO                                              |
+|      parts: PO line create/delete                                                                            |
+|      website: publish feed operations                                                                         |
+|      fallback: planned-action task queue                                                                      |
+|                                                                                                             |
+|   - resolveDefaultTaskSlaMinutes()                                                                           |
+|   - resolveTaskTiming()/attention ranking                                                                     |
+|   - recordStoreActivity()/recordStoreTaskComment()                                                           |
+|   - loadServiceOrderDetailContext()                                                                          |
++-------------------------------------------------------------------------------------------------------------+
+                                                   |
+                                                   | Prisma Client
+                                                   v
++-------------------------------------------------------------------------------------------------------------+
+|                            SHARED DATA PACKAGE | packages/database (Prisma + SQLite)                        |
+|-------------------------------------------------------------------------------------------------------------|
+|  PUBLIC EXPORT                                                                                               |
+|   - src/index.ts  -> prisma singleton + generated type exports                                                |
+|                                                                                                             |
+|  SCHEMA                                                                                                      |
+|   - prisma/schema.prisma                                                                                      |
+|     DealerGroup, User, Store, UserStore                                                                       |
+|     AppModule, StoreModule                                                                                    |
+|     WebsiteFeed, SalesDeal, ServiceOrder, PartsOrderLine                                                      |
+|     StoreActivity, StoreTask, StoreTaskComment, StoreTaskSlaPolicy                                            |
+|                                                                                                             |
+|  DB TOOLING                                                                                                  |
+|   - prisma/seed.ts  (multi-store seeded demo world)                                                           |
+|   - prisma.config.ts                                                                                          |
+|   - scripts: db:generate, db:push, db:seed, db:studio                                                        |
++-------------------------------------------------------------------------------------------------------------+
+                                                   |
+                                                   | better-sqlite3 adapter
+                                                   v
++-------------------------------------------------------------------------------------------------------------+
+|                                            SQLITE DATAFILE (dev.db)                                          |
++-------------------------------------------------------------------------------------------------------------+
+
+
+                                             DATA RELATION CORE MAP
+                                             ----------------------
+
+ DealerGroup
+    |\
+    | +-------------------------------+
+    |                                 |
+    v                                 v
+  Store ---------------------------> User
+    |  \                               |
+    |   \                              +--> UserStore <-------------------------+
+    |    \                                                                      |
+    |     +--> StoreModule --> AppModule                                        |
+    |     +--> WebsiteFeed                                                      |
+    |     +--> SalesDeal                                                        |
+    |     +--> ServiceOrder                                                     |
+    |     +--> PartsOrderLine                                                   |
+    |     +--> StoreActivity (actor -> User)                                    |
+    |     +--> StoreTask (actor/assignee/updater/commentBy -> User)             |
+    |               |
+    |               +--> StoreTaskComment (author -> User)
+    |
+    +--> StoreTaskSlaPolicy (workspace + action overrides)
+
+
+                                         END-TO-END CONTROL FLOW
+                                         -----------------------
+
+ [1] LoginPage submit
+      -> POST /api/auth/login
+      -> session + store list returned
+      -> StoreSelectModal choose store
+      -> navigate /dashboard/:store/desktop
+
+ [2] Dashboard boot
+      -> GET /api/stores/:storeId/dashboard
+      -> GET /api/stores/:storeId/workspaces/:workspaceId
+      -> render rows + nav + operator list + workspace counts
+
+ [3] Top-tabs leaf click
+      -> workspaceMenuIntents resolves workflow intent
+      -> workflow panel prefills fields
+      -> submit workflow
+      -> POST /api/stores/:storeId/workflow-actions
+      -> API may create/update entity and/or queue StoreTask and StoreActivity
+      -> UI refreshes activity/task rails
+
+ [4] Service deep lane operations
+      -> GET  /api/stores/:storeId/service-orders/:serviceOrderId
+      -> POST /api/stores/:storeId/service-orders/:id/actions
+      -> serviceOrderDetail mutation engine patches row + snapshot + activity semantics
+      -> optional RO reference rewrite + notification synthesis
+
+ [5] SLA governance
+      -> POST /api/stores/:storeId/task-sla-policies
+      -> POST /api/stores/:storeId/task-sla-policies/actions
+      -> per-action SLA override, copy/preview/reset, retime open tasks, audit entries
+
+
+                                   QUALITY / TEST / OPERATIONS RUNWAY
+                                   ----------------------------------
+
+ MONOREPO ORCHESTRATION (root package.json)
+   dev        -> db push + seed + db build + concurrently run web/api
+   build      -> db generate + build database + api + web
+   test       -> test:api + test:web
+   test:smoke -> playwright smoke suite
+
+ API TESTS (node --test)
+   apps/api/src/serviceNotifications.test.ts
+   apps/api/src/serviceOrderDetail.test.ts
+   apps/api/src/workflowActionPlans.test.ts
+
+ WEB TESTS
+   unit: apps/web/test/workspaceMenuIntents.test.ts
+   smoke: apps/web/test/topNavSmoke.spec.ts (Playwright, boots API+Web unless external URLs provided)
+
+
+                                     ARCHITECTURE SUPPORT DOCUMENTS
+                                     ------------------------------
+
+ Root planning artifacts (html/txt/mmd) provide strategic and operating context:
+   - dealership operating diagrams and flow builders
+   - valuation and forecast reports
+   - production plans and analysis notes
+
+ These documents sit outside runtime code paths but inform the product model and UX vocabulary.
+
+===============================================================================================
+END OF SINGLE MASTER ASCII BLUEPRINT
+===============================================================================================
