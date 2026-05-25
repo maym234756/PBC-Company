@@ -170,6 +170,7 @@ export type ServiceOrderActionRequest =
       customerApproval: string;
       status: string;
       appliance: string;
+      warranty: string;
       description: string;
       resolution: string;
       recommendations: string;

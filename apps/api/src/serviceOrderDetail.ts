@@ -300,6 +300,7 @@ export type ServiceOrderDetailMutation =
       customerApproval: string;
       status: string;
       appliance: string;
+      warranty: string;
       description: string;
       resolution: string;
       recommendations: string;
@@ -570,6 +571,7 @@ export function applyServiceOrderDetailMutation(
       targetJob.customerApproval = mutation.customerApproval.trim();
       targetJob.status = mutation.status.trim();
       targetJob.appliance = mutation.appliance.trim();
+      targetJob.warranty = mutation.warranty.trim();
       targetJob.description = mutation.description.trim();
       targetJob.resolution = mutation.resolution.trim();
       targetJob.recommendations = mutation.recommendations.trim();

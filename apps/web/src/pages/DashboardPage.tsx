@@ -4802,6 +4802,7 @@ function renderWorkspace(
       customerApproval: string;
       status: string;
       appliance: string;
+      warranty: string;
       description: string;
       resolution: string;
       recommendations: string;
@@ -10219,6 +10220,7 @@ interface ServiceRepairWorkbenchProps extends ServiceUtilityInlinePanelProps {
     customerApproval: string;
     status: string;
     appliance: string;
+    warranty: string;
     description: string;
     resolution: string;
     recommendations: string;
@@ -11006,6 +11008,7 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
               customerApproval: readWorkbenchFormText(formData, "customerApproval"),
               status: readWorkbenchFormText(formData, "status"),
               appliance: readWorkbenchFormText(formData, "appliance"),
+              warranty: readWorkbenchFormText(formData, "warranty"),
               description: readWorkbenchFormText(formData, "description"),
               resolution: readWorkbenchFormText(formData, "resolution"),
               recommendations: readWorkbenchFormText(formData, "recommendations"),
@@ -11077,7 +11080,7 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
                   <input defaultValue={selectedJob.quantity} min="0" name="quantity" step="0.1" type="number" />
                 </label>
                 <div className="legacy-service-work-checks">
-                  <label><input defaultChecked={selectedJob.warranty.trim().length > 0 && selectedJob.warranty !== "None" && selectedJob.warranty !== "-"} type="checkbox" /> Warranty</label>
+                  <label><input defaultChecked={selectedJob.warranty.trim().length > 0 && selectedJob.warranty !== "None" && selectedJob.warranty !== "-"} name="warranty" type="checkbox" value="Yes" /> Warranty</label>
                   <label><input type="checkbox" /> Parts Only</label>
                 </div>
               </div>
