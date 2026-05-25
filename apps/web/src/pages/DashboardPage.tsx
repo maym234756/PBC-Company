@@ -4274,8 +4274,8 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                           ),
                         onAddTaskNote: handleTaskNoteCreate,
                         onAssignTask: handleTaskAssigneeUpdate,
-                        onCreateJob: (payload) =>
-                          handleServiceOrderAction(
+                        onCreateJob: async (payload) => {
+                          const ok = await handleServiceOrderAction(
                             {
                               mode: "createJob",
                               actorUserId: session.user.id,
@@ -4283,9 +4283,12 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                             },
                             "Creating service job...",
                             "job:create"
-                          ),
-                        onDeleteJob: (jobId) =>
-                          handleServiceOrderAction(
+                          );
+                          if (ok) appendCommandLog({ label: "New Job Created", detail: `Title: ${payload.title}`, tone: "stable" }, { optimistic: true });
+                          return ok;
+                        },
+                        onDeleteJob: async (jobId) => {
+                          const ok = await handleServiceOrderAction(
                             {
                               mode: "deleteJob",
                               actorUserId: session.user.id,
@@ -4293,7 +4296,10 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                             },
                             "Deleting service job...",
                             `job:delete:${jobId}`
-                          ),
+                          );
+                          if (ok) appendCommandLog({ label: "Job Deleted", detail: `Job: ${jobId}`, tone: "attention" }, { optimistic: true });
+                          return ok;
+                        },
                         onCloseLabor: (payload) =>
                           handleServiceOrderAction(
                             {
@@ -4360,8 +4366,8 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                             "Saving RO header...",
                             "ro:header"
                           ),
-                        onFinalizeInvoice: (invoiceStatus) =>
-                          handleServiceOrderAction(
+                        onFinalizeInvoice: async (invoiceStatus) => {
+                          const ok = await handleServiceOrderAction(
                             {
                               mode: "finalizeInvoice",
                               actorUserId: session.user.id,
@@ -4369,15 +4375,24 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                             },
                             "Invoice updated.",
                             "invoice:finalize"
-                          ),
-                        onRecordPayment: (method, amount, reference) =>
-                          handleServiceOrderAction(
+                          );
+                          if (ok) appendCommandLog({ label: `Invoice Finalized`, detail: `RO #${selectedServiceRowId} — ${invoiceStatus}`, tone: "stable" }, { optimistic: true });
+                          return ok;
+                        },
+                        onRecordPayment: async (method, amount, reference) => {
+                          const ok = await handleServiceOrderAction(
                             { mode: "recordPayment", actorUserId: session.user.id, method, amount, reference },
                             "Payment processed.",
                             "payment:record"
-                          ),
-                        onUpdateJobStatus: (jobId, status) =>
-                          handleServiceOrderAction({ mode: "updateJobStatus", jobId, status, actorUserId: session.user.id }, "Job status updated.", `updateJobStatus-${jobId}`),
+                          );
+                          if (ok) appendCommandLog({ label: "Payment Recorded", detail: `${method} — $${amount}`, tone: "stable" }, { optimistic: true });
+                          return ok;
+                        },
+                        onUpdateJobStatus: async (jobId, status) => {
+                          const ok = await handleServiceOrderAction({ mode: "updateJobStatus", jobId, status, actorUserId: session.user.id }, "Job status updated.", `updateJobStatus-${jobId}`);
+                          if (ok) appendCommandLog({ label: `Job Status Updated`, detail: `Status → ${status}`, tone: "neutral" }, { optimistic: true });
+                          return ok;
+                        },
                         onRequestSignature: (docType, recipient, message) =>
                           handleServiceOrderAction({ mode: "requestSignature", docType, recipient, message, actorUserId: session.user.id }, "Signature request sent.", "requestSignature"),
                         onUpdateQueueRow: handleServiceQueueRowUpdate,
@@ -5538,7 +5553,7 @@ function renderWorkspace(
       );
     }
     case "reports": {
-      return <ReportCenterWorkspace />;
+      return <ReportCenterWorkspace auditLog={taskControls.activityEntries} />;
     }
     case "desktop":
     default: {
@@ -11090,6 +11105,7 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
   const [isCloseoutOpen, setIsCloseoutOpen] = useState(false);
   const [closeoutStep, setCloseoutStep] = useState(0);
   const [workbenchNotice, setWorkbenchNotice] = useState<string | null>(null);
+  const [isPortalPreviewOpen, setIsPortalPreviewOpen] = useState(false);
 
   useEffect(() => {
     setActiveTab("general");
@@ -13819,6 +13835,13 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
         >
           Convert To {orderTypeToggleTarget}
         </button>
+        <button
+          className="legacy-task-status-button"
+          onClick={() => setIsPortalPreviewOpen(true)}
+          type="button"
+        >
+          🚤 Portal Preview
+        </button>
       </div>
       <div className="legacy-service-workbench-tabs" role="tablist" aria-label={`${recordLabel} tabs`}>
         {visibleWorkbenchTabs.map((tab) => (
@@ -13837,6 +13860,46 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
         {workbenchNotice && <div className="legacy-workbench-notice" onClick={() => setWorkbenchNotice(null)}>{workbenchNotice}</div>}
         {paneContent}
       </div>
+      {isPortalPreviewOpen && (
+        <div className="legacy-portal-overlay" onClick={() => setIsPortalPreviewOpen(false)}>
+          <div className="legacy-portal-preview" onClick={e => e.stopPropagation()}>
+            <div className="legacy-portal-preview-header">
+              <span>🚤 Customer Portal Preview</span>
+              <button className="legacy-task-status-button" onClick={() => setIsPortalPreviewOpen(false)} type="button">✕ Close</button>
+            </div>
+            <div className="legacy-portal-preview-body">
+              <div className="legacy-portal-preview-card">
+                <div className="legacy-portal-preview-ro-header">
+                  <span className="legacy-portal-preview-label">Repair Order</span>
+                  <strong>#{model.roNumber}</strong>
+                </div>
+                <div className="legacy-portal-preview-status-row">
+                  <span>Status</span>
+                  <span className={`legacy-chip tone-${invoiceStatus === "Paid" ? "stable" : "accent"}`}>{invoiceStatus || "In Progress"}</span>
+                </div>
+                <div className="legacy-portal-preview-status-row">
+                  <span>Promised Date</span>
+                  <span>{model.promisedDate || "TBD"}</span>
+                </div>
+              </div>
+              <div className="legacy-portal-preview-section-label">Your Services</div>
+              {model.jobs.map(j => (
+                <div className="legacy-portal-preview-job-card" key={j.id}>
+                  <div className="legacy-portal-preview-job-title">{j.title || "Unnamed Job"}</div>
+                  <div className="legacy-portal-preview-job-status">
+                    <span className={`legacy-chip tone-${j.status === "Closed" ? "stable" : "neutral"}`}>{j.status || "Open"}</span>
+                  </div>
+                  {j.description && <div className="legacy-portal-preview-job-desc">{j.description}</div>}
+                </div>
+              ))}
+              <div className="legacy-portal-preview-totals">
+                <div className="legacy-portal-preview-total-row"><span>Estimated Total</span><span>{model.totals.total.toLocaleString("en-US", { style: "currency", currency: "USD" })}</span></div>
+                <div className="legacy-portal-preview-total-row is-due"><span>Amount Due</span><span>{model.totals.totalDue.toLocaleString("en-US", { style: "currency", currency: "USD" })}</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -15028,6 +15091,15 @@ function PartsInventoryBoard({ onOpenDetail, onSelectRow, onSendToPurchasePad, r
   const [selectedInventoryActionRowIds, setSelectedInventoryActionRowIds] = useState<string[]>([]);
   const [selectedInventoryRowId, setSelectedInventoryRowId] = useState<string | null>(selectedRowId);
   const [scrollTop, setScrollTop] = useState(0);
+  const [isAdjustOpen, setIsAdjustOpen] = useState(false);
+  const [adjustType, setAdjustType] = useState<"Add" | "Remove" | "Set Exact">("Add");
+  const [adjustQty, setAdjustQty] = useState("");
+  const [adjustReason, setAdjustReason] = useState("Cycle Count");
+  const [adjustNotes, setAdjustNotes] = useState("");
+  const [adjustmentLog, setAdjustmentLog] = useState<Array<{ partNumber: string; type: string; qty: number; reason: string; ts: string }>>([]);
+  const adjustmentLogCount = adjustmentLog.length;
+  const [isCycleCountMode, setIsCycleCountMode] = useState(false);
+  const [countedPartIds, setCountedPartIds] = useState<Set<string>>(new Set());
   const gridWrapRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const normalizedSearchTerm = searchTerm.trim();
@@ -15566,8 +15638,94 @@ function PartsInventoryBoard({ onOpenDetail, onSelectRow, onSendToPurchasePad, r
           <button disabled={!selectedInventoryRow} onClick={() => handleInventoryAction("Detail")} type="button">
             Detail
           </button>
+          <button
+            disabled={!selectedInventoryRow}
+            onClick={() => {
+              if (selectedInventoryRow) setIsAdjustOpen(v => !v);
+            }}
+            style={{ marginLeft: 4 }}
+            type="button"
+          >
+            Adjust Qty
+          </button>
+          <button
+            onClick={() => {
+              if (!isCycleCountMode) {
+                setIsCycleCountMode(true);
+                setCountedPartIds(new Set());
+              } else {
+                const n = countedPartIds.size;
+                setIsCycleCountMode(false);
+                setCountedPartIds(new Set());
+                setActionNotice(`Cycle Count completed for ${n} part${n === 1 ? "" : "s"}.`);
+              }
+            }}
+            style={{ marginLeft: 4 }}
+            type="button"
+          >
+            {isCycleCountMode ? `Mark Counted (${countedPartIds.size})` : "Cycle Count"}
+          </button>
         </div>
       </section>
+
+      {isAdjustOpen && selectedInventoryRow && (
+        <div className="legacy-adjust-panel">
+          <div className="legacy-adjust-panel-header">
+            <span>Adjust Quantity — <strong>{selectedInventoryRow.partNumber}</strong> {selectedInventoryRow.description}</span>
+            <button className="legacy-task-status-button" onClick={() => setIsAdjustOpen(false)} type="button">✕</button>
+          </div>
+          <div style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.8rem" }}>Current On-Hand: <strong style={{ color: "#fff" }}>{selectedInventoryRow.onHand}</strong></div>
+          <div className="legacy-adjust-grid">
+            <div className="legacy-adjust-field">
+              <span>Adjustment Type</span>
+              <select onChange={e => setAdjustType(e.target.value as "Add" | "Remove" | "Set Exact")} value={adjustType}>
+                <option>Add</option>
+                <option>Remove</option>
+                <option>Set Exact</option>
+              </select>
+            </div>
+            <div className="legacy-adjust-field">
+              <span>Quantity</span>
+              <input onChange={e => setAdjustQty(e.target.value)} placeholder="0" type="number" value={adjustQty} />
+            </div>
+            <div className="legacy-adjust-field">
+              <span>Reason Code</span>
+              <select onChange={e => setAdjustReason(e.target.value)} value={adjustReason}>
+                <option>Cycle Count</option>
+                <option>Damaged</option>
+                <option>Found</option>
+                <option>Theft</option>
+                <option>Return</option>
+                <option>Correction</option>
+              </select>
+            </div>
+            <div className="legacy-adjust-field" style={{ gridColumn: "1 / -1" }}>
+              <span>Notes (optional)</span>
+              <textarea onChange={e => setAdjustNotes(e.target.value)} placeholder="Additional notes…" value={adjustNotes} />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              className="legacy-task-status-button"
+              disabled={!adjustQty}
+              onClick={() => {
+                const qty = parseInt(adjustQty, 10) || 0;
+                const entry = { partNumber: selectedInventoryRow.partNumber, type: adjustType, qty, reason: adjustReason, ts: new Date().toLocaleTimeString() };
+                setAdjustmentLog(log => [entry, ...log]);
+                setActionNotice(`${selectedInventoryRow.partNumber}: Qty adjusted (${adjustType === "Remove" ? "-" : adjustType === "Add" ? "+" : "="}${qty}). Reason: ${adjustReason}.`);
+                setAdjustQty("");
+                setAdjustNotes("");
+                setIsAdjustOpen(false);
+              }}
+              type="button"
+            >
+              Apply Adjustment
+            </button>
+            <button className="legacy-task-status-button" onClick={() => setIsAdjustOpen(false)} type="button">Cancel</button>
+          </div>
+          {adjustmentLogCount > 0 && <p className="legacy-adjust-log-count">Session adjustments: {adjustmentLogCount}</p>}
+        </div>
+      )}
 
       <section className="legacy-info-card legacy-parts-inventory-grid-panel">
         <div className="legacy-parts-inventory-grid-wrap" onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)} ref={gridWrapRef}>
@@ -15683,6 +15841,22 @@ function PartsInventoryBoard({ onOpenDetail, onSelectRow, onSendToPurchasePad, r
                       {renderInventoryCell(row, column)}
                     </td>
                   ))}
+                  {isCycleCountMode && (
+                    <td className="legacy-cycle-count-col">
+                      <input
+                        checked={countedPartIds.has(row.id)}
+                        onChange={e => {
+                          setCountedPartIds(prev => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.add(row.id); else next.delete(row.id);
+                            return next;
+                          });
+                        }}
+                        onClick={e => e.stopPropagation()}
+                        type="checkbox"
+                      />
+                    </td>
+                  )}
                 </tr>
               ))}
               {bottomSpacerHeight > 0 ? (
@@ -18916,12 +19090,14 @@ type SalesDealTab =
   | "dealRecap"
   | "attach"
   | "eSignature"
-  | "fi";
+  | "fi"
+  | "desk";
 
 const salesDealTabs: Array<{ id: SalesDealTab; label: string }> = [
   { id: "general", label: "General" },
   { id: "customer", label: "Customer" },
   { id: "fi", label: "F&I" },
+  { id: "desk", label: "Desking" },
   { id: "communications", label: "Communications..." },
   { id: "lienIns", label: "Lien / Ins" },
   { id: "trades", label: "Trades" },
@@ -18945,7 +19121,319 @@ const salesDepositMethodOptions = [
   "ZACCT - Internal Coupons"
 ];
 
-function ReportCenterWorkspace() {
+// ─── Vendor/Supplier Management Panel ─────────────────────────────────────────
+const stubVendors = [
+  { id: "v1", name: "Mercury Marine Parts", contact: "John Wells", phone: "800-555-0191", email: "jwells@mercurymarine.com", terms: "Net 30", leadDays: 5, notes: "Primary engine parts supplier" },
+  { id: "v2", name: "Sea Ray Distribution", contact: "Lisa Park", phone: "800-555-0284", email: "lpark@searay.com", terms: "Net 15", leadDays: 7, notes: "Hull and deck components" },
+  { id: "v3", name: "West Marine Wholesale", contact: "Tom Rivera", phone: "800-555-0372", email: "trivera@westmarine.com", terms: "COD", leadDays: 2, notes: "Accessories and hardware" },
+  { id: "v4", name: "BRP Marine Parts", contact: "Sarah Chen", phone: "800-555-0445", email: "schen@brp.com", terms: "Net 30", leadDays: 10, notes: "Evinrude/Can-Am parts" },
+];
+
+function VendorManagementPanel() {
+  const [vendors, setVendors] = useState(stubVendors);
+  const [selectedVendorId, setSelectedVendorId] = useState<string | null>(stubVendors[0].id);
+  const [editingVendorId, setEditingVendorId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<typeof stubVendors[0] | null>(null);
+  const selectedVendor = vendors.find(v => v.id === selectedVendorId) ?? null;
+
+  function startEdit(v: typeof stubVendors[0]) {
+    setEditingVendorId(v.id);
+    setEditDraft({ ...v });
+  }
+
+  function cancelEdit() {
+    setEditingVendorId(null);
+    setEditDraft(null);
+  }
+
+  function saveEdit() {
+    if (!editDraft) return;
+    setVendors(current => current.map(v => v.id === editDraft.id ? editDraft : v));
+    setEditingVendorId(null);
+    setEditDraft(null);
+  }
+
+  return (
+    <div className="legacy-vendor-layout">
+      <div className="legacy-vendor-list">
+        {vendors.map(v => (
+          <button
+            className={`legacy-vendor-list-item${selectedVendorId === v.id ? " is-active" : ""}`}
+            key={v.id}
+            onClick={() => setSelectedVendorId(v.id)}
+            type="button"
+          >
+            <strong>{v.name}</strong>
+            <span>{v.terms}</span>
+          </button>
+        ))}
+      </div>
+      <div className="legacy-vendor-detail">
+        {selectedVendor ? (
+          <>
+            <div className="legacy-vendor-detail-header">{selectedVendor.name}</div>
+            <div className="legacy-vendor-meta-grid">
+              <div className="legacy-vendor-meta-item"><label>Contact</label><span>{selectedVendor.contact}</span></div>
+              <div className="legacy-vendor-meta-item"><label>Phone</label><span>{selectedVendor.phone}</span></div>
+              <div className="legacy-vendor-meta-item"><label>Email</label><span>{selectedVendor.email}</span></div>
+              <div className="legacy-vendor-meta-item"><label>Terms</label><span><span className="legacy-pricing-markup-chip">{selectedVendor.terms}</span></span></div>
+              <div className="legacy-vendor-meta-item"><label>Lead Days</label><span>{selectedVendor.leadDays} days</span></div>
+            </div>
+            <div className="legacy-vendor-notes">{selectedVendor.notes}</div>
+            {editingVendorId === selectedVendor.id && editDraft ? (
+              <div className="legacy-vendor-edit-form">
+                {(["name", "contact", "phone", "email", "terms", "notes"] as const).map(field => (
+                  <label className="legacy-pricing-edit-field" key={field}>
+                    <span style={{ textTransform: "capitalize" }}>{field}</span>
+                    {field === "notes" ? (
+                      <textarea
+                        onChange={e => setEditDraft(d => d ? { ...d, [field]: e.target.value } : d)}
+                        rows={2}
+                        style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 5, color: "inherit", fontSize: "0.82rem", padding: "4px 8px", resize: "vertical", width: "100%" }}
+                        value={editDraft[field] as string}
+                      />
+                    ) : (
+                      <input
+                        onChange={e => setEditDraft(d => d ? { ...d, [field]: e.target.value } : d)}
+                        style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 5, color: "inherit", fontSize: "0.82rem", padding: "4px 7px", width: "100%" }}
+                        type="text"
+                        value={editDraft[field] as string}
+                      />
+                    )}
+                  </label>
+                ))}
+                <label className="legacy-pricing-edit-field">
+                  <span>Lead Days</span>
+                  <input
+                    min={0}
+                    onChange={e => setEditDraft(d => d ? { ...d, leadDays: parseInt(e.target.value, 10) || 0 } : d)}
+                    style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 5, color: "inherit", fontSize: "0.82rem", padding: "4px 7px", width: "100%" }}
+                    type="number"
+                    value={editDraft.leadDays}
+                  />
+                </label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="legacy-task-status-button" onClick={saveEdit} type="button">Save</button>
+                  <button className="legacy-task-status-button" onClick={cancelEdit} type="button">Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button className="legacy-task-status-button" onClick={() => startEdit(selectedVendor)} type="button">Edit Vendor</button>
+            )}
+          </>
+        ) : (
+          <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.88rem", marginTop: 24, textAlign: "center" }}>Select a vendor.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Parts Pricing Matrix Panel ────────────────────────────────────────────────
+const stubPricingMatrix = [
+  { id: "pm1", category: "Engine Parts", costMin: 0, costMax: 50, markupPct: 40, retailMethod: "Cost + Markup", minMarginPct: 25 },
+  { id: "pm2", category: "Engine Parts", costMin: 50, costMax: 200, markupPct: 32, retailMethod: "Cost + Markup", minMarginPct: 22 },
+  { id: "pm3", category: "Engine Parts", costMin: 200, costMax: 9999, markupPct: 25, retailMethod: "Cost + Markup", minMarginPct: 18 },
+  { id: "pm4", category: "Accessories", costMin: 0, costMax: 100, markupPct: 50, retailMethod: "Cost + Markup", minMarginPct: 30 },
+  { id: "pm5", category: "Accessories", costMin: 100, costMax: 9999, markupPct: 38, retailMethod: "Cost + Markup", minMarginPct: 25 },
+  { id: "pm6", category: "OEM Hull Parts", costMin: 0, costMax: 9999, markupPct: 20, retailMethod: "MSRP", minMarginPct: 15 },
+  { id: "pm7", category: "Electronics", costMin: 0, costMax: 9999, markupPct: 28, retailMethod: "Cost + Markup", minMarginPct: 20 },
+];
+
+function PricingMatrixPanel() {
+  const [rules, setRules] = useState(stubPricingMatrix);
+  const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
+  const [draftRule, setDraftRule] = useState<typeof stubPricingMatrix[0] | null>(null);
+  const [pricingNotice, setPricingNotice] = useState("");
+
+  function selectRule(rule: typeof stubPricingMatrix[0]) {
+    setSelectedRuleId(rule.id);
+    setDraftRule({ ...rule });
+  }
+
+  function saveRule() {
+    if (!draftRule) return;
+    setRules(current => current.map(r => r.id === draftRule.id ? draftRule : r));
+    setPricingNotice("Rule saved.");
+    setTimeout(() => setPricingNotice(""), 2000);
+  }
+
+  function deleteRule() {
+    if (!selectedRuleId) return;
+    setRules(current => current.filter(r => r.id !== selectedRuleId));
+    setSelectedRuleId(null);
+    setDraftRule(null);
+    setPricingNotice("Rule deleted.");
+    setTimeout(() => setPricingNotice(""), 2000);
+  }
+
+  function addRule() {
+    const newId = `pm${Date.now()}`;
+    const newRule = { id: newId, category: "New Category", costMin: 0, costMax: 9999, markupPct: 30, retailMethod: "Cost + Markup", minMarginPct: 20 };
+    setRules(current => [...current, newRule]);
+    selectRule(newRule);
+  }
+
+  return (
+    <div style={{ padding: 16, overflow: "auto" }}>
+      {pricingNotice && <div className="legacy-workbench-notice" style={{ marginBottom: 8 }}>{pricingNotice}</div>}
+      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <button className="legacy-task-status-button" onClick={addRule} type="button">+ Add Rule</button>
+        <button className="legacy-task-status-button" disabled={!selectedRuleId} onClick={deleteRule} type="button">Delete Rule</button>
+      </div>
+      <table className="legacy-pricing-matrix-table">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Cost Range</th>
+            <th>Markup %</th>
+            <th>Method</th>
+            <th>Min Margin %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rules.map(r => (
+            <tr className={selectedRuleId === r.id ? "is-selected" : ""} key={r.id} onClick={() => selectRule(r)}>
+              <td>{r.category}</td>
+              <td>${r.costMin}–${r.costMax === 9999 ? "∞" : r.costMax}</td>
+              <td><span className="legacy-pricing-markup-chip">{r.markupPct}%</span></td>
+              <td>{r.retailMethod}</td>
+              <td>{r.minMarginPct}%</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {draftRule && (
+        <div className="legacy-pricing-edit-form">
+          <div className="legacy-pricing-edit-field">
+            <span>Category</span>
+            <input onChange={e => setDraftRule(d => d ? { ...d, category: e.target.value } : d)} type="text" value={draftRule.category} />
+          </div>
+          <div className="legacy-pricing-edit-field">
+            <span>Cost Min ($)</span>
+            <input onChange={e => setDraftRule(d => d ? { ...d, costMin: parseFloat(e.target.value) || 0 } : d)} type="number" value={draftRule.costMin} />
+          </div>
+          <div className="legacy-pricing-edit-field">
+            <span>Cost Max ($)</span>
+            <input onChange={e => setDraftRule(d => d ? { ...d, costMax: parseFloat(e.target.value) || 0 } : d)} type="number" value={draftRule.costMax} />
+          </div>
+          <div className="legacy-pricing-edit-field">
+            <span>Markup %</span>
+            <input onChange={e => setDraftRule(d => d ? { ...d, markupPct: parseFloat(e.target.value) || 0 } : d)} type="number" value={draftRule.markupPct} />
+          </div>
+          <div className="legacy-pricing-edit-field">
+            <span>Retail Method</span>
+            <select onChange={e => setDraftRule(d => d ? { ...d, retailMethod: e.target.value } : d)} value={draftRule.retailMethod}>
+              <option>Cost + Markup</option>
+              <option>MSRP</option>
+              <option>Matrix</option>
+            </select>
+          </div>
+          <div className="legacy-pricing-edit-field">
+            <span>Min Margin %</span>
+            <input onChange={e => setDraftRule(d => d ? { ...d, minMarginPct: parseFloat(e.target.value) || 0 } : d)} type="number" value={draftRule.minMarginPct} />
+          </div>
+          <div style={{ display: "flex", gap: 8, gridColumn: "1 / -1" }}>
+            <button className="legacy-task-status-button" onClick={saveRule} type="button">Save Rule</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Service Reminder Campaign Panel ──────────────────────────────────────────
+const campaignTypes = ["Winterization", "Annual Service", "Oil Change", "Spring Launch"];
+
+function generateCampaignRows(type: string): Array<{ id: string; name: string; unit: string; lastService: string; contact: string; type: string }> {
+  const base = [
+    { name: "James Holloway", unit: "2021 Sea Ray 230 SLX", lastService: "2023-11-12", contact: "james@email.com" },
+    { name: "Maria Santos", unit: "2019 Bayliner VR5", lastService: "2023-10-28", contact: "msantos@email.com" },
+    { name: "Robert Keen", unit: "2022 Yamaha FSH210", lastService: "2024-01-05", contact: "rkeen@email.com" },
+    { name: "Linda Park", unit: "2020 MasterCraft X22", lastService: "2023-12-01", contact: "lpark@email.com" },
+    { name: "Tom Walsh", unit: "2018 Chaparral 21 H2O", lastService: "2023-09-17", contact: "twalsh@email.com" },
+    { name: "Cynthia Moore", unit: "2023 Cobalt R7", lastService: "2024-02-14", contact: "cmoore@email.com" },
+    { name: "Derek Han", unit: "2017 Four Winns H240", lastService: "2023-08-30", contact: "dhan@email.com" },
+  ];
+  return base.map((row, i) => ({ id: `cr${i}`, ...row, type }));
+}
+
+function CampaignPanel() {
+  const [campaignType, setCampaignType] = useState<string>("Winterization");
+  const [campaignRows, setCampaignRows] = useState<Array<{ id: string; name: string; unit: string; lastService: string; contact: string; type: string }>>([]);
+  const [campaignNotice, setCampaignNotice] = useState("");
+
+  function generateList() {
+    const rows = generateCampaignRows(campaignType);
+    setCampaignRows(rows);
+    setCampaignNotice(`${rows.length} customers identified for ${campaignType} campaign.`);
+  }
+
+  function exportCsv() {
+    if (campaignRows.length === 0) return;
+    const header = "Customer Name,Unit,Last Service,Contact,Reminder Type\n";
+    const body = campaignRows.map(r => `"${r.name}","${r.unit}","${r.lastService}","${r.contact}","${r.type}"`).join("\n");
+    const blob = new Blob([header + body], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${campaignType.replace(/\s+/g, "-").toLowerCase()}-campaign.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div style={{ padding: 16 }}>
+      <div className="legacy-campaign-type-row">
+        {campaignTypes.map(t => (
+          <button
+            className={`legacy-campaign-type-btn${campaignType === t ? " is-active" : ""}`}
+            key={t}
+            onClick={() => setCampaignType(t)}
+            type="button"
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+      <div style={{ alignItems: "center", display: "flex", gap: 10, marginBottom: 12 }}>
+        <button className="legacy-task-status-button" onClick={generateList} type="button">Generate List</button>
+        <button className="legacy-task-status-button" disabled={campaignRows.length === 0} onClick={exportCsv} type="button">Export CSV</button>
+        {campaignRows.length > 0 && <span className="legacy-campaign-count-badge">{campaignRows.length} customers</span>}
+      </div>
+      {campaignNotice && <div className="legacy-workbench-notice" style={{ marginBottom: 10 }}>{campaignNotice}</div>}
+      {campaignRows.length > 0 && (
+        <table className="legacy-campaign-table">
+          <thead>
+            <tr>
+              <th>Customer Name</th>
+              <th>Unit</th>
+              <th>Last Service</th>
+              <th>Contact</th>
+              <th>Reminder Type</th>
+            </tr>
+          </thead>
+          <tbody>
+            {campaignRows.map(r => (
+              <tr key={r.id}>
+                <td>{r.name}</td>
+                <td>{r.unit}</td>
+                <td>{r.lastService}</td>
+                <td>{r.contact}</td>
+                <td>{r.type}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// ─── Report Center Workspace ───────────────────────────────────────────────────
+type ReportCenterSection = "reports" | "vendors" | "pricing" | "campaigns" | "audit";
+
+function ReportCenterWorkspace({ auditLog }: { auditLog: CommandLogEntry[] }) {
   const reports = [
     { id: "service-revenue", label: "Service Revenue", category: "Service" },
     { id: "parts-movement", label: "Parts Movement", category: "Parts" },
@@ -18954,35 +19442,103 @@ function ReportCenterWorkspace() {
     { id: "inventory-aging", label: "Inventory Aging", category: "Inventory" },
     { id: "deal-gross", label: "Deal Gross Report", category: "Sales" },
   ];
+  const [activeSection, setActiveSection] = useState<ReportCenterSection>("reports");
   const [activeReport, setActiveReport] = useState<string | null>(null);
+  const [auditFilter, setAuditFilter] = useState("");
   const selected = reports.find(r => r.id === activeReport);
+  const filteredAudit = auditFilter.trim()
+    ? auditLog.filter(e => e.label.toLowerCase().includes(auditFilter.toLowerCase()) || (e.detail ?? "").toLowerCase().includes(auditFilter.toLowerCase()))
+    : auditLog;
+
+  const sidebarSections: Array<{ id: ReportCenterSection; label: string }> = [
+    { id: "reports", label: "Reports" },
+    { id: "vendors", label: "Vendors" },
+    { id: "pricing", label: "Pricing Matrix" },
+    { id: "campaigns", label: "Campaigns" },
+    { id: "audit", label: "Audit Trail" },
+  ];
+
   return (
     <div className="legacy-report-workspace">
       <div className="legacy-report-sidebar">
-        <div className="legacy-report-sidebar-header">Reports</div>
-        {reports.map(r => (
-          <button
-            className={`legacy-report-sidebar-item${activeReport === r.id ? " is-active" : ""}`}
-            key={r.id}
-            onClick={() => setActiveReport(r.id)}
-            type="button"
-          >
-            <span className="legacy-report-sidebar-category">{r.category}</span>
-            <span>{r.label}</span>
-          </button>
+        {sidebarSections.map(s => (
+          <div key={s.id}>
+            <button
+              className={`legacy-report-sidebar-item${activeSection === s.id ? " is-active" : ""}`}
+              onClick={() => setActiveSection(s.id)}
+              type="button"
+            >
+              <span className="legacy-report-sidebar-category">{s.label}</span>
+            </button>
+            {s.id === "reports" && activeSection === "reports" && reports.map(r => (
+              <button
+                className={`legacy-report-sidebar-item${activeReport === r.id ? " is-active" : ""}`}
+                key={r.id}
+                onClick={() => setActiveReport(r.id)}
+                style={{ paddingLeft: 20 }}
+                type="button"
+              >
+                <span className="legacy-report-sidebar-category">{r.category}</span>
+                <span>{r.label}</span>
+              </button>
+            ))}
+          </div>
         ))}
       </div>
-      <div className="legacy-report-main">
-        {selected ? (
-          <div>
-            <div className="legacy-report-main-header">{selected.label}</div>
-            <p style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.85rem", marginTop: 16 }}>
-              Report data is loading… (stub — connect to API in a future sprint)
-            </p>
-          </div>
-        ) : (
-          <div style={{ color: "rgba(255,255,255,0.45)", fontSize: "0.9rem", marginTop: 32, textAlign: "center" }}>
-            Select a report from the sidebar to get started.
+      <div className="legacy-report-main" style={{ overflow: "hidden", padding: 0 }}>
+        {activeSection === "reports" && (
+          selected ? (
+            <div style={{ padding: 16 }}>
+              <div className="legacy-report-main-header">{selected.label}</div>
+              <p style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.85rem", marginTop: 16 }}>
+                Report data is loading… (stub — connect to API in a future sprint)
+              </p>
+            </div>
+          ) : (
+            <div style={{ color: "rgba(255,255,255,0.45)", fontSize: "0.9rem", marginTop: 32, textAlign: "center" }}>
+              Select a report from the sidebar to get started.
+            </div>
+          )
+        )}
+        {activeSection === "vendors" && <VendorManagementPanel />}
+        {activeSection === "pricing" && <PricingMatrixPanel />}
+        {activeSection === "campaigns" && <CampaignPanel />}
+        {activeSection === "audit" && (
+          <div style={{ padding: 16, overflow: "auto" }}>
+            <div style={{ alignItems: "center", display: "flex", gap: 10, marginBottom: 12 }}>
+              <input
+                onChange={e => setAuditFilter(e.target.value)}
+                placeholder="Filter by action or detail…"
+                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, color: "inherit", flex: 1, fontSize: "0.82rem", padding: "5px 10px" }}
+                type="text"
+                value={auditFilter}
+              />
+              <span style={{ color: "rgba(255,255,255,0.45)", fontSize: "0.78rem" }}>{filteredAudit.length} entries</span>
+            </div>
+            {filteredAudit.length === 0 ? (
+              <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.88rem", marginTop: 24, textAlign: "center" }}>No audit entries yet.</div>
+            ) : (
+              <table className="legacy-audit-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Action</th>
+                    <th>Detail</th>
+                    <th>Actor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAudit.map(entry => (
+                    <tr className={`legacy-audit-row-${entry.tone ?? "neutral"}`} key={entry.id}>
+                      <td className="legacy-audit-time">{entry.timeLabel}</td>
+                      <td>{entry.label}</td>
+                      <td>{entry.detail ?? "—"}</td>
+                      <td className="legacy-audit-actor">{entry.actorName ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         )}
       </div>
@@ -19020,6 +19576,12 @@ function SalesDealWorkbench({
   const [takeDepositError, setTakeDepositError] = useState<string | null>(null);
   const [depositSnapshot, setDepositSnapshot] = useState<SalesDealDepositsResponse | null>(null);
   const [selectedDepositEntryId, setSelectedDepositEntryId] = useState<string>("");
+  const [deskScenarios, setDeskScenarios] = useState([
+    { id: "s1", label: "Scenario A", down: 5000, term: 60, rate: 6.9 },
+    { id: "s2", label: "Scenario B", down: 8000, term: 72, rate: 5.9 },
+    { id: "s3", label: "Scenario C", down: 10000, term: 84, rate: 4.9 },
+  ]);
+  const [activeDeskScenarioId, setActiveDeskScenarioId] = useState("s1");
 
   const price = dealRow ? parseFloat(dealRow.cashPrice.replace(/[$,]/g, "")) || 0 : 42049;
   const freight = 738;
@@ -19654,7 +20216,92 @@ function SalesDealWorkbench({
             </aside>
           </div>
         </div>
-      ) : activeTab === "fi" ? (() => {
+      ) : activeTab === "desk" ? (() => {
+        function deskCalc(scenario: { down: number; term: number; rate: number }) {
+          const P = Math.max(0, cashPrice - scenario.down);
+          const r = scenario.rate / 100 / 12;
+          const n = scenario.term;
+          const monthly = r > 0 && n > 0 ? P * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1) : P / (n || 1);
+          const totalCost = monthly * n;
+          const totalInterest = totalCost - P;
+          return { loanAmount: P, monthly, totalCost, totalInterest };
+        }
+        return (
+          <div style={{ padding: 16, overflow: "auto" }}>
+            <div style={{ alignItems: "center", display: "flex", gap: 10, justifyContent: "space-between", marginBottom: 12 }}>
+              <strong style={{ fontSize: "0.9rem" }}>Pencil — Side-by-Side Scenarios</strong>
+              <button
+                className="legacy-task-status-button"
+                disabled={deskScenarios.length >= 3}
+                onClick={() => setDeskScenarios(ds => ds.length < 3 ? [...ds, { id: `s${Date.now()}`, label: `Scenario ${String.fromCharCode(65 + ds.length)}`, down: 5000, term: 60, rate: 6.9 }] : ds)}
+                type="button"
+              >
+                + Add Scenario
+              </button>
+            </div>
+            {dealNotice && <div className="legacy-workbench-notice" style={{ marginBottom: 10 }}>{dealNotice}</div>}
+            <div className="legacy-desk-grid">
+              {deskScenarios.map(sc => {
+                const calc = deskCalc(sc);
+                const isActive = activeDeskScenarioId === sc.id;
+                return (
+                  <div className={`legacy-desk-scenario-card${isActive ? " is-active" : ""}`} key={sc.id}>
+                    <div className="legacy-desk-scenario-label">
+                      <span>{sc.label}</span>
+                      {isActive && <span className="legacy-pricing-markup-chip">Selected</span>}
+                    </div>
+                    <div className="legacy-desk-field">
+                      <span>Down Payment ($)</span>
+                      <input
+                        onChange={e => setDeskScenarios(ds => ds.map(d => d.id === sc.id ? { ...d, down: parseFloat(e.target.value) || 0 } : d))}
+                        type="number"
+                        value={sc.down}
+                      />
+                    </div>
+                    <div className="legacy-desk-field">
+                      <span>Term (months)</span>
+                      <input
+                        onChange={e => setDeskScenarios(ds => ds.map(d => d.id === sc.id ? { ...d, term: parseInt(e.target.value, 10) || 60 } : d))}
+                        type="number"
+                        value={sc.term}
+                      />
+                    </div>
+                    <div className="legacy-desk-field">
+                      <span>Rate (%)</span>
+                      <input
+                        onChange={e => setDeskScenarios(ds => ds.map(d => d.id === sc.id ? { ...d, rate: parseFloat(e.target.value) || 0 } : d))}
+                        step="0.1"
+                        type="number"
+                        value={sc.rate}
+                      />
+                    </div>
+                    <div className="legacy-desk-computed">
+                      <div className="legacy-desk-computed-row"><span>Loan Amount</span><span>{calc.loanAmount.toLocaleString("en-US", { style: "currency", currency: "USD" })}</span></div>
+                      <div className="legacy-desk-computed-row is-highlight"><span>Monthly Payment</span><span>{calc.monthly.toLocaleString("en-US", { style: "currency", currency: "USD" })}/mo</span></div>
+                      <div className="legacy-desk-computed-row"><span>Total Cost</span><span>{calc.totalCost.toLocaleString("en-US", { style: "currency", currency: "USD" })}</span></div>
+                      <div className="legacy-desk-computed-row"><span>Total Interest</span><span>{calc.totalInterest.toLocaleString("en-US", { style: "currency", currency: "USD" })}</span></div>
+                    </div>
+                    <button
+                      className="legacy-task-status-button"
+                      onClick={() => {
+                        setDownPayment(sc.down);
+                        setTermMonths(sc.term);
+                        setInterestRate(sc.rate);
+                        setActiveDeskScenarioId(sc.id);
+                        setDealNotice(`${sc.label} selected.`);
+                        setTimeout(() => setDealNotice(null), 3000);
+                      }}
+                      type="button"
+                    >
+                      Select
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })() : activeTab === "fi" ? (() => {
         const rate = interestRate / 100;
         const financed = Math.max(0, loanAmount - downPayment - tradeInValue);
         const monthlyPayment = rate > 0 && termMonths > 0

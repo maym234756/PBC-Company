@@ -10613,6 +10613,91 @@ body.is-desktop-dragging {
   grid-template-columns: minmax(300px, 0.72fr) minmax(0, 1fr);
 }
 
+/* ── Sprint 6: Vendor Management ── */
+.legacy-vendor-layout { display: grid; gap: 0; grid-template-columns: 220px 1fr; height: 100%; }
+.legacy-vendor-list { border-right: 1px solid rgba(255,255,255,0.08); display: grid; align-content: start; gap: 4px; overflow-y: auto; padding: 10px 8px; }
+.legacy-vendor-list-item { background: none; border: none; border-radius: 7px; color: rgba(255,255,255,0.7); cursor: pointer; display: grid; gap: 2px; padding: 8px 10px; text-align: left; width: 100%; }
+.legacy-vendor-list-item:hover { background: rgba(255,255,255,0.06); }
+.legacy-vendor-list-item.is-active { background: rgba(255,255,255,0.1); color: #fff; }
+.legacy-vendor-list-item strong { font-size: 0.82rem; }
+.legacy-vendor-list-item span { color: rgba(255,255,255,0.45); font-size: 0.72rem; }
+.legacy-vendor-detail { overflow-y: auto; padding: 16px; }
+.legacy-vendor-detail-header { font-size: 1rem; font-weight: 700; margin-bottom: 10px; }
+.legacy-vendor-meta-grid { display: grid; gap: 6px; grid-template-columns: 1fr 1fr; margin-bottom: 12px; }
+.legacy-vendor-meta-item label { color: rgba(255,255,255,0.45); display: block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
+.legacy-vendor-meta-item span { font-size: 0.83rem; }
+.legacy-vendor-notes { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; color: rgba(255,255,255,0.6); font-size: 0.8rem; margin-bottom: 12px; padding: 8px 10px; }
+.legacy-vendor-edit-form { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; display: grid; gap: 8px; margin-top: 10px; padding: 12px; }
+
+/* ── Sprint 6: Pricing Matrix ── */
+.legacy-pricing-matrix-table { border-collapse: collapse; font-size: 0.8rem; width: 100%; }
+.legacy-pricing-matrix-table th { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.5); font-size: 0.7rem; font-weight: 700; padding: 6px 10px; text-align: left; text-transform: uppercase; }
+.legacy-pricing-matrix-table td { border-top: 1px solid rgba(255,255,255,0.06); cursor: pointer; padding: 7px 10px; }
+.legacy-pricing-matrix-table tr.is-selected td { background: rgba(255,165,80,0.1); }
+.legacy-pricing-markup-chip { background: rgba(123,204,160,0.12); border: 1px solid #7bcca0; border-radius: 4px; color: #7bcca0; font-size: 0.72rem; font-weight: 700; padding: 2px 6px; }
+.legacy-pricing-edit-form { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; display: grid; gap: 8px; grid-template-columns: repeat(3, 1fr); margin-top: 12px; padding: 12px; }
+.legacy-pricing-edit-field { display: grid; gap: 3px; font-size: 0.78rem; font-weight: 600; }
+.legacy-pricing-edit-field input, .legacy-pricing-edit-field select { border: 1px solid rgba(255,255,255,0.15); border-radius: 5px; background: rgba(255,255,255,0.06); color: inherit; font-size: 0.82rem; padding: 4px 7px; width: 100%; }
+
+/* ── Sprint 6: Sales Desking Tool ── */
+.legacy-desk-grid { display: grid; gap: 12px; grid-template-columns: repeat(3, 1fr); }
+.legacy-desk-scenario-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; display: grid; gap: 8px; padding: 14px; }
+.legacy-desk-scenario-card.is-active { border-color: #e55a2b; }
+.legacy-desk-scenario-label { align-items: center; display: flex; font-size: 0.85rem; font-weight: 700; gap: 8px; justify-content: space-between; margin-bottom: 4px; }
+.legacy-desk-field { display: grid; gap: 3px; font-size: 0.78rem; font-weight: 600; }
+.legacy-desk-field input { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); border-radius: 5px; color: inherit; font-size: 0.85rem; padding: 4px 8px; width: 100%; }
+.legacy-desk-computed { border-top: 1px solid rgba(255,255,255,0.08); display: grid; gap: 4px; margin-top: 8px; padding-top: 8px; }
+.legacy-desk-computed-row { display: flex; font-size: 0.8rem; justify-content: space-between; }
+.legacy-desk-computed-row.is-highlight { color: #f0a830; font-weight: 700; }
+
+/* ── Sprint 6: Inventory Adjustment ── */
+.legacy-adjust-panel { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; display: grid; gap: 10px; margin: 8px; padding: 14px; }
+.legacy-adjust-panel-header { align-items: center; display: flex; font-size: 0.85rem; font-weight: 700; gap: 8px; justify-content: space-between; }
+.legacy-adjust-grid { display: grid; gap: 8px; grid-template-columns: repeat(3, 1fr); }
+.legacy-adjust-field { display: grid; font-size: 0.78rem; font-weight: 600; gap: 3px; }
+.legacy-adjust-field input, .legacy-adjust-field select, .legacy-adjust-field textarea { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); border-radius: 5px; color: inherit; font-size: 0.82rem; padding: 4px 8px; width: 100%; }
+.legacy-adjust-field textarea { min-height: 48px; resize: vertical; }
+.legacy-cycle-count-col { color: rgba(255,255,255,0.45); font-size: 0.72rem; text-align: center; width: 32px; }
+
+/* ── Sprint 6: Service Reminder Campaigns ── */
+.legacy-campaign-type-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.legacy-campaign-type-btn { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; color: rgba(255,255,255,0.65); cursor: pointer; font-size: 0.8rem; padding: 6px 12px; }
+.legacy-campaign-type-btn.is-active { background: rgba(229,90,43,0.2); border-color: #e55a2b; color: #fff; font-weight: 600; }
+.legacy-campaign-count-badge { background: rgba(123,204,160,0.12); border: 1px solid #7bcca0; border-radius: 12px; color: #7bcca0; font-size: 0.78rem; font-weight: 700; padding: 3px 10px; }
+.legacy-campaign-table { border-collapse: collapse; font-size: 0.8rem; width: 100%; }
+.legacy-campaign-table th { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.45); font-size: 0.7rem; font-weight: 700; padding: 5px 10px; text-align: left; text-transform: uppercase; }
+.legacy-campaign-table td { border-top: 1px solid rgba(255,255,255,0.06); padding: 6px 10px; }
+
+/* ── Sprint 6: Customer Portal Preview ── */
+.legacy-portal-overlay { align-items: center; background: rgba(0,0,0,0.6); bottom: 0; display: flex; justify-content: center; left: 0; position: fixed; right: 0; top: 0; z-index: 500; }
+.legacy-portal-preview { background: #0d1f2d; border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; box-shadow: 0 16px 60px rgba(0,0,0,0.5); display: grid; grid-template-rows: auto 1fr; max-height: 80vh; overflow: hidden; width: 360px; }
+.legacy-portal-preview-header { align-items: center; background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; font-size: 0.85rem; font-weight: 700; gap: 10px; justify-content: space-between; padding: 12px 14px; }
+.legacy-portal-preview-body { display: grid; gap: 10px; overflow-y: auto; padding: 14px; }
+.legacy-portal-preview-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px; }
+.legacy-portal-preview-ro-header { align-items: baseline; display: flex; font-size: 1rem; gap: 8px; justify-content: space-between; margin-bottom: 8px; }
+.legacy-portal-preview-label { color: rgba(255,255,255,0.45); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; }
+.legacy-portal-preview-status-row { align-items: center; border-top: 1px solid rgba(255,255,255,0.06); display: flex; font-size: 0.82rem; justify-content: space-between; padding: 5px 0; }
+.legacy-portal-preview-section-label { color: rgba(255,255,255,0.4); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; }
+.legacy-portal-preview-job-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; display: grid; gap: 5px; padding: 10px 12px; }
+.legacy-portal-preview-job-title { font-size: 0.85rem; font-weight: 600; }
+.legacy-portal-preview-job-status { display: flex; }
+.legacy-portal-preview-job-desc { color: rgba(255,255,255,0.5); font-size: 0.78rem; }
+.legacy-portal-preview-totals { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; display: grid; gap: 0; padding: 10px 12px; }
+.legacy-portal-preview-total-row { align-items: center; border-top: 1px solid rgba(255,255,255,0.06); display: flex; font-size: 0.82rem; justify-content: space-between; padding: 5px 0; }
+.legacy-portal-preview-total-row:first-child { border-top: none; }
+.legacy-portal-preview-total-row.is-due { color: #f0a830; font-size: 0.88rem; font-weight: 700; }
+
+/* ── Sprint 6: Audit Trail ── */
+.legacy-audit-table { border-collapse: collapse; font-size: 0.8rem; width: 100%; }
+.legacy-audit-table th { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.45); font-size: 0.7rem; font-weight: 700; padding: 5px 10px; text-align: left; text-transform: uppercase; }
+.legacy-audit-table td { border-top: 1px solid rgba(255,255,255,0.06); padding: 6px 10px; }
+.legacy-audit-row-stable td { border-left: 3px solid #7bcca0; }
+.legacy-audit-row-attention td { border-left: 3px solid #f0a830; }
+.legacy-audit-row-accent td { border-left: 3px solid #4a90c4; }
+.legacy-audit-row-neutral td { border-left: 3px solid rgba(255,255,255,0.2); }
+.legacy-audit-time { color: rgba(255,255,255,0.45); font-size: 0.75rem; white-space: nowrap; }
+.legacy-audit-actor { color: rgba(255,255,255,0.45); font-size: 0.75rem; }
+
 .website-feed-endpoints,
 .website-feed-focus,
 .website-feed-mapping {
