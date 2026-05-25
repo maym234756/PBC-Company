@@ -161,6 +161,9 @@ export type ServiceOrderActionRequest =
       unitLabel: string;
       description: string;
       technician: string;
+      jobCode: string;
+      recommendations: string;
+      resolution: string;
     }
   | {
       mode: "updateJob";

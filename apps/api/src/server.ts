@@ -1843,8 +1843,11 @@ const serviceOrderDetailActionSchema = z.discriminatedUnion("mode", [
     actorUserId: z.string().trim().min(1),
     title: z.string().trim().max(120).default(""),
     unitLabel: z.string().trim().max(160).default(""),
-    description: z.string().trim().max(400).default(""),
-    technician: z.string().trim().max(120).default("")
+    description: z.string().trim().max(2000).default(""),
+    technician: z.string().trim().max(120).default(""),
+    jobCode: z.string().trim().max(40).default(""),
+    recommendations: z.string().trim().max(2000).default(""),
+    resolution: z.string().trim().max(2000).default("")
   }),
   z.object({
     mode: z.literal("updateJob"),
@@ -4444,7 +4447,10 @@ function mapServiceOrderMutation(
         title: mutation.title,
         unitLabel: mutation.unitLabel,
         description: mutation.description,
-        technician: mutation.technician
+        technician: mutation.technician,
+        jobCode: mutation.jobCode,
+        recommendations: mutation.recommendations,
+        resolution: mutation.resolution
       };
     case "updateJob":
       return {

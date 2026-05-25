@@ -292,6 +292,9 @@ export type ServiceOrderDetailMutation =
       unitLabel: string;
       description: string;
       technician: string;
+      jobCode: string;
+      recommendations: string;
+      resolution: string;
     }
   | {
       mode: "updateJob";
@@ -546,9 +549,9 @@ export function applyServiceOrderDetailMutation(
         warranty: "",
         appliance: "",
         description: mutation.description.trim(),
-        resolution: "",
-        recommendations: "",
-        jobCode: "",
+        resolution: (mutation.resolution ?? "").trim(),
+        recommendations: (mutation.recommendations ?? "").trim(),
+        jobCode: (mutation.jobCode ?? "").trim(),
         technician: mutation.technician.trim(),
         laborRate: "",
         chargeBy: "",

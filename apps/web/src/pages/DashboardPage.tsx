@@ -4831,6 +4831,9 @@ function renderWorkspace(
       unitLabel: string;
       description: string;
       technician: string;
+      jobCode: string;
+      recommendations: string;
+      resolution: string;
     }) => Promise<boolean>;
     onDeleteJob: (jobId: string) => Promise<boolean>;
     onCloseLabor: (payload: { jobId: string; lineIndex: number; actorName: string }) => Promise<boolean>;
@@ -10270,6 +10273,9 @@ interface ServiceRepairWorkbenchProps extends ServiceUtilityInlinePanelProps {
     unitLabel: string;
     description: string;
     technician: string;
+    jobCode: string;
+    recommendations: string;
+    resolution: string;
   }) => Promise<boolean>;
   onDeleteJob: (jobId: string) => Promise<boolean>;
   onRemovePart: (jobId: string, partNumber: string) => Promise<boolean>;
@@ -10388,6 +10394,20 @@ function buildServiceCustomerLookupOptions(rows: ServiceWorkspaceRow[]): Service
   return Array.from(options.values()).sort((left, right) => left.customerName.localeCompare(right.customerName));
 }
 
+
+const STANDARD_JOB_TEMPLATES = [
+  { code: "100HR", title: "100-Hour Service", description: "Perform full 100-hour preventive maintenance service per manufacturer spec.", recommendation: "Change engine oil, gear lube, fuel filters, spark plugs, and inspect impeller.", resolution: "" },
+  { code: "ANNL", title: "Annual Service", description: "Comprehensive annual service including all fluid changes and safety inspection.", recommendation: "Full fluid service, belt inspection, battery test, bilge pump test, fire extinguisher check.", resolution: "" },
+  { code: "INSP", title: "Winterization", description: "Winterize engine, raw water system, and install antifreeze.", recommendation: "Fog cylinders, change lower unit oil, fill raw water with antifreeze, shrink-wrap if requested.", resolution: "" },
+  { code: "DEWIN", title: "Dewinterization", description: "Remove winterization, inspect and commission vessel for spring season.", recommendation: "Flush antifreeze, inspect impeller, check zincs, test all electronics and bilge.", resolution: "" },
+  { code: "IMPEL", title: "Impeller Replacement", description: "Remove and replace water pump impeller.", recommendation: "Inspect pump housing, replace O-rings and seals as needed.", resolution: "" },
+  { code: "TRIML", title: "Trim/Tilt Service", description: "Service power trim and tilt system, check fluid level and seals.", recommendation: "Change ATF fluid, inspect cylinders for corrosion.", resolution: "" },
+  { code: "BATT", title: "Battery Service", description: "Test and service battery bank, inspect connections and cables.", recommendation: "Load-test all batteries, clean terminals, check charging system output.", resolution: "" },
+  { code: "PROP", title: "Propeller Inspection/Repair", description: "Remove, inspect, and reinstall or replace propeller.", recommendation: "Check hub, straighten or replace blades as needed, re-torque nut.", resolution: "" },
+  { code: "TRLR", title: "Trailer Inspection", description: "Full trailer safety and bearing inspection.", recommendation: "Repack wheel bearings, inspect lights, check tire pressure and brake operation.", resolution: "" },
+  { code: "DIAG", title: "Diagnostic / Check Engine", description: "Connect diagnostic computer and retrieve fault codes, perform root cause analysis.", recommendation: "Document all fault codes, perform guided diagnostics per OEM service manual.", resolution: "" },
+] as const;
+
 function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
   const { activityEntries, entries, selectedServiceRow, serviceDetail, servicePartCatalog, updatingServiceDetailKey } = props;
   const [activeTab, setActiveTab] = useState<ServiceWorkbenchTab>("general");
@@ -10424,6 +10444,7 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
   const [isEditSessionOpen, setIsEditSessionOpen] = useState(false);
   const [isAddCloseoutSessionOpen, setIsAddCloseoutSessionOpen] = useState(false);
   const [isTimeClockOpen, setIsTimeClockOpen] = useState(false);
+  const [isStandardJobsOpen, setIsStandardJobsOpen] = useState(false);
 
   useEffect(() => {
     setActiveTab("general");
@@ -10438,6 +10459,7 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
     setIsEditSessionOpen(false);
     setIsAddCloseoutSessionOpen(false);
     setIsTimeClockOpen(false);
+    setIsStandardJobsOpen(false);
   }, [selectedServiceRow?.id]);
 
   useEffect(() => {
@@ -11483,7 +11505,10 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
                   title: "",
                   unitLabel: "",
                   description: "",
-                  technician: ""
+                  technician: "",
+                  jobCode: "",
+                  recommendations: "",
+                  resolution: ""
                 });
 
                 if (created) {
@@ -11512,11 +11537,54 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
             >
               Delete Job
             </button>
-            <button className="legacy-task-status-button" type="button">Standard Jobs</button>
+            <button
+              className={`legacy-task-status-button${isStandardJobsOpen ? " is-active" : ""}`}
+              onClick={() => setIsStandardJobsOpen((prev) => !prev)}
+              type="button"
+            >
+              Standard Jobs
+            </button>
             <button className="legacy-task-status-button" type="button">Labor Requests</button>
             <button className="legacy-task-status-button" type="button">Send Job for Approval</button>
             <button className="legacy-task-status-button" type="button">Create Std Job</button>
           </div>
+          {isStandardJobsOpen && (
+            <div className="legacy-standard-jobs-picker">
+              <div className="legacy-service-pane-header">
+                <h4>Standard Jobs Library</h4>
+                <span>Select a template to create a new pre-filled job</span>
+              </div>
+              <div className="legacy-standard-jobs-grid">
+                {STANDARD_JOB_TEMPLATES.map((template) => (
+                  <button
+                    className="legacy-standard-job-card"
+                    disabled={isMutatingServiceDetail}
+                    key={template.code}
+                    onClick={async () => {
+                      const created = await props.onCreateJob({
+                        title: template.title,
+                        unitLabel: "",
+                        jobCode: template.code,
+                        description: template.description,
+                        recommendations: template.recommendation,
+                        resolution: template.resolution,
+                        technician: ""
+                      });
+                      if (created) {
+                        setIsStandardJobsOpen(false);
+                        setActiveWorkSubTab("jobGeneral");
+                      }
+                    }}
+                    type="button"
+                  >
+                    <span className="legacy-std-job-code">{template.code}</span>
+                    <span className="legacy-std-job-title">{template.title}</span>
+                    <span className="legacy-std-job-desc">{template.description}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="legacy-service-work-detail-shell">
             <div className="legacy-service-work-subtabs" role="tablist" aria-label={`${recordLabel} job tabs`}>
               {serviceWorkSubTabs.map((tab) => (
