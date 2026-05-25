@@ -55,6 +55,9 @@ model Store {
   serviceOrders ServiceOrder[]
   partsLines    PartsOrderLine[]
   websiteFeeds  WebsiteFeed[]
+  vendors         Vendor[]
+  pricingRules    PricingRule[]
+  approvalRequests ApprovalRequest[]
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 }
@@ -311,4 +314,55 @@ model StoreTaskSlaPolicy {
 
   @@unique([storeId, workspaceId, action])
   @@index([storeId, workspaceId, updatedAt])
+}
+
+model Vendor {
+  id          String   @id @default(cuid())
+  name        String
+  contact     String
+  phone       String
+  email       String
+  terms       String
+  leadDays    Int      @default(5)
+  notes       String
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([storeId, name])
+}
+
+model PricingRule {
+  id            String   @id @default(cuid())
+  category      String
+  costMin       Int      @default(0)
+  costMax       Int      @default(9999)
+  markupPct     Int      @default(30)
+  retailMethod  String   @default("Cost + Markup")
+  minMarginPct  Int      @default(20)
+  storeId       String
+  store         Store    @relation(fields: [storeId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([storeId, category])
+}
+
+model ApprovalRequest {
+  id           String   @id @default(cuid())
+  type         String
+  reference    String
+  requestedBy  String
+  impact       String
+  status       String   @default("Pending")
+  reason       String
+  reviewedBy   String?
+  reviewNote   String?
+  storeId      String
+  store        Store    @relation(fields: [storeId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([storeId, status, createdAt])
 }

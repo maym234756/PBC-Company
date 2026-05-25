@@ -1045,6 +1045,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const [isDashboardLoading, setIsDashboardLoading] = useState(true);
   const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [portalPreviewMode, setPortalPreviewMode] = useState<{ roNumber: string; customerName: string } | null>(null);
   const [isStorePickerOpen, setIsStorePickerOpen] = useState(false);
   const [openWindowsContextMenu, setOpenWindowsContextMenu] = useState<OpenWindowsContextMenuState | null>(null);
   const [quickLaunchContextMenu, setQuickLaunchContextMenu] = useState<QuickLaunchContextMenuState | null>(null);
@@ -3695,6 +3696,36 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
 
   return (
     <div className="dashboard-screen legacy-dashboard">
+      {portalPreviewMode && (
+        <div className="legacy-portal-full-page">
+          <div className="legacy-portal-full-header">
+            <div className="legacy-portal-full-logo">⚓ Premier Marine</div>
+            <span className="legacy-portal-full-title">Service Status</span>
+            <button className="legacy-task-status-button" onClick={() => setPortalPreviewMode(null)} type="button">✕ Exit Preview</button>
+          </div>
+          <div className="legacy-portal-full-body">
+            <div className="legacy-portal-full-card">
+              <div className="legacy-portal-preview-label">Your Repair Order</div>
+              <div style={{ fontSize: "1.4rem", fontWeight: 800, margin: "6px 0" }}>#{portalPreviewMode.roNumber}</div>
+              <div style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.88rem" }}>{portalPreviewMode.customerName}</div>
+              <div className="legacy-portal-status-bar">
+                {["Received", "Diagnosed", "In Progress", "Ready", "Complete"].map((step, i) => (
+                  <div key={step} className={`legacy-portal-status-step${i <= 2 ? " is-done" : ""}`}>
+                    <div className="legacy-portal-status-dot" />
+                    <span>{step}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="legacy-portal-full-card">
+              <div className="legacy-portal-preview-label">Need Help?</div>
+              <div style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.6)", marginTop: 6 }}>Call us: (800) 555-0100<br />Mon–Fri 8am–5pm CST</div>
+            </div>
+          </div>
+        </div>
+      )}
+      {!portalPreviewMode && (
+        <Fragment>
       <header
         className={`legacy-app-frame${isQuickLaunchStripDropTarget ? " is-drop-target" : ""}`}
         onDragLeave={handleQuickLaunchStripDragLeave}
@@ -4136,6 +4167,10 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                   <option value="tech">Tech</option>
                   <option value="writer">Writer</option>
                 </select>
+                {/* Session indicator — compact, non-intrusive */}
+                <span className="legacy-session-indicator" title="Session active">
+                  🔒 {session.user.name}
+                </span>
                 <div className="legacy-notif-bell-wrap">
                   <button
                     className="legacy-notif-bell"
@@ -4488,7 +4523,8 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                         inventoryToolRequest: partsInventoryToolRequest,
                         purchasePadRows,
                         workspaceView: partsWorkspaceView
-                      }
+                      },
+                      (roNumber, customerName) => { setPortalPreviewMode({ roNumber, customerName }); }
                     )
                   )}
 
@@ -4610,6 +4646,8 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
           </div>
         </>
       )}
+      </Fragment>
+    )}
     </div>
   );
 }
@@ -4652,6 +4690,13 @@ function ServiceQueueBoard({
   const [editingCell, setEditingCell] = useState<ServiceQueueEditingCell | null>(null);
   const [draftValue, setDraftValue] = useState("");
   const [isScheduleView, setIsScheduleView] = useState(false);
+  const [isTechView, setIsTechView] = useState(false);
+  const SAVED_SEARCHES_KEY = "legacySavedSearches_serviceQueue";
+  const [savedSearches, setSavedSearches] = useState<Array<{ id: string; label: string; term: string; filter: string }>>(() => {
+    try { return JSON.parse(localStorage.getItem(SAVED_SEARCHES_KEY) ?? "[]"); } catch { return []; }
+  });
+  const [isSaveSearchOpen, setIsSaveSearchOpen] = useState(false);
+  const [saveSearchDraft, setSaveSearchDraft] = useState("");
   const serviceNotificationsByRo = groupServiceNotificationsByRo(serviceNotificationEntries);
   const noteEditorRow = editingCell?.field === "note" ? rows.find((candidate) => candidate.id === editingCell.rowId) ?? null : null;
   const filterOptions = buildFilterOptions(rows.map((row) => row.roStatus));
@@ -4736,6 +4781,9 @@ function ServiceQueueBoard({
         <button className="legacy-task-status-button" onClick={() => setIsScheduleView((s) => !s)} type="button">
           {isScheduleView ? "📋 List View" : "📅 Schedule"}
         </button>
+        <button className="legacy-task-status-button" onClick={() => setIsTechView((t) => !t)} type="button">
+          {isTechView ? "📋 Standard View" : "📱 Tech View"}
+        </button>
         <button className="legacy-task-status-button" onClick={() => exportServiceQueueCsv(filteredRows)} type="button">Export CSV</button>
       </div>
 
@@ -4769,6 +4817,63 @@ function ServiceQueueBoard({
         searchTerm={searchState.searchTerm}
       />
 
+      <div className="legacy-saved-searches-row">
+        <button
+          className="legacy-task-status-button"
+          onClick={() => setIsSaveSearchOpen((v) => !v)}
+          type="button"
+        >
+          💾 Save Search
+        </button>
+        {savedSearches.map((s) => (
+          <span className="legacy-saved-search-chip" key={s.id}>
+            <button
+              className="legacy-saved-search-chip"
+              onClick={() => { onSearchChange(s.term); onFilterChange(s.filter); }}
+              type="button"
+            >
+              {s.label}
+            </button>
+            <button
+              className="legacy-saved-search-remove"
+              onClick={() => {
+                const updated = savedSearches.filter((x) => x.id !== s.id);
+                setSavedSearches(updated);
+                localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(updated));
+              }}
+              type="button"
+            >
+              ✕
+            </button>
+          </span>
+        ))}
+        {isSaveSearchOpen && (
+          <span className="legacy-save-search-inline">
+            <input
+              autoFocus
+              onChange={(e) => setSaveSearchDraft(e.target.value)}
+              placeholder="Label for this search…"
+              type="text"
+              value={saveSearchDraft}
+            />
+            <button
+              className="legacy-task-status-button"
+              onClick={() => {
+                if (!saveSearchDraft.trim()) return;
+                const updated = [...savedSearches, { id: Date.now().toString(), label: saveSearchDraft.trim(), term: searchState.searchTerm, filter: searchState.filterValue }];
+                setSavedSearches(updated);
+                localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(updated));
+                setSaveSearchDraft("");
+                setIsSaveSearchOpen(false);
+              }}
+              type="button"
+            >
+              Save
+            </button>
+          </span>
+        )}
+      </div>
+
       <div className="legacy-service-quick-filter-row" aria-label="Service queue quick filters">
         {serviceQueueQuickFilterDefinitions.map((filterDefinition) => {
           const count = rows.filter(filterDefinition.matches).length;
@@ -4799,7 +4904,26 @@ function ServiceQueueBoard({
       </div>
 
       <div className="legacy-grid-shell">
-        {isScheduleView ? (() => {
+        {isTechView ? (
+          <div className="legacy-tech-view-grid">
+            {filteredRows.map(row => (
+              <button
+                className={`legacy-tech-view-card${selectedRow?.id === row.id ? " is-selected" : ""}`}
+                key={row.id}
+                onClick={() => onSelectRow(row)}
+                type="button"
+              >
+                <div className="legacy-tech-view-ro">RO #{row.roNumber}</div>
+                <div className="legacy-tech-view-customer">{row.customerName}</div>
+                <div className="legacy-tech-view-meta">
+                  <span>{row.model}</span>
+                  <span className={`legacy-chip tone-${row.tone}`}>{row.roStatus}</span>
+                </div>
+                <div className="legacy-tech-view-writer">{row.serviceWriter}</div>
+              </button>
+            ))}
+          </div>
+        ) : isScheduleView ? (() => {
           const today = new Date();
           const dayOfWeek = today.getDay();
           const monday = new Date(today);
@@ -5320,7 +5444,8 @@ function renderWorkspace(
     inventoryToolRequest: PartsInventoryToolRequest | null;
     purchasePadRows: PartsWorkspaceRow[];
     workspaceView: PartsWorkspaceView;
-  }
+  },
+  onOpenPortalPreview: (roNumber: string, customerName: string) => void
 ) {
   switch (activeWorkspaceId) {
     case "sales": {
@@ -5441,6 +5566,7 @@ function renderWorkspace(
             updatingServiceDetailKey={taskControls.updatingServiceDetailKey}
             updatingTaskId={taskControls.updatingTaskId}
             userRole={taskControls.userRole}
+            onOpenPortalPreview={onOpenPortalPreview}
           />
         </div>
       );
@@ -10974,6 +11100,7 @@ interface ServiceRepairWorkbenchProps extends ServiceUtilityInlinePanelProps {
   servicePartCatalog: ServiceOrderPartCatalogEntry[];
   updatingServiceDetailKey: string | null;
   userRole: "admin" | "manager" | "tech" | "writer";
+  onOpenPortalPreview: (roNumber: string, customerName: string) => void;
 }
 
 function readWorkbenchFormText(formData: FormData, key: string) {
@@ -11059,6 +11186,8 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
   const [isJobGeneralDirty, setIsJobGeneralDirty] = useState(false);
   const [isUnitSearchOpen, setIsUnitSearchOpen] = useState(false);
   const [unitSearchTerm, setUnitSearchTerm] = useState("");
+  const [vinHinInput, setVinHinInput] = useState("");
+  const [vinHinDecoded, setVinHinDecoded] = useState<{ year: string; make: string; type: string } | null>(null);
   const [jobUnitDraft, setJobUnitDraft] = useState(selectedJobForDraft?.unitLabel ?? "");
   const [customerToolMode, setCustomerToolMode] = useState<"edit" | "search" | null>(null);
   const [customerSearchTerm, setCustomerSearchTerm] = useState("");
@@ -11912,6 +12041,49 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
                       ))
                     ) : (
                       <p>No matching customer units found.</p>
+                    )}
+                  </div>
+                  <div className="legacy-vin-decoder">
+                    <div className="legacy-vin-decoder-label">Decode VIN / HIN</div>
+                    <input
+                      className="legacy-vin-decoder-input"
+                      maxLength={17}
+                      onChange={(e) => {
+                        const val = e.target.value.toUpperCase();
+                        setVinHinInput(val);
+                        const wmiLookup: Record<string, string> = {
+                          "1HD": "Harley-Davidson", "1YAM": "Yamaha", "JS1": "Suzuki",
+                          "YAM": "Yamaha Marine", "SER": "Sea Ray", "MER": "Mercury Marine",
+                          "GRG": "Grady-White", "BRG": "Boston Whaler", "SMK": "Smoker Craft",
+                          "LWA": "Lund Boats"
+                        };
+                        const vinYearMap: Record<string, string> = {
+                          "A":"1980","B":"1981","C":"1982","D":"1983","E":"1984","F":"1985","G":"1986","H":"1987",
+                          "J":"1988","K":"1989","L":"2020","M":"2021","N":"2022","P":"2023","R":"2024","S":"2025","T":"2026",
+                          "V":"1997","W":"1998","X":"1999","Y":"2000","1":"2001","2":"2002","3":"2003",
+                          "4":"2004","5":"2005","6":"2006","7":"2007","8":"2008","9":"2009"
+                        };
+                        if (val.length === 17 || val.length === 12) {
+                          const wmiKey = Object.keys(wmiLookup).find(k => val.startsWith(k));
+                          const make = wmiKey ? wmiLookup[wmiKey] : val.slice(0, 3);
+                          const yearChar = val.length === 17 ? val[9] : val[9] ?? "";
+                          const year = (yearChar && vinYearMap[yearChar]) ? vinYearMap[yearChar] : "Unknown";
+                          const type = val.length === 12 ? "Boat (HIN)" : "Vehicle (VIN)";
+                          setVinHinDecoded({ year, make, type });
+                        } else {
+                          setVinHinDecoded(null);
+                        }
+                      }}
+                      placeholder="Enter 17-char VIN or 12-char HIN"
+                      type="text"
+                      value={vinHinInput}
+                    />
+                    {vinHinDecoded && (
+                      <div className="legacy-vin-decoded-chips">
+                        <span className="legacy-chip tone-neutral">{vinHinDecoded.type}</span>
+                        <span className="legacy-chip tone-stable">Year: {vinHinDecoded.year}</span>
+                        <span className="legacy-chip tone-neutral">Make: {vinHinDecoded.make}</span>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -12858,6 +13030,28 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
         URL.revokeObjectURL(url);
       }
 
+      function exportQuickBooksJournal(m: ServiceWorkbenchModel) {
+        const date = new Date().toLocaleDateString("en-US");
+        const lines: string[] = [
+          "!TRNS\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tMEMO",
+          "!SPL\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tMEMO",
+          "!ENDTRNS",
+          `TRNS\tINVOICE\t${date}\tAccounts Receivable\t${m.customerAddress[0] ?? "Customer"}\t${m.totals.totalDue.toFixed(2)}\tRO #${m.roNumber}`,
+          `SPL\tINVOICE\t${date}\tService Revenue\t${m.customerAddress[0] ?? "Customer"}\t-${m.totals.labor.toFixed(2)}\tLabor`,
+          `SPL\tINVOICE\t${date}\tParts Revenue\t${m.customerAddress[0] ?? "Customer"}\t-${m.totals.parts.toFixed(2)}\tParts`,
+          `SPL\tINVOICE\t${date}\tSales Tax Payable\t${m.customerAddress[0] ?? "Customer"}\t-${m.totals.salesTax.toFixed(2)}\tSales Tax`,
+          "ENDTRNS"
+        ];
+        const iif = lines.join("\n");
+        const blob = new Blob([iif], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `RO-${m.roNumber}-journal.iif`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+
       paneContent = (
         <div className="legacy-service-tab-screen">
           <div className="legacy-invoice-layout" style={{ padding: "16px", overflowY: "auto" }}>
@@ -12899,6 +13093,7 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
                 <button className="legacy-task-status-button" disabled={props.userRole !== "admin" && props.userRole !== "manager"} onClick={() => handleInvoiceStatus("Voided")} type="button">Void</button>
                 <button className="legacy-task-status-button" onClick={() => window.print()} type="button">Print</button>
                 <button className="legacy-task-status-button" onClick={() => exportInvoiceCsv(model)} type="button">Export CSV</button>
+                <button className="legacy-task-status-button" onClick={() => exportQuickBooksJournal(model)} type="button">QB Export</button>
                 <button className="legacy-task-status-button" onClick={() => { setIsCloseoutOpen((o) => !o); setCloseoutStep(0); }} type="button">📋 Close RO</button>
               </div>
               {isPaymentOpen && (
@@ -13841,6 +14036,13 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
           type="button"
         >
           🚤 Portal Preview
+        </button>
+        <button
+          className="legacy-task-status-button"
+          onClick={() => props.onOpenPortalPreview(model.roNumber, selectedServiceRow?.customerName ?? "")}
+          type="button"
+        >
+          🌐 Full Portal View
         </button>
       </div>
       <div className="legacy-service-workbench-tabs" role="tablist" aria-label={`${recordLabel} tabs`}>
@@ -15099,6 +15301,8 @@ function PartsInventoryBoard({ onOpenDetail, onSelectRow, onSendToPurchasePad, r
   const [adjustmentLog, setAdjustmentLog] = useState<Array<{ partNumber: string; type: string; qty: number; reason: string; ts: string }>>([]);
   const adjustmentLogCount = adjustmentLog.length;
   const [isCycleCountMode, setIsCycleCountMode] = useState(false);
+  const [isReorderPoOpen, setIsReorderPoOpen] = useState(false);
+  const [reorderPoPreview, setReorderPoPreview] = useState<Array<{ supplier: string; partCount: number }>>([]);
   const [countedPartIds, setCountedPartIds] = useState<Set<string>>(new Set());
   const gridWrapRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -15559,7 +15763,35 @@ function PartsInventoryBoard({ onOpenDetail, onSelectRow, onSendToPurchasePad, r
           <span className="legacy-parts-reorder-banner-text">⚠ {reorderRows.length} part(s) are below minimum stock.</span>
           <div className="legacy-parts-reorder-banner-actions">
             <button className="legacy-task-status-button" onClick={() => setSearchTerm("")} type="button">View All</button>
+            <button className="legacy-task-status-button" onClick={() => {
+              const bySupplier = reorderRows.reduce<Record<string, number>>((acc, row) => {
+                acc[row.supplier] = (acc[row.supplier] ?? 0) + 1;
+                return acc;
+              }, {});
+              setReorderPoPreview(Object.entries(bySupplier).map(([supplier, partCount]) => ({ supplier, partCount })));
+              setIsReorderPoOpen(true);
+            }} type="button">Generate Reorder POs</button>
           </div>
+        </div>
+      )}
+      {isReorderPoOpen && (
+        <div className="legacy-reorder-po-panel">
+          <div className="legacy-reorder-po-header">
+            <span>Reorder PO Preview</span>
+            <button className="legacy-task-status-button" onClick={() => setIsReorderPoOpen(false)} type="button">✕</button>
+          </div>
+          {reorderPoPreview.map(({ supplier, partCount }) => (
+            <div className="legacy-reorder-po-row" key={supplier}>
+              <span>{supplier}</span>
+              <span>{partCount} part{partCount === 1 ? "" : "s"}</span>
+            </div>
+          ))}
+          <button className="legacy-task-status-button" onClick={() => {
+            const count = reorderPoPreview.length;
+            setIsReorderPoOpen(false);
+            setReorderPoPreview([]);
+            setActionNotice(`${count} reorder PO${count === 1 ? "" : "s"} generated.`);
+          }} type="button">Confirm &amp; Generate</button>
         </div>
       )}
       <section className="legacy-info-card legacy-parts-inventory-search">
@@ -19998,7 +20230,55 @@ function SystemHealthPanel() {
   );
 }
 // ─── Report Center Workspace ───────────────────────────────────────────────────
-type ReportCenterSection = "reports" | "vendors" | "pricing" | "campaigns" | "audit" | "approvals" | "documents" | "tasks" | "exceptions" | "data-tools" | "preferences" | "system-health";
+type ReportCenterSection = "reports" | "vendors" | "pricing" | "campaigns" | "audit" | "approvals" | "documents" | "tasks" | "exceptions" | "data-tools" | "preferences" | "system-health" | "notifications";
+
+function NotificationTemplatesPanel() {
+  const templates = [
+    { id: "svc-reminder", name: "Service Reminder", channel: ["Email", "SMS"] as string[], subject: "Your boat service is due", body: "Hi {{customer}}, your {{unit}} is due for service. Please call us at {{phone}} to schedule." },
+    { id: "payment-receipt", name: "Payment Receipt", channel: ["Email"] as string[], subject: "Payment received — Thank you!", body: "Hi {{customer}}, we received your payment of {{amount}} for RO #{{roNumber}}. Thank you!" },
+    { id: "approval-request", name: "Approval Request", channel: ["Email"] as string[], subject: "Approval Required: {{type}}", body: "Hi {{approver}}, your approval is needed for {{reference}}. Reason: {{reason}}." },
+    { id: "esig-request", name: "eSignature Request", channel: ["Email", "SMS"] as string[], subject: "Please sign: {{docType}}", body: "Hi {{customer}}, please review and sign your {{docType}} at: {{link}}" },
+  ];
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, { subject: string; body: string; fromName: string; replyTo: string }>>({});
+  const [notice, setNotice] = useState("");
+  function getDraft(t: typeof templates[0]) {
+    return drafts[t.id] ?? { subject: t.subject, body: t.body, fromName: "Premier Marine", replyTo: "service@premiermarinedemo.com" };
+  }
+  return (
+    <div style={{ overflow: "auto", padding: 16 }}>
+      {notice && <div className="legacy-workbench-notice" onClick={() => setNotice("")}>{notice}</div>}
+      <div className="legacy-notif-template-grid">
+        {templates.map(t => {
+          const draft = getDraft(t);
+          const isEditing = editingId === t.id;
+          return (
+            <div className="legacy-notif-template-card" key={t.id}>
+              <div className="legacy-notif-template-name">{t.name}</div>
+              <div className="legacy-notif-template-channels">
+                {t.channel.map(c => <span className="legacy-chip tone-neutral" key={c}>{c}</span>)}
+              </div>
+              <div className="legacy-notif-template-preview">{draft.body.slice(0, 60)}…</div>
+              <button className="legacy-task-status-button" onClick={() => setEditingId(isEditing ? null : t.id)} type="button">{isEditing ? "▲ Close" : "Edit Template"}</button>
+              {isEditing && (
+                <div className="legacy-notif-template-edit">
+                  <label className="legacy-notif-template-field"><span>Subject</span><input onChange={e => setDrafts(d => ({ ...d, [t.id]: { ...getDraft(t), subject: e.target.value } }))} value={draft.subject} /></label>
+                  <label className="legacy-notif-template-field"><span>Body</span><textarea onChange={e => setDrafts(d => ({ ...d, [t.id]: { ...getDraft(t), body: e.target.value } }))} value={draft.body} /></label>
+                  <label className="legacy-notif-template-field"><span>From Name</span><input onChange={e => setDrafts(d => ({ ...d, [t.id]: { ...getDraft(t), fromName: e.target.value } }))} value={draft.fromName} /></label>
+                  <label className="legacy-notif-template-field"><span>Reply-To</span><input onChange={e => setDrafts(d => ({ ...d, [t.id]: { ...getDraft(t), replyTo: e.target.value } }))} value={draft.replyTo} /></label>
+                  <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                    <button className="legacy-task-status-button" onClick={() => setNotice(`Test notification sent to ${draft.replyTo}.`)} type="button">Send Test</button>
+                    <button className="legacy-task-status-button" onClick={() => { setDrafts(d => ({ ...d, [t.id]: draft })); setNotice("Template saved."); }} type="button">Save Template</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function ReportCenterWorkspace({ auditLog }: { auditLog: CommandLogEntry[] }) {
   const reports = [
@@ -20030,6 +20310,7 @@ function ReportCenterWorkspace({ auditLog }: { auditLog: CommandLogEntry[] }) {
     { id: "data-tools", label: "Data Tools", group: "Admin" },
     { id: "preferences", label: "Preferences" },
     { id: "system-health", label: "System Health" },
+    { id: "notifications", label: "Notifications" },
   ];
 
   return (
@@ -20085,6 +20366,7 @@ function ReportCenterWorkspace({ auditLog }: { auditLog: CommandLogEntry[] }) {
         {activeSection === "data-tools" && <DataToolsPanel />}
         {activeSection === "preferences" && <NotificationPreferencesPanel />}
         {activeSection === "system-health" && <SystemHealthPanel />}
+        {activeSection === "notifications" && <NotificationTemplatesPanel />}
         {activeSection === "audit" && (
           <div style={{ padding: 16, overflow: "auto" }}>
             <div style={{ alignItems: "center", display: "flex", gap: 10, marginBottom: 12 }}>

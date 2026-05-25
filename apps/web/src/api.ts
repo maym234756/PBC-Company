@@ -602,6 +602,42 @@ export async function runTaskSlaPolicyAction(storeId: string, payload: TaskSlaPo
   });
 }
 
+export async function getVendors(storeId: string): Promise<unknown[]> {
+  const response = await fetch(`/api/stores/${storeId}/vendors`);
+  if (!response.ok) throw new Error("Failed to fetch vendors");
+  return response.json() as Promise<unknown[]>;
+}
+
+export async function createVendor(storeId: string, data: { name: string; contact: string; phone: string; email: string; terms: string; leadDays: number; notes: string }): Promise<unknown> {
+  const response = await fetch(`/api/stores/${storeId}/vendors`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+  if (!response.ok) throw new Error("Failed to create vendor");
+  return response.json();
+}
+
+export async function updateVendor(storeId: string, vendorId: string, data: Partial<{ name: string; contact: string; phone: string; email: string; terms: string; leadDays: number; notes: string }>): Promise<unknown> {
+  const response = await fetch(`/api/stores/${storeId}/vendors/${vendorId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+  if (!response.ok) throw new Error("Failed to update vendor");
+  return response.json();
+}
+
+export async function getPricingRules(storeId: string): Promise<unknown[]> {
+  const response = await fetch(`/api/stores/${storeId}/pricing-rules`);
+  if (!response.ok) throw new Error("Failed to fetch pricing rules");
+  return response.json() as Promise<unknown[]>;
+}
+
+export async function getApprovals(storeId: string): Promise<unknown[]> {
+  const response = await fetch(`/api/stores/${storeId}/approvals`);
+  if (!response.ok) throw new Error("Failed to fetch approvals");
+  return response.json() as Promise<unknown[]>;
+}
+
+export async function updateApproval(storeId: string, approvalId: string, data: { status: string; reviewedBy?: string; reviewNote?: string }): Promise<unknown> {
+  const response = await fetch(`/api/stores/${storeId}/approvals/${approvalId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+  if (!response.ok) throw new Error("Failed to update approval");
+  return response.json();
+}
+
 async function request<T>(path: string, init?: RequestInit) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,

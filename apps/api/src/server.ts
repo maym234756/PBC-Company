@@ -2211,6 +2211,25 @@ app.post("/api/auth/login", async (request, response) => {
   });
 });
 
+app.post("/api/auth/logout", (_request, response) => {
+  response.json({ ok: true, message: "Logged out" });
+});
+
+app.get("/api/auth/me", async (request, response) => {
+  const authHeader = request.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    response.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const userId = authHeader.slice(7);
+  const user = await prisma.user.findUnique({ where: { id: userId }, include: { dealerGroup: true } });
+  if (!user) {
+    response.status(401).json({ error: "User not found" });
+    return;
+  }
+  response.json({ id: user.id, name: user.name, email: user.email, role: "writer" });
+});
+
 app.get("/api/stores/:storeId/dashboard", async (request, response) => {
   const store = await prisma.store.findUnique({
     where: {
@@ -4085,6 +4104,81 @@ app.use(
 
 app.listen(port, () => {
   console.log(`Marine cloud API listening on http://localhost:${port}`);
+});
+
+// Vendors CRUD
+app.get("/api/stores/:storeId/vendors", async (request, response) => {
+  const { storeId } = request.params as { storeId: string };
+  const vendors = await prisma.vendor.findMany({ where: { storeId }, orderBy: { name: "asc" } });
+  response.json(vendors);
+});
+
+app.post("/api/stores/:storeId/vendors", async (request, response) => {
+  const { storeId } = request.params as { storeId: string };
+  const body = request.body as { name: string; contact: string; phone: string; email: string; terms: string; leadDays: number; notes: string };
+  const vendor = await prisma.vendor.create({ data: { ...body, storeId } });
+  response.json(vendor);
+});
+
+app.put("/api/stores/:storeId/vendors/:vendorId", async (request, response) => {
+  const { vendorId } = request.params as { storeId: string; vendorId: string };
+  const body = request.body as Partial<{ name: string; contact: string; phone: string; email: string; terms: string; leadDays: number; notes: string }>;
+  const vendor = await prisma.vendor.update({ where: { id: vendorId }, data: body });
+  response.json(vendor);
+});
+
+app.delete("/api/stores/:storeId/vendors/:vendorId", async (request, response) => {
+  const { vendorId } = request.params as { storeId: string; vendorId: string };
+  await prisma.vendor.delete({ where: { id: vendorId } });
+  response.json({ ok: true });
+});
+
+// Pricing Rules CRUD
+app.get("/api/stores/:storeId/pricing-rules", async (request, response) => {
+  const { storeId } = request.params as { storeId: string };
+  const rules = await prisma.pricingRule.findMany({ where: { storeId }, orderBy: { category: "asc" } });
+  response.json(rules);
+});
+
+app.post("/api/stores/:storeId/pricing-rules", async (request, response) => {
+  const { storeId } = request.params as { storeId: string };
+  const body = request.body as { category: string; costMin: number; costMax: number; markupPct: number; retailMethod: string; minMarginPct: number };
+  const rule = await prisma.pricingRule.create({ data: { ...body, storeId } });
+  response.json(rule);
+});
+
+app.put("/api/stores/:storeId/pricing-rules/:ruleId", async (request, response) => {
+  const { ruleId } = request.params as { storeId: string; ruleId: string };
+  const body = request.body as Partial<{ category: string; costMin: number; costMax: number; markupPct: number; retailMethod: string; minMarginPct: number }>;
+  const rule = await prisma.pricingRule.update({ where: { id: ruleId }, data: body });
+  response.json(rule);
+});
+
+app.delete("/api/stores/:storeId/pricing-rules/:ruleId", async (request, response) => {
+  const { ruleId } = request.params as { storeId: string; ruleId: string };
+  await prisma.pricingRule.delete({ where: { id: ruleId } });
+  response.json({ ok: true });
+});
+
+// Approval Requests CRUD
+app.get("/api/stores/:storeId/approvals", async (request, response) => {
+  const { storeId } = request.params as { storeId: string };
+  const approvals = await prisma.approvalRequest.findMany({ where: { storeId }, orderBy: { createdAt: "desc" } });
+  response.json(approvals);
+});
+
+app.post("/api/stores/:storeId/approvals", async (request, response) => {
+  const { storeId } = request.params as { storeId: string };
+  const body = request.body as { type: string; reference: string; requestedBy: string; impact: string; reason: string };
+  const approval = await prisma.approvalRequest.create({ data: { ...body, storeId, status: "Pending" } });
+  response.json(approval);
+});
+
+app.put("/api/stores/:storeId/approvals/:approvalId", async (request, response) => {
+  const { approvalId } = request.params as { storeId: string; approvalId: string };
+  const body = request.body as { status: string; reviewedBy?: string; reviewNote?: string };
+  const approval = await prisma.approvalRequest.update({ where: { id: approvalId }, data: body });
+  response.json(approval);
 });
 
 function formatMinutesAgo(date: Date) {
