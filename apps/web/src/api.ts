@@ -309,6 +309,13 @@ export type ServiceOrderActionRequest =
       actualHours: string;
       creditedHours: string;
       override: string;
+    }
+  | {
+      mode: "updateROHeader";
+      actorUserId: string;
+      purchaseOrder: string;
+      promisedDate: string;
+      closedDate: string;
     };
 
 export interface ServiceOrderActionResponse extends ServiceOrderDetailResponse {

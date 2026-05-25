@@ -4182,6 +4182,16 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                         onReturnToAuditCleanup: serviceReturnStore
                           ? () => returnToAuditCleanup(serviceReturnStore.id, requestedAuditCleanupStoreId)
                           : null,
+                        onUpdateROHeader: (payload) =>
+                          handleServiceOrderAction(
+                            {
+                              mode: "updateROHeader",
+                              actorUserId: session.user.id,
+                              ...payload
+                            },
+                            "Saving RO header...",
+                            "ro:header"
+                          ),
                         onUpdateQueueRow: handleServiceQueueRowUpdate,
                         onUpdateJob: (payload) =>
                           handleServiceOrderAction(
@@ -4852,6 +4862,7 @@ function renderWorkspace(
     }) => Promise<boolean>;
     onRemovePart: (jobId: string, partNumber: string) => Promise<boolean>;
     onReturnToAuditCleanup: (() => void) | null;
+    onUpdateROHeader: (payload: { purchaseOrder: string; promisedDate: string; closedDate: string }) => Promise<boolean>;
     onUpdateQueueRow: (row: ServiceWorkspaceRow) => Promise<boolean>;
     onUpdateCustomer: (payload: ServiceWorkbenchCustomerPayload) => Promise<boolean>;
     onUpdateJob: (payload: {
@@ -5036,6 +5047,7 @@ function renderWorkspace(
             onUpdateJob={taskControls.onUpdateJob}
             onUpdateNotes={taskControls.onUpdateNotes}
             onUpdateOrderType={taskControls.onUpdateOrderType}
+            onUpdateROHeader={taskControls.onUpdateROHeader}
             onUpdateStatus={taskControls.onUpdateStatus}
             onUpdateWarrantyClaim={taskControls.onUpdateWarrantyClaim}
             operators={taskControls.operators}
@@ -10279,6 +10291,7 @@ interface ServiceRepairWorkbenchProps extends ServiceUtilityInlinePanelProps {
   }) => Promise<boolean>;
   onDeleteJob: (jobId: string) => Promise<boolean>;
   onRemovePart: (jobId: string, partNumber: string) => Promise<boolean>;
+  onUpdateROHeader: (payload: { purchaseOrder: string; promisedDate: string; closedDate: string }) => Promise<boolean>;
   onCloseLabor: (payload: { jobId: string; lineIndex: number; actorName: string }) => Promise<boolean>;
   onReopenLabor: (payload: { jobId: string; lineIndex: number }) => Promise<boolean>;
   onDeleteLaborSession: (sessionIndex: number) => Promise<boolean>;
@@ -10445,6 +10458,9 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
   const [isAddCloseoutSessionOpen, setIsAddCloseoutSessionOpen] = useState(false);
   const [isTimeClockOpen, setIsTimeClockOpen] = useState(false);
   const [isStandardJobsOpen, setIsStandardJobsOpen] = useState(false);
+  const [addPartResetKey, setAddPartResetKey] = useState(0);
+  const [isEditingROHeader, setIsEditingROHeader] = useState(false);
+  const [roHeaderDraft, setROHeaderDraft] = useState({ purchaseOrder: "", promisedDate: "", closedDate: "" });
 
   useEffect(() => {
     setActiveTab("general");
@@ -10460,6 +10476,7 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
     setIsAddCloseoutSessionOpen(false);
     setIsTimeClockOpen(false);
     setIsStandardJobsOpen(false);
+    setIsEditingROHeader(false);
   }, [selectedServiceRow?.id]);
 
   useEffect(() => {
@@ -10695,28 +10712,25 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
             </div>
             <form
               className="workflow-form"
-              key={`${selectedJob.id}-add-part`}
-              onSubmit={(event) => {
+              key={`${selectedJob.id}-add-part-${addPartResetKey}`}
+              onSubmit={async (event) => {
                 event.preventDefault();
-                const form = event.currentTarget;
-                const formData = new FormData(form);
+                const formData = new FormData(event.currentTarget);
 
-                void props
-                  .onAddPart({
-                    jobId: selectedJob.id,
-                    partNumber: readWorkbenchFormText(formData, "partNumber"),
-                    description: readWorkbenchFormText(formData, "description"),
-                    supplier: readWorkbenchFormText(formData, "supplier"),
-                    available: readWorkbenchFormInteger(formData, "available"),
-                    price: readWorkbenchFormNumber(formData, "price"),
-                    quantity: Math.max(1, readWorkbenchFormInteger(formData, "quantity")),
-                    category: readWorkbenchFormText(formData, "category")
-                  })
-                  .then((saved) => {
-                    if (saved) {
-                      form.reset();
-                    }
-                  });
+                const saved = await props.onAddPart({
+                  jobId: selectedJob.id,
+                  partNumber: readWorkbenchFormText(formData, "partNumber"),
+                  description: readWorkbenchFormText(formData, "description"),
+                  supplier: readWorkbenchFormText(formData, "supplier"),
+                  available: readWorkbenchFormInteger(formData, "available"),
+                  price: readWorkbenchFormNumber(formData, "price"),
+                  quantity: Math.max(1, readWorkbenchFormInteger(formData, "quantity")),
+                  category: readWorkbenchFormText(formData, "category")
+                });
+
+                if (saved) {
+                  setAddPartResetKey((prev) => prev + 1);
+                }
               }}
             >
               <div className="workflow-grid">
@@ -12417,10 +12431,57 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
                     <LabelValue label="Service Writer" value={selectedServiceRow.serviceWriter} />
                     <LabelValue label="Category" value={selectedServiceRow.category} />
                     <LabelValue label="In Date" value={selectedServiceRow.inDate} />
-                    <LabelValue label="PO #" value={model.purchaseOrder} />
-                    <LabelValue label="Promised Date" value={model.promisedDate} />
-                    <LabelValue label="Closed Date" value={model.closedDate || "-"} />
+                    <div className="legacy-service-key-value-edit">
+                      <div>
+                        <LabelValue label="PO #" value={model.purchaseOrder} />
+                        <LabelValue label="Promised Date" value={model.promisedDate} />
+                        <LabelValue label="Closed Date" value={model.closedDate || "—"} />
+                      </div>
+                      <button
+                        aria-label="Edit RO header fields"
+                        className={`legacy-service-inline-edit-btn${isEditingROHeader ? " is-active" : ""}`}
+                        disabled={isMutatingServiceDetail}
+                        onClick={() => {
+                          if (!isEditingROHeader) {
+                            setROHeaderDraft({ purchaseOrder: model.purchaseOrder, promisedDate: model.promisedDate, closedDate: model.closedDate });
+                          }
+                          setIsEditingROHeader((prev) => !prev);
+                        }}
+                        type="button"
+                      >
+                        ✎
+                      </button>
+                    </div>
                   </div>
+                  {isEditingROHeader && (
+                    <form
+                      className="legacy-service-ro-header-editor"
+                      onSubmit={async (event) => {
+                        event.preventDefault();
+                        const saved = await props.onUpdateROHeader(roHeaderDraft);
+                        if (saved) {
+                          setIsEditingROHeader(false);
+                        }
+                      }}
+                    >
+                      <label>
+                        <span>PO #</span>
+                        <input disabled={isMutatingServiceDetail} onChange={(e) => setROHeaderDraft((prev) => ({ ...prev, purchaseOrder: e.target.value }))} value={roHeaderDraft.purchaseOrder} />
+                      </label>
+                      <label>
+                        <span>Promised Date</span>
+                        <input disabled={isMutatingServiceDetail} onChange={(e) => setROHeaderDraft((prev) => ({ ...prev, promisedDate: e.target.value }))} placeholder="MM/DD/YYYY" value={roHeaderDraft.promisedDate} />
+                      </label>
+                      <label>
+                        <span>Closed Date</span>
+                        <input disabled={isMutatingServiceDetail} onChange={(e) => setROHeaderDraft((prev) => ({ ...prev, closedDate: e.target.value }))} placeholder="MM/DD/YYYY" value={roHeaderDraft.closedDate} />
+                      </label>
+                      <div className="legacy-service-customer-editor-actions">
+                        <button disabled={isMutatingServiceDetail} type="submit">Save</button>
+                        <button disabled={isMutatingServiceDetail} onClick={() => setIsEditingROHeader(false)} type="button">Cancel</button>
+                      </div>
+                    </form>
+                  )}
                 </div>
                 <div className="legacy-service-key-grid is-compact">
                   <LabelValue label="Home Phone" value={model.homePhone} />

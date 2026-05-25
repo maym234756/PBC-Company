@@ -426,6 +426,12 @@ export type ServiceOrderDetailMutation =
       actualHours: string;
       creditedHours: string;
       override: string;
+    }
+  | {
+      mode: "updateROHeader";
+      purchaseOrder: string;
+      promisedDate: string;
+      closedDate: string;
     };
 
 type ServiceOrderWorkspaceRowPatch = Partial<
@@ -950,6 +956,15 @@ export function applyServiceOrderDetailMutation(
       activityLabel = "Labor session updated";
       activityDetail = `RO ${row.roNumber} updated session for ${session.technician}.`;
       message = "Labor session updated.";
+      break;
+    }
+    case "updateROHeader": {
+      nextDetail.purchaseOrder = mutation.purchaseOrder.trim();
+      nextDetail.promisedDate = mutation.promisedDate.trim();
+      nextDetail.closedDate = mutation.closedDate.trim();
+      activityLabel = "RO header updated";
+      activityDetail = `RO ${row.roNumber} header fields updated (PO: ${mutation.purchaseOrder}, Promised: ${mutation.promisedDate}).`;
+      message = "RO header saved.";
       break;
     }
   }

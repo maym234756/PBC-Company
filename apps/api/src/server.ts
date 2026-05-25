@@ -1993,6 +1993,13 @@ const serviceOrderDetailActionSchema = z.discriminatedUnion("mode", [
     actualHours: z.string().trim().min(1).max(20),
     creditedHours: z.string().trim().min(1).max(20),
     override: z.string().trim().max(160).default("")
+  }),
+  z.object({
+    mode: z.literal("updateROHeader"),
+    actorUserId: z.string().trim().min(1),
+    purchaseOrder: z.string().trim().max(80).default(""),
+    promisedDate: z.string().trim().max(40).default(""),
+    closedDate: z.string().trim().max(40).default("")
   })
 ]);
 const createServiceOrderSchema = z.object({
@@ -4596,6 +4603,13 @@ function mapServiceOrderMutation(
         actualHours: mutation.actualHours,
         creditedHours: mutation.creditedHours,
         override: mutation.override
+      };
+    case "updateROHeader":
+      return {
+        mode: mutation.mode,
+        purchaseOrder: mutation.purchaseOrder,
+        promisedDate: mutation.promisedDate,
+        closedDate: mutation.closedDate
       };
   }
 }
