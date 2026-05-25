@@ -12030,3 +12030,76 @@ body.is-desktop-dragging {
   font-size: 0.88rem;
   margin: 4px 0 10px;
 }
+
+/* Feature 1: Invoice tab */
+.legacy-invoice-layout { display: grid; gap: 16px; }
+.legacy-invoice-header { display: grid; gap: 8px; }
+.legacy-invoice-header-meta { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; font-size: 0.85rem; }
+.legacy-invoice-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.legacy-invoice-job-block { border: 1px solid #dce7ed; border-radius: 8px; overflow: hidden; }
+.legacy-invoice-job-header { align-items: center; background: #eef5f9; display: flex; gap: 10px; justify-content: space-between; padding: 8px 12px; }
+.legacy-invoice-sub-table { border-collapse: collapse; font-size: 0.8rem; width: 100%; }
+.legacy-invoice-sub-table th { background: #f5f9fb; color: #567185; font-size: 0.72rem; font-weight: 700; padding: 5px 8px; text-align: left; text-transform: uppercase; }
+.legacy-invoice-sub-table td { border-top: 1px solid #edf1f4; padding: 5px 8px; }
+.legacy-invoice-sub-table .is-right { text-align: right; }
+.legacy-invoice-sub-total { background: #f5f9fb; font-size: 0.82rem; font-weight: 700; padding: 6px 12px; text-align: right; }
+.legacy-invoice-totals-grid { display: grid; gap: 4px; max-width: 340px; margin-left: auto; }
+.legacy-invoice-totals-row { align-items: center; display: flex; gap: 8px; justify-content: space-between; font-size: 0.85rem; padding: 3px 0; }
+.legacy-invoice-totals-row.is-total { border-top: 2px solid #dce7ed; font-size: 1rem; font-weight: 700; padding-top: 8px; margin-top: 4px; }
+.legacy-invoice-totals-row.is-due { color: #d43a2a; font-size: 1.05rem; font-weight: 800; }
+.legacy-invoice-misc-row { align-items: center; display: flex; gap: 8px; justify-content: space-between; padding: 4px 0; font-size: 0.85rem; }
+.legacy-invoice-deposit-row { align-items: center; display: flex; gap: 12px; padding: 5px 0; font-size: 0.82rem; border-top: 1px solid #edf1f4; }
+
+/* Feature 2: Parts PO Receiving */
+.legacy-parts-receive-panel { background: #fff; border: 1px solid #dce7ed; border-radius: 10px; display: grid; gap: 12px; padding: 16px; }
+.legacy-parts-receive-header { align-items: center; display: flex; gap: 10px; justify-content: space-between; }
+.legacy-parts-receive-table { border-collapse: collapse; width: 100%; font-size: 0.82rem; }
+.legacy-parts-receive-table th { background: #eef5f9; color: #567185; font-size: 0.72rem; font-weight: 700; padding: 6px 8px; text-align: left; text-transform: uppercase; }
+.legacy-parts-receive-table td { border-top: 1px solid #edf1f4; padding: 5px 8px; vertical-align: middle; }
+.legacy-parts-receive-table input[type="number"] { border: 1px solid #c8d8e1; border-radius: 5px; font-size: 0.82rem; padding: 3px 6px; width: 64px; }
+.legacy-parts-receive-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Feature 3: Sales F&I Deal Stages */
+.legacy-deal-stage-bar { display: flex; gap: 0; margin-bottom: 12px; }
+.legacy-deal-stage { align-items: center; background: #eef5f9; border-right: 2px solid #fff; display: flex; flex: 1; flex-direction: column; gap: 2px; padding: 8px 6px; font-size: 0.72rem; text-align: center; }
+.legacy-deal-stage:first-child { border-radius: 8px 0 0 8px; }
+.legacy-deal-stage:last-child { border-radius: 0 8px 8px 0; border-right: none; }
+.legacy-deal-stage.is-active { background: #173446; color: #fff; font-weight: 700; }
+.legacy-deal-stage.is-complete { background: #2a7f62; color: #fff; }
+.legacy-deal-stage-dot { border-radius: 50%; height: 8px; width: 8px; background: currentColor; opacity: 0.5; margin: 0 auto 2px; }
+.legacy-deal-stage.is-active .legacy-deal-stage-dot, .legacy-deal-stage.is-complete .legacy-deal-stage-dot { opacity: 1; }
+.legacy-fi-panel { display: grid; gap: 12px; }
+.legacy-fi-grid { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+.legacy-fi-field { display: grid; gap: 4px; }
+.legacy-fi-field label { color: #567185; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; }
+.legacy-fi-field input, .legacy-fi-field select { border: 1px solid #c8d8e1; border-radius: 6px; font-size: 0.85rem; padding: 6px 8px; width: 100%; }
+.legacy-fi-payment-result { background: #eef7f3; border: 1px solid #b9ded0; border-radius: 8px; padding: 12px; text-align: center; }
+.legacy-fi-payment-result strong { display: block; font-size: 1.4rem; color: #173446; }
+.legacy-fi-payment-result span { font-size: 0.78rem; color: #567185; }
+
+/* Feature 4: Technician Workload View */
+.legacy-workload-board { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); padding: 16px; }
+.legacy-workload-card { background: #fff; border: 1px solid #dce7ed; border-radius: 10px; display: grid; gap: 8px; padding: 12px; }
+.legacy-workload-card-header { align-items: center; display: flex; gap: 8px; justify-content: space-between; }
+.legacy-workload-bar-track { background: #eef5f9; border-radius: 4px; height: 6px; overflow: hidden; }
+.legacy-workload-bar-fill { background: #2a7f62; border-radius: 4px; height: 100%; transition: width 0.3s; }
+.legacy-workload-bar-fill.is-busy { background: #e6a817; }
+.legacy-workload-bar-fill.is-overloaded { background: #d43a2a; }
+.legacy-workload-meta { display: flex; gap: 8px; font-size: 0.75rem; color: #567185; }
+
+/* Feature 5: Unit History */
+.legacy-unit-history { border: 1px solid #dce7ed; border-radius: 8px; overflow: hidden; margin-top: 12px; }
+.legacy-unit-history-header { align-items: center; background: #eef5f9; display: flex; gap: 8px; justify-content: space-between; padding: 8px 12px; font-size: 0.8rem; font-weight: 700; }
+.legacy-unit-history-table { border-collapse: collapse; font-size: 0.8rem; width: 100%; }
+.legacy-unit-history-table th { background: #f5f9fb; color: #567185; font-size: 0.72rem; font-weight: 700; padding: 5px 8px; text-align: left; text-transform: uppercase; }
+.legacy-unit-history-table td { border-top: 1px solid #edf1f4; padding: 5px 8px; }
+.legacy-unit-history-table .is-view-btn { background: none; border: none; color: #2a6f9e; cursor: pointer; font-size: 0.78rem; text-decoration: underline; }
+
+/* Feature 7: Schema Mapping */
+.legacy-schema-mapping { display: grid; gap: 12px; }
+.legacy-schema-mapping-table { border-collapse: collapse; font-size: 0.82rem; width: 100%; }
+.legacy-schema-mapping-table th { background: #eef5f9; color: #567185; font-size: 0.72rem; font-weight: 700; padding: 6px 10px; text-align: left; text-transform: uppercase; }
+.legacy-schema-mapping-table td { border-top: 1px solid #edf1f4; padding: 6px 10px; vertical-align: middle; }
+.legacy-schema-mapping-arrow { color: #8faab8; font-weight: 700; text-align: center; }
+.legacy-schema-mapping-table select { border: 1px solid #c8d8e1; border-radius: 5px; font-size: 0.8rem; padding: 3px 6px; }
+.legacy-schema-mapping-table input[type="text"] { border: 1px solid #c8d8e1; border-radius: 5px; font-size: 0.8rem; padding: 3px 6px; width: 140px; }

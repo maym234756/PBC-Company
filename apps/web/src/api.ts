@@ -316,6 +316,11 @@ export type ServiceOrderActionRequest =
       purchaseOrder: string;
       promisedDate: string;
       closedDate: string;
+    }
+  | {
+      mode: "finalizeInvoice";
+      actorUserId: string;
+      invoiceStatus: "Draft" | "Finalized" | "Paid" | "Voided";
     };
 
 export interface ServiceOrderActionResponse extends ServiceOrderDetailResponse {

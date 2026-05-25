@@ -275,6 +275,7 @@ export interface ServiceOrderDetailPayload {
     repairOrderCategory: string;
     repairOrderTone: string;
   };
+  invoiceStatus?: string;
 }
 
 export interface ServiceOrderPartCatalogEntry {
@@ -432,6 +433,10 @@ export type ServiceOrderDetailMutation =
       purchaseOrder: string;
       promisedDate: string;
       closedDate: string;
+    }
+  | {
+      mode: "finalizeInvoice";
+      invoiceStatus: "Draft" | "Finalized" | "Paid" | "Voided";
     };
 
 type ServiceOrderWorkspaceRowPatch = Partial<
@@ -965,6 +970,13 @@ export function applyServiceOrderDetailMutation(
       activityLabel = "RO header updated";
       activityDetail = `RO ${row.roNumber} header fields updated (PO: ${mutation.purchaseOrder}, Promised: ${mutation.promisedDate}).`;
       message = "RO header saved.";
+      break;
+    }
+    case "finalizeInvoice": {
+      nextDetail.invoiceStatus = mutation.invoiceStatus;
+      activityLabel = "Invoice status updated";
+      activityDetail = `RO ${row.roNumber} invoice status set to ${mutation.invoiceStatus}.`;
+      message = "Invoice updated.";
       break;
     }
   }

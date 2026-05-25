@@ -173,7 +173,10 @@ type DesktopWidgetType =
   | "attentionBoard"
   | "openWindows"
   | "operatingLanes"
-  | "activityFeed";
+  | "activityFeed"
+  | "revenuePeriod"
+  | "roAging"
+  | "partsBurnRate";
 
 type DesktopWidgetView = "cards" | "compact" | "line" | "area" | "bars" | "donut" | "list" | "timeline" | "table" | "gauge" | "funnel";
 type DesktopWidgetWidth = "half" | "full";
@@ -430,6 +433,51 @@ const desktopWidgetCatalog: DesktopWidgetDefinition[] = [
       { id: "timeline", label: "Timeline" },
       { id: "list", label: "List" }
     ]
+  },
+  {
+    type: "revenuePeriod",
+    label: "Revenue by Period",
+    description: "Gross revenue trending by day, week, or month across all departments.",
+    defaultTitle: "Revenue by Period",
+    defaultView: "bars",
+    defaultWidth: "full",
+    defaultHeight: "standard",
+    defaultLane: "spotlight",
+    defaultShape: "rectangle",
+    views: [
+      { id: "bars", label: "Bars" },
+      { id: "line", label: "Line" }
+    ]
+  },
+  {
+    type: "roAging",
+    label: "RO Aging",
+    description: "Service repair orders grouped by age bucket to surface stale work orders.",
+    defaultTitle: "RO Aging",
+    defaultView: "bars",
+    defaultWidth: "half",
+    defaultHeight: "standard",
+    defaultLane: "left",
+    defaultShape: "rectangle",
+    views: [
+      { id: "bars", label: "Bars" },
+      { id: "table", label: "Table" }
+    ]
+  },
+  {
+    type: "partsBurnRate",
+    label: "Parts Burn Rate",
+    description: "Parts inventory consumption rate versus replenishment over the last 30 days.",
+    defaultTitle: "Parts Burn Rate",
+    defaultView: "area",
+    defaultWidth: "half",
+    defaultHeight: "standard",
+    defaultLane: "right",
+    defaultShape: "rectangle",
+    views: [
+      { id: "area", label: "Area" },
+      { id: "line", label: "Line" }
+    ]
   }
 ];
 
@@ -481,7 +529,7 @@ interface HeaderSearchCommand {
 
 type CommandLogEntry = ActivityLogEntry;
 
-type ServiceQueueView = "All" | "Estimates" | "Repair Orders" | "Customer Reply" | "Tech Complete" | "Parts Received" | "Parts Hold";
+type ServiceQueueView = "All" | "Estimates" | "Repair Orders" | "Customer Reply" | "Tech Complete" | "Parts Received" | "Parts Hold" | "Workload";
 
 type PendingSalesMenuIntent =
   | {
@@ -525,7 +573,8 @@ const serviceQueueViews: ServiceQueueView[] = [
   "Customer Reply",
   "Tech Complete",
   "Parts Received",
-  "Parts Hold"
+  "Parts Hold",
+  "Workload"
 ];
 
 function resolveSalesMenuIntent(item: string): PendingSalesMenuIntent | null {
@@ -4192,6 +4241,16 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                             "Saving RO header...",
                             "ro:header"
                           ),
+                        onFinalizeInvoice: (invoiceStatus) =>
+                          handleServiceOrderAction(
+                            {
+                              mode: "finalizeInvoice",
+                              actorUserId: session.user.id,
+                              invoiceStatus
+                            },
+                            "Invoice updated.",
+                            "invoice:finalize"
+                          ),
                         onUpdateQueueRow: handleServiceQueueRowUpdate,
                         onUpdateJob: (payload) =>
                           handleServiceOrderAction(
@@ -4521,6 +4580,51 @@ function ServiceQueueBoard({
       </div>
 
       <div className="legacy-grid-shell">
+        {serviceQueueView === "Workload" ? (() => {
+          const techMap = new Map<string, { roCount: number; totalHours: number }>();
+          for (const row of rows) {
+            const tech = row.serviceWriter || "Unassigned";
+            const entry = techMap.get(tech) ?? { roCount: 0, totalHours: 0 };
+            entry.roCount += 1;
+            entry.totalHours += 2;
+            techMap.set(tech, entry);
+          }
+          const techs = Array.from(techMap.entries());
+          return (
+            <div className="legacy-workload-board">
+              {techs.length === 0 ? (
+                <div style={{ padding: "16px", color: "#567185" }}>No technicians found in queue.</div>
+              ) : (
+                techs.map(([tech, data]) => {
+                  const utilPct = Math.min((data.totalHours / 8) * 100, 100);
+                  const isBusy = utilPct >= 60 && utilPct < 100;
+                  const isOverloaded = utilPct >= 100;
+                  const chipLabel = isOverloaded ? "Overloaded" : isBusy ? "Busy" : "Available";
+                  const chipTone = isOverloaded ? "attention" : isBusy ? "warning" : "stable";
+                  return (
+                    <div className="legacy-workload-card" key={tech}>
+                      <div className="legacy-workload-card-header">
+                        <strong style={{ fontSize: "0.85rem" }}>{tech}</strong>
+                        <span className={`legacy-chip tone-${chipTone}`}>{chipLabel}</span>
+                      </div>
+                      <div className="legacy-workload-bar-track">
+                        <div
+                          className={`legacy-workload-bar-fill${isOverloaded ? " is-overloaded" : isBusy ? " is-busy" : ""}`}
+                          style={{ width: `${utilPct}%` }}
+                        />
+                      </div>
+                      <div className="legacy-workload-meta">
+                        <span>{data.roCount} RO{data.roCount === 1 ? "" : "s"}</span>
+                        <span>{data.totalHours.toFixed(1)} hrs</span>
+                        <span>{utilPct.toFixed(0)}% of 8hr</span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          );
+        })() : (
         <table className="legacy-grid">
           <thead>
             <tr>
@@ -4698,6 +4802,7 @@ function ServiceQueueBoard({
             )}
           </tbody>
         </table>
+        )}
       </div>
 
       {noteEditorRow ? (
@@ -4863,6 +4968,7 @@ function renderWorkspace(
     onRemovePart: (jobId: string, partNumber: string) => Promise<boolean>;
     onReturnToAuditCleanup: (() => void) | null;
     onUpdateROHeader: (payload: { purchaseOrder: string; promisedDate: string; closedDate: string }) => Promise<boolean>;
+    onFinalizeInvoice: (status: "Draft" | "Finalized" | "Paid" | "Voided") => Promise<boolean>;
     onUpdateQueueRow: (row: ServiceWorkspaceRow) => Promise<boolean>;
     onUpdateCustomer: (payload: ServiceWorkbenchCustomerPayload) => Promise<boolean>;
     onUpdateJob: (payload: {
@@ -5048,6 +5154,7 @@ function renderWorkspace(
             onUpdateNotes={taskControls.onUpdateNotes}
             onUpdateOrderType={taskControls.onUpdateOrderType}
             onUpdateROHeader={taskControls.onUpdateROHeader}
+            onFinalizeInvoice={taskControls.onFinalizeInvoice}
             onUpdateStatus={taskControls.onUpdateStatus}
             onUpdateWarrantyClaim={taskControls.onUpdateWarrantyClaim}
             operators={taskControls.operators}
@@ -6291,6 +6398,83 @@ function DesktopWorkspace({ dashboard, onOpenWorkspace, openWorkspaceIds, rows, 
                 <span className={`legacy-chip tone-${item.tone.toLowerCase()}`}>{item.tone}</span>
               </article>
             ))}
+          </div>
+        );
+      }
+      case "revenuePeriod": {
+        const periods = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const values = [42, 58, 61, 75, 88, 94, 79, 85, 91, 67, 53, 48];
+        const maxVal = Math.max(...values);
+        return (
+          <div className="legacy-desktop-chart-widget">
+            <div className="legacy-desktop-bar-row">
+              {values.map((v, i) => (
+                <div className="legacy-desktop-bar-col" key={periods[i]}>
+                  <div
+                    className="legacy-desktop-bar-fill"
+                    style={{ height: `${(v / maxVal) * 100}%`, background: "#1f8aa7" }}
+                  />
+                  <span className="legacy-desktop-bar-label">{periods[i]}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      }
+      case "roAging": {
+        const agingBuckets = [
+          { label: "0–7 days", count: 14, tone: "stable" },
+          { label: "8–14 days", count: 8, tone: "neutral" },
+          { label: "15–30 days", count: 5, tone: "warning" },
+          { label: "30+ days", count: 3, tone: "attention" }
+        ];
+        if (widget.view === "table") {
+          return (
+            <div className="legacy-desktop-compact-list">
+              {agingBuckets.map((b) => (
+                <article className="legacy-desktop-compact-row" key={b.label}>
+                  <strong>{b.label}</strong>
+                  <span className={`legacy-chip tone-${b.tone}`}>{b.count} ROs</span>
+                </article>
+              ))}
+            </div>
+          );
+        }
+        const agingMax = Math.max(...agingBuckets.map((b) => b.count));
+        return (
+          <div className="legacy-desktop-chart-widget">
+            <div className="legacy-desktop-bar-row">
+              {agingBuckets.map((b) => (
+                <div className="legacy-desktop-bar-col" key={b.label}>
+                  <div
+                    className="legacy-desktop-bar-fill"
+                    style={{ height: `${(b.count / agingMax) * 100}%`, background: b.tone === "attention" ? "#ce5f63" : b.tone === "warning" ? "#d69b00" : "#1f8aa7" }}
+                  />
+                  <span className="legacy-desktop-bar-label">{b.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      }
+      case "partsBurnRate": {
+        const burnPoints = [12, 18, 14, 22, 19, 25, 21, 17, 23, 28, 20, 16];
+        const burnMax = Math.max(...burnPoints);
+        const width = 280;
+        const height = 80;
+        const pts = burnPoints.map((v, i) => {
+          const x = i * (width / (burnPoints.length - 1));
+          const y = height - (v / burnMax) * (height - 10) - 5;
+          return `${x},${y}`;
+        });
+        const linePath = `M ${pts.join(" L ")}`;
+        const fillPath = `M ${pts[0]} L ${pts.join(" L ")} L ${width},${height} L 0,${height} Z`;
+        return (
+          <div className="legacy-desktop-chart-widget">
+            <svg aria-hidden="true" className="legacy-desktop-trend-svg" viewBox={`0 0 ${width} ${height}`}>
+              {widget.view !== "line" && <path className="legacy-desktop-trend-fill" d={fillPath} />}
+              <path className="legacy-desktop-trend-line" d={linePath} />
+            </svg>
           </div>
         );
       }
@@ -8442,6 +8626,14 @@ function SyncMonitorCustomSettingsPage({
 }: SyncMonitorCustomSettingsPageProps) {
   const activeDestinations = rows.filter((row) => row.status === "Publishing" || row.status === "Ready").length;
   const protectedSettings = syncSettingsRows.filter((setting) => setting.visibility === "Protected").length;
+  const [schemaMappings, setSchemaMappings] = useState([
+    { id: "m1", sourceField: "CustomerName", destField: "Contact.FullName", transform: "None", isEditing: false },
+    { id: "m2", sourceField: "Email", destField: "Contact.Email", transform: "Lowercase", isEditing: false },
+    { id: "m3", sourceField: "PhoneNumber", destField: "Contact.Phone", transform: "E164Format", isEditing: false },
+    { id: "m4", sourceField: "StockNumber", destField: "Unit.StockId", transform: "None", isEditing: false },
+    { id: "m5", sourceField: "SalePrice", destField: "Deal.CashPrice", transform: "CurrencyUSD", isEditing: false },
+    { id: "m6", sourceField: "RoNumber", destField: "ServiceOrder.ROId", transform: "None", isEditing: false }
+  ]);
 
   return (
     <div className="website-sync-settings-page">
@@ -8576,6 +8768,96 @@ function SyncMonitorCustomSettingsPage({
             </div>
           </section>
         </aside>
+      </section>
+
+      <section className="legacy-info-card legacy-schema-mapping-section">
+        <div className="legacy-schema-mapping-header">
+          <div>
+            <strong>Schema Mapping</strong>
+            <p>Map DMS source fields to destination object fields for outbound sync.</p>
+          </div>
+          <button
+            className="legacy-desktop-board-button is-secondary"
+            onClick={() => setSchemaMappings((prev) => [
+              ...prev,
+              { id: `m${Date.now()}`, sourceField: "", destField: "", transform: "None", isEditing: true }
+            ])}
+            type="button"
+          >
+            Add Mapping
+          </button>
+        </div>
+        <table className="legacy-schema-mapping-table">
+          <thead>
+            <tr>
+              <th>Source Field</th>
+              <th>Destination Field</th>
+              <th>Transform</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {schemaMappings.map((mapping) => (
+              <tr key={mapping.id}>
+                <td>
+                  {mapping.isEditing ? (
+                    <input
+                      className="legacy-schema-mapping-input"
+                      onChange={(e) => setSchemaMappings((prev) => prev.map((m) => m.id === mapping.id ? { ...m, sourceField: e.target.value } : m))}
+                      placeholder="Source field"
+                      value={mapping.sourceField}
+                    />
+                  ) : (
+                    <code>{mapping.sourceField}</code>
+                  )}
+                </td>
+                <td>
+                  {mapping.isEditing ? (
+                    <input
+                      className="legacy-schema-mapping-input"
+                      onChange={(e) => setSchemaMappings((prev) => prev.map((m) => m.id === mapping.id ? { ...m, destField: e.target.value } : m))}
+                      placeholder="Dest field"
+                      value={mapping.destField}
+                    />
+                  ) : (
+                    <code>{mapping.destField}</code>
+                  )}
+                </td>
+                <td>
+                  {mapping.isEditing ? (
+                    <select
+                      className="legacy-schema-mapping-select"
+                      onChange={(e) => setSchemaMappings((prev) => prev.map((m) => m.id === mapping.id ? { ...m, transform: e.target.value } : m))}
+                      value={mapping.transform}
+                    >
+                      {["None", "Lowercase", "Uppercase", "E164Format", "CurrencyUSD", "DateISO"].map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="legacy-chip tone-neutral">{mapping.transform}</span>
+                  )}
+                </td>
+                <td>
+                  <button
+                    className="legacy-schema-mapping-action"
+                    onClick={() => setSchemaMappings((prev) => prev.map((m) => m.id === mapping.id ? { ...m, isEditing: !m.isEditing } : m))}
+                    type="button"
+                  >
+                    {mapping.isEditing ? "Save" : "Edit"}
+                  </button>
+                  <button
+                    className="legacy-schema-mapping-action is-danger"
+                    onClick={() => setSchemaMappings((prev) => prev.filter((m) => m.id !== mapping.id))}
+                    type="button"
+                  >
+                    Remove
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </section>
     </div>
   );
@@ -10033,6 +10315,7 @@ type ServiceWorkbenchTab =
   | "work"
   | "communications"
   | "laborCloseout"
+  | "invoice"
   | "deposits"
   | "attachments"
   | "history"
@@ -10254,6 +10537,7 @@ interface ServiceWorkbenchModel {
   attachments: ServiceWorkbenchAttachment[];
   history: ServiceWorkbenchHistoryLine[];
   signatureDocs: ServiceWorkbenchSignatureDoc[];
+  invoiceStatus?: string;
 }
 
 const serviceWorkbenchTabs: Array<{ id: ServiceWorkbenchTab; label: string }> = [
@@ -10262,6 +10546,7 @@ const serviceWorkbenchTabs: Array<{ id: ServiceWorkbenchTab; label: string }> = 
   { id: "work", label: "Work" },
   { id: "communications", label: "Communications" },
   { id: "laborCloseout", label: "Labor Closeout" },
+  { id: "invoice", label: "Invoice" },
   { id: "deposits", label: "Deposits" },
   { id: "attachments", label: "Attachments" },
   { id: "history", label: "History" },
@@ -10322,6 +10607,7 @@ interface ServiceRepairWorkbenchProps extends ServiceUtilityInlinePanelProps {
   onDeleteJob: (jobId: string) => Promise<boolean>;
   onRemovePart: (jobId: string, partNumber: string) => Promise<boolean>;
   onUpdateROHeader: (payload: { purchaseOrder: string; promisedDate: string; closedDate: string }) => Promise<boolean>;
+  onFinalizeInvoice: (status: "Draft" | "Finalized" | "Paid" | "Voided") => Promise<boolean>;
   onCloseLabor: (payload: { jobId: string; lineIndex: number; actorName: string }) => Promise<boolean>;
   onReopenLabor: (payload: { jobId: string; lineIndex: number }) => Promise<boolean>;
   onDeleteLaborSession: (sessionIndex: number) => Promise<boolean>;
@@ -10491,6 +10777,9 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
   const [addPartResetKey, setAddPartResetKey] = useState(0);
   const [isEditingROHeader, setIsEditingROHeader] = useState(false);
   const [roHeaderDraft, setROHeaderDraft] = useState({ purchaseOrder: "", promisedDate: "", closedDate: "" });
+  const [invoiceStatus, setInvoiceStatus] = useState<"Draft" | "Finalized" | "Paid" | "Voided">(
+    (model?.invoiceStatus as "Draft" | "Finalized" | "Paid" | "Voided" | undefined) ?? "Draft"
+  );
 
   useEffect(() => {
     setActiveTab("general");
@@ -11484,6 +11773,53 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
                 ))}
               </div>
             </section>
+            {model.units.length > 0 && (
+              <div className="legacy-unit-history">
+                <div className="legacy-unit-history-header">
+                  <span>Unit Service History</span>
+                  <span>{selectedServiceRow.stockNumber}</span>
+                </div>
+                <table className="legacy-unit-history-table">
+                  <thead>
+                    <tr>
+                      <th>RO#</th>
+                      <th>Date</th>
+                      <th>Description</th>
+                      <th>Status</th>
+                      <th>Technician</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      { ro: "10041", date: "03/12/2024", desc: "100-Hour Service", status: "Closed", tech: "M. Torres" },
+                      { ro: "09887", date: "11/05/2023", desc: "Winterization", status: "Closed", tech: "J. Rivera" },
+                      { ro: "09612", date: "07/22/2023", desc: "Impeller Replacement", status: "Closed", tech: "M. Torres" },
+                      { ro: "09203", date: "04/08/2023", desc: "Dewinterization", status: "Closed", tech: "K. Smith" },
+                      { ro: "08944", date: "10/14/2022", desc: "Annual Service", status: "Closed", tech: "J. Rivera" },
+                      { ro: "08611", date: "05/30/2022", desc: "Trim/Tilt Service", status: "Closed", tech: "M. Torres" },
+                    ].map((hist) => (
+                      <tr key={hist.ro}>
+                        <td>{hist.ro}</td>
+                        <td>{hist.date}</td>
+                        <td>{hist.desc}</td>
+                        <td>{hist.status}</td>
+                        <td>{hist.tech}</td>
+                        <td>
+                          <button
+                            className="is-view-btn"
+                            onClick={() => alert(`Viewing RO #${hist.ro}`)}
+                            type="button"
+                          >
+                            View RO
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       );
@@ -12181,6 +12517,143 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
               </form>
             </section>
           )}
+        </div>
+      );
+      break;
+    }
+    case "invoice": {
+      const fmtInv = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+      const statusTone: Record<string, string> = { Draft: "neutral", Finalized: "accent", Paid: "stable", Voided: "attention" };
+
+      function handleInvoiceStatus(s: "Draft" | "Finalized" | "Paid" | "Voided") {
+        setInvoiceStatus(s);
+        void props.onFinalizeInvoice(s);
+      }
+
+      paneContent = (
+        <div className="legacy-service-tab-screen">
+          <div className="legacy-invoice-layout" style={{ padding: "16px", overflowY: "auto" }}>
+            {/* Header */}
+            <section className="legacy-info-card legacy-invoice-header">
+              <div className="legacy-command-log-header">
+                <div><strong>Invoice</strong><span>Repair Order #{selectedServiceRow.roNumber}</span></div>
+              </div>
+              <div className="legacy-invoice-header-meta">
+                <span><strong>RO#</strong> {selectedServiceRow.roNumber}</span>
+                <span><strong>Customer:</strong> {selectedServiceRow.customerName}</span>
+                <span><strong>Date:</strong> {new Date().toLocaleDateString("en-US")}</span>
+                <span className={`legacy-chip tone-${statusTone[invoiceStatus] ?? "neutral"}`}>{invoiceStatus}</span>
+              </div>
+              <div className="legacy-invoice-actions">
+                <button className="legacy-task-status-button" onClick={() => handleInvoiceStatus("Finalized")} type="button">Finalize Invoice</button>
+                <button className="legacy-task-status-button" onClick={() => handleInvoiceStatus("Paid")} type="button">Mark Paid</button>
+                <button className="legacy-task-status-button" onClick={() => handleInvoiceStatus("Voided")} type="button">Void</button>
+                <button className="legacy-task-status-button" onClick={() => window.print()} type="button">Print</button>
+              </div>
+            </section>
+
+            {/* Job line items */}
+            {model.jobs.map((job) => {
+              const jobPartsTotal = job.parts.reduce((s, p) => s + p.price * p.quantity, 0);
+              const jobLaborTotal = job.laborLines.reduce((s, l) => s + l.total, 0);
+              const jobSubletTotal = job.subletLines.reduce((s, l) => s + l.price, 0);
+              const jobTotal = jobPartsTotal + jobLaborTotal + jobSubletTotal;
+              return (
+                <div className="legacy-invoice-job-block" key={job.id}>
+                  <div className="legacy-invoice-job-header">
+                    <span><strong>{job.title}</strong></span>
+                    <span>{job.technician}</span>
+                    <span className={`legacy-chip tone-${job.status === "Complete" ? "stable" : "neutral"}`}>{job.status}</span>
+                  </div>
+                  {job.parts.length > 0 && (
+                    <table className="legacy-invoice-sub-table">
+                      <thead><tr><th>Part #</th><th>Description</th><th>Qty</th><th className="is-right">Price</th><th className="is-right">Total</th></tr></thead>
+                      <tbody>
+                        {job.parts.map((p) => (
+                          <tr key={p.partNumber}>
+                            <td>{p.partNumber}</td><td>{p.description}</td>
+                            <td>{p.quantity}</td>
+                            <td className="is-right">{fmtInv(p.price)}</td>
+                            <td className="is-right">{fmtInv(p.price * p.quantity)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  {job.laborLines.length > 0 && (
+                    <table className="legacy-invoice-sub-table">
+                      <thead><tr><th>Tech</th><th>Hrs</th><th className="is-right">Rate</th><th className="is-right">Total</th></tr></thead>
+                      <tbody>
+                        {job.laborLines.map((l, i) => (
+                          <tr key={i}>
+                            <td>{l.technician}</td>
+                            <td>{l.quantity}</td>
+                            <td className="is-right">{fmtInv(l.rate)}</td>
+                            <td className="is-right">{fmtInv(l.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  {job.subletLines.length > 0 && (
+                    <table className="legacy-invoice-sub-table">
+                      <thead><tr><th>Vendor</th><th>Description</th><th className="is-right">Price</th></tr></thead>
+                      <tbody>
+                        {job.subletLines.map((sl, i) => (
+                          <tr key={i}>
+                            <td>{sl.vendor}</td><td>{sl.description}</td>
+                            <td className="is-right">{fmtInv(sl.price)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  <div className="legacy-invoice-sub-total">Job Subtotal: {fmtInv(jobTotal)}</div>
+                </div>
+              );
+            })}
+
+            {/* Misc charges */}
+            {model.miscCharges.length > 0 && (
+              <section className="legacy-info-card">
+                <div className="legacy-service-section-header"><strong>Misc Charges</strong></div>
+                {model.miscCharges.map((mc, i) => (
+                  <div className="legacy-invoice-misc-row" key={i}>
+                    <span>{mc.label}</span><span>{fmtInv(mc.amount)}</span>
+                  </div>
+                ))}
+              </section>
+            )}
+
+            {/* Totals */}
+            <section className="legacy-info-card">
+              <div className="legacy-service-section-header"><strong>Totals</strong></div>
+              <div className="legacy-invoice-totals-grid">
+                <div className="legacy-invoice-totals-row"><span>Parts</span><span>{fmtInv(model.totals.parts)}</span></div>
+                <div className="legacy-invoice-totals-row"><span>Labor</span><span>{fmtInv(model.totals.labor)}</span></div>
+                <div className="legacy-invoice-totals-row"><span>Sublet</span><span>{fmtInv(model.totals.sublet)}</span></div>
+                <div className="legacy-invoice-totals-row"><span>Misc</span><span>{fmtInv(model.totals.misc)}</span></div>
+                <div className="legacy-invoice-totals-row"><span>Before Tax</span><span>{fmtInv(model.totals.beforeTax)}</span></div>
+                <div className="legacy-invoice-totals-row"><span>Sales Tax</span><span>{fmtInv(model.totals.salesTax)}</span></div>
+                <div className="legacy-invoice-totals-row is-total"><strong>Total</strong><strong>{fmtInv(model.totals.total)}</strong></div>
+                <div className="legacy-invoice-totals-row is-due"><strong>Amount Due</strong><strong>{fmtInv(model.totals.totalDue)}</strong></div>
+              </div>
+            </section>
+
+            {/* Deposits */}
+            {model.deposits.length > 0 && (
+              <section className="legacy-info-card">
+                <div className="legacy-service-section-header"><strong>Deposits Applied</strong></div>
+                {model.deposits.map((d, i) => (
+                  <div className="legacy-invoice-deposit-row" key={i}>
+                    <span>#{d.invoiceNumber}</span>
+                    <span>{d.date}</span>
+                    <span>{fmtInv(d.amount)}</span>
+                  </div>
+                ))}
+              </section>
+            )}
+          </div>
         </div>
       );
       break;
@@ -15586,6 +16059,8 @@ function PartsOrderingBoard({
   const [salesHistoryDepth, setSalesHistoryDepth] = useState<PartsSalesHistoryDepth>(24);
   const [selectedActionRowIds, setSelectedActionRowIds] = useState<string[]>([]);
   const [stagedQuantities, setStagedQuantities] = useState<Record<string, string>>({});
+  const [isReceivingOpen, setIsReceivingOpen] = useState(false);
+  const [receivingRows, setReceivingRows] = useState<Array<{ id: string; receivedQty: string; status: "pending" | "partial" | "received" }>>([]);
   const partsQuickAddInputRef = useRef<HTMLInputElement | null>(null);
   const partsSearchInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -16095,6 +16570,22 @@ function PartsOrderingBoard({
           </div>
 
           <div className="legacy-search-meta">Found: {filteredRows.length}</div>
+          <button
+            className={`legacy-parts-receive-toggle${isReceivingOpen ? " is-active" : ""}`}
+            onClick={() => {
+              if (!isReceivingOpen) {
+                setReceivingRows(filteredRows.slice(0, 8).map((row) => ({
+                  id: row.id,
+                  receivedQty: getDisplayQuantity(row),
+                  status: "pending" as const
+                })));
+              }
+              setIsReceivingOpen((prev) => !prev);
+            }}
+            type="button"
+          >
+            {isReceivingOpen ? "Close Receiving" : "Receive PO"}
+          </button>
         </div>
         <div className="legacy-grid-shell">
           <table className="legacy-grid legacy-parts-ordering-grid">
@@ -16584,6 +17075,78 @@ function PartsOrderingBoard({
         searchTerm={lookupSearchTerm}
         selectedRowId={lookupSelectedRowId}
       />
+
+      {isReceivingOpen && (
+        <div className="legacy-parts-receive-panel">
+          <div className="legacy-parts-receive-header">
+            <strong>Receive PO Lines</strong>
+            <button
+              className="legacy-task-status-button"
+              onClick={() => setIsReceivingOpen(false)}
+              type="button"
+            >
+              Close
+            </button>
+          </div>
+          <table className="legacy-parts-receive-table">
+            <thead>
+              <tr>
+                <th>Part #</th>
+                <th>Description</th>
+                <th>Ordered Qty</th>
+                <th>Received Qty</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {receivingRows.map((recv) => {
+                const row = rows.find((r) => r.id === recv.id);
+                if (!row) return null;
+                const ordered = parseInt(getDisplayQuantity(row), 10) || 1;
+                const received = parseInt(recv.receivedQty, 10) || 0;
+                const status = received === 0 ? "pending" : received < ordered ? "partial" : "received";
+                return (
+                  <tr key={recv.id}>
+                    <td>{row.partNumber}</td>
+                    <td>{row.description}</td>
+                    <td style={{ textAlign: "center" }}>{ordered}</td>
+                    <td>
+                      <input
+                        className="legacy-parts-receive-qty-input"
+                        max={ordered}
+                        min={0}
+                        onChange={(event) => {
+                          const next = event.target.value;
+                          setReceivingRows((prev) =>
+                            prev.map((r) => r.id === recv.id ? { ...r, receivedQty: next, status } : r)
+                          );
+                        }}
+                        type="number"
+                        value={recv.receivedQty}
+                      />
+                    </td>
+                    <td>
+                      <span className={`legacy-parts-receive-status is-${status}`}>{status}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div className="legacy-parts-receive-actions">
+            <button
+              className="legacy-parts-composer-action"
+              onClick={() => {
+                setPartsActionNotice(`${receivingRows.length} line(s) receipt confirmed.`);
+                setIsReceivingOpen(false);
+              }}
+              type="button"
+            >
+              Confirm Receipt
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -17718,11 +18281,13 @@ type SalesDealTab =
   | "options"
   | "dealRecap"
   | "attach"
-  | "eSignature";
+  | "eSignature"
+  | "fi";
 
 const salesDealTabs: Array<{ id: SalesDealTab; label: string }> = [
   { id: "general", label: "General" },
   { id: "customer", label: "Customer" },
+  { id: "fi", label: "F&I" },
   { id: "communications", label: "Communications..." },
   { id: "lienIns", label: "Lien / Ins" },
   { id: "trades", label: "Trades" },
@@ -17758,6 +18323,14 @@ function SalesDealWorkbench({
   storeId: string;
 }) {
   const [activeTab, setActiveTab] = useState<SalesDealTab>("general");
+  const [dealStage, setDealStage] = useState<"Lead" | "Desk" | "Finance" | "Closed" | "Delivered">("Desk");
+  const [lender, setLender] = useState("First National Bank");
+  const [loanAmount, setLoanAmount] = useState(35000);
+  const [interestRate, setInterestRate] = useState(6.9);
+  const [termMonths, setTermMonths] = useState(60);
+  const [downPayment, setDownPayment] = useState(5000);
+  const [tradeInValue, setTradeInValue] = useState(0);
+  const [tradeInDesc, setTradeInDesc] = useState("");
   const [isTakeDepositModalOpen, setIsTakeDepositModalOpen] = useState(false);
   const [isReprintModalOpen, setIsReprintModalOpen] = useState(false);
   const [isDepositsLoading, setIsDepositsLoading] = useState(false);
@@ -18020,6 +18593,27 @@ function SalesDealWorkbench({
 
   return (
     <div className="sales-deal-workbench">
+      {/* Deal Stage Progress Bar */}
+      <div className="legacy-deal-stage-bar">
+        {(["Lead", "Desk", "Finance", "Closed", "Delivered"] as const).map((s, i, arr) => {
+          const activeIdx = arr.indexOf(dealStage);
+          const isActive = s === dealStage;
+          const isDone = i < activeIdx;
+          return (
+            <Fragment key={s}>
+              <button
+                className={`legacy-deal-stage-step${isActive ? " is-active" : isDone ? " is-done" : ""}`}
+                onClick={() => setDealStage(s)}
+                type="button"
+              >
+                <span className="legacy-deal-stage-dot">{isDone ? "✓" : i + 1}</span>
+                <span>{s}</span>
+              </button>
+              {i < arr.length - 1 && <div className={`legacy-deal-stage-connector${isDone ? " is-done" : ""}`} />}
+            </Fragment>
+          );
+        })}
+      </div>
       {/* Tab bar */}
       <div className="sales-deal-tabs">
         {salesDealTabs.map((tab) => (
@@ -18340,7 +18934,96 @@ function SalesDealWorkbench({
             </aside>
           </div>
         </div>
-      ) : (
+      ) : activeTab === "fi" ? (() => {
+        const rate = interestRate / 100;
+        const financed = Math.max(0, loanAmount - downPayment - tradeInValue);
+        const monthlyPayment = rate > 0 && termMonths > 0
+          ? financed * (rate / 12) / (1 - Math.pow(1 + rate / 12, -termMonths))
+          : financed / (termMonths || 1);
+        const totalCost = monthlyPayment * termMonths;
+        const totalInterest = totalCost - financed;
+        return (
+          <div className="legacy-fi-panel">
+            <div className="legacy-fi-section">
+              <h4 className="legacy-fi-section-title">Financing Calculator</h4>
+              <div className="legacy-fi-grid">
+                <label className="legacy-fi-field">
+                  <span>Lender</span>
+                  <input onChange={(e) => setLender(e.target.value)} type="text" value={lender} />
+                </label>
+                <label className="legacy-fi-field">
+                  <span>Loan Amount ($)</span>
+                  <input
+                    min={0}
+                    onChange={(e) => setLoanAmount(parseFloat(e.target.value) || 0)}
+                    type="number"
+                    value={loanAmount}
+                  />
+                </label>
+                <label className="legacy-fi-field">
+                  <span>Down Payment ($)</span>
+                  <input
+                    min={0}
+                    onChange={(e) => setDownPayment(parseFloat(e.target.value) || 0)}
+                    type="number"
+                    value={downPayment}
+                  />
+                </label>
+                <label className="legacy-fi-field">
+                  <span>Interest Rate (%)</span>
+                  <input
+                    min={0}
+                    onChange={(e) => setInterestRate(parseFloat(e.target.value) || 0)}
+                    step={0.1}
+                    type="number"
+                    value={interestRate}
+                  />
+                </label>
+                <label className="legacy-fi-field">
+                  <span>Term (months)</span>
+                  <input
+                    min={1}
+                    onChange={(e) => setTermMonths(parseInt(e.target.value, 10) || 12)}
+                    type="number"
+                    value={termMonths}
+                  />
+                </label>
+                <label className="legacy-fi-field">
+                  <span>Trade-In Value ($)</span>
+                  <input
+                    min={0}
+                    onChange={(e) => setTradeInValue(parseFloat(e.target.value) || 0)}
+                    type="number"
+                    value={tradeInValue}
+                  />
+                </label>
+                <label className="legacy-fi-field" style={{ gridColumn: "1 / -1" }}>
+                  <span>Trade-In Description</span>
+                  <input onChange={(e) => setTradeInDesc(e.target.value)} type="text" value={tradeInDesc} />
+                </label>
+              </div>
+            </div>
+            <div className="legacy-fi-results">
+              <div className="legacy-fi-result-row">
+                <span>Amount Financed</span>
+                <strong>{financed.toLocaleString("en-US", { style: "currency", currency: "USD" })}</strong>
+              </div>
+              <div className="legacy-fi-result-row legacy-fi-highlight">
+                <span>Est. Monthly Payment</span>
+                <strong>{monthlyPayment.toLocaleString("en-US", { style: "currency", currency: "USD" })}/mo</strong>
+              </div>
+              <div className="legacy-fi-result-row">
+                <span>Total Interest</span>
+                <strong>{totalInterest.toLocaleString("en-US", { style: "currency", currency: "USD" })}</strong>
+              </div>
+              <div className="legacy-fi-result-row">
+                <span>Total Cost</span>
+                <strong>{totalCost.toLocaleString("en-US", { style: "currency", currency: "USD" })}</strong>
+              </div>
+            </div>
+          </div>
+        );
+      })() : (
         <div className="sales-deal-tab-placeholder">
           <p>{salesDealTabs.find((t) => t.id === activeTab)?.label ?? "Tab"} — Coming soon.</p>
         </div>
@@ -19046,6 +19729,10 @@ function matchesServiceQueueView(row: ServiceWorkspaceRow, queueView: ServiceQue
 
   if (queueView === "Parts Hold") {
     return row.category === "Parts Hold";
+  }
+
+  if (queueView === "Workload") {
+    return true;
   }
 
   return true;

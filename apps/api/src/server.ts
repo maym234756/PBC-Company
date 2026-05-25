@@ -2000,6 +2000,11 @@ const serviceOrderDetailActionSchema = z.discriminatedUnion("mode", [
     purchaseOrder: z.string().trim().max(80).default(""),
     promisedDate: z.string().trim().max(40).default(""),
     closedDate: z.string().trim().max(40).default("")
+  }),
+  z.object({
+    mode: z.literal("finalizeInvoice"),
+    actorUserId: z.string().trim().min(1),
+    invoiceStatus: z.enum(["Draft", "Finalized", "Paid", "Voided"])
   })
 ]);
 const createServiceOrderSchema = z.object({
@@ -4610,6 +4615,11 @@ function mapServiceOrderMutation(
         purchaseOrder: mutation.purchaseOrder,
         promisedDate: mutation.promisedDate,
         closedDate: mutation.closedDate
+      };
+    case "finalizeInvoice":
+      return {
+        mode: mutation.mode,
+        invoiceStatus: mutation.invoiceStatus
       };
   }
 }
