@@ -19430,8 +19430,575 @@ function CampaignPanel() {
   );
 }
 
+type ApprovalStatus = "Pending" | "Approved" | "Rejected";
+type ApprovalRequestType = "Void Invoice" | "Discount Override" | "Warranty Authorization" | "Parts Adjustment" | "Deal Funding";
+interface ApprovalRequest {
+  id: string;
+  type: ApprovalRequestType;
+  reference: string;
+  requestedBy: string;
+  impact: string;
+  status: ApprovalStatus;
+  age: string;
+  reason: string;
+}
+
+const initialApprovalRequests: ApprovalRequest[] = [
+  { id: "ap1", type: "Void Invoice", reference: "RO 104582", requestedBy: "M. Torres", impact: "$2,418.33", status: "Pending", age: "12m", reason: "Customer disputed duplicate charge" },
+  { id: "ap2", type: "Discount Override", reference: "Deal WKS-22014", requestedBy: "A. Jensen", impact: "7.5% discount", status: "Pending", age: "34m", reason: "Boat show promo match" },
+  { id: "ap3", type: "Warranty Authorization", reference: "Claim WTY-9012", requestedBy: "S. Lee", impact: "$684.50", status: "Approved", age: "1h", reason: "Manufacturer pre-auth received" },
+  { id: "ap4", type: "Parts Adjustment", reference: "Part 8M0123456", requestedBy: "P. Walsh", impact: "-2 qty", status: "Pending", age: "2h", reason: "Cycle count variance" },
+  { id: "ap5", type: "Deal Funding", reference: "Deal WKS-22009", requestedBy: "R. Chan", impact: "$48,910.00", status: "Rejected", age: "4h", reason: "Missing lender confirmation" }
+];
+
+type DocumentType = "RO Invoice" | "Estimate" | "Signed Form" | "Deal Jacket" | "Warranty Doc" | "PO PDF";
+type DocumentStatus = "Draft" | "Ready" | "Sent" | "Signed" | "Archived";
+interface DocumentRecord {
+  id: string;
+  type: DocumentType;
+  reference: string;
+  party: string;
+  status: DocumentStatus;
+  lastUpdated: string;
+}
+
+const documentTypeOptions: Array<"All" | DocumentType> = ["All", "RO Invoice", "Estimate", "Signed Form", "Deal Jacket", "Warranty Doc", "PO PDF"];
+const initialDocuments: DocumentRecord[] = [
+  { id: "doc1", type: "RO Invoice", reference: "RO 104582", party: "James Holloway", status: "Ready", lastUpdated: "Today 9:42 AM" },
+  { id: "doc2", type: "Estimate", reference: "EST 7713", party: "Maria Santos", status: "Sent", lastUpdated: "Today 8:18 AM" },
+  { id: "doc3", type: "Signed Form", reference: "SIG 33091", party: "Robert Keen", status: "Signed", lastUpdated: "Yesterday 4:20 PM" },
+  { id: "doc4", type: "Deal Jacket", reference: "Deal WKS-22014", party: "Aqua Finance", status: "Draft", lastUpdated: "Yesterday 1:05 PM" },
+  { id: "doc5", type: "Warranty Doc", reference: "Claim WTY-9012", party: "Mercury Marine", status: "Ready", lastUpdated: "Mon 11:33 AM" },
+  { id: "doc6", type: "PO PDF", reference: "PO 60218", party: "West Marine Wholesale", status: "Archived", lastUpdated: "Fri 3:45 PM" }
+];
+
+type InternalTaskStatus = "Open" | "In Progress" | "Done";
+type InternalTaskPriority = "Low" | "Normal" | "High" | "Urgent";
+interface InternalTask {
+  id: string;
+  title: string;
+  reference: string;
+  assignee: string;
+  dueDate: string;
+  priority: InternalTaskPriority;
+  status: InternalTaskStatus;
+}
+
+type InternalTaskDraft = Omit<InternalTask, "id" | "status">;
+const taskStatusColumns: InternalTaskStatus[] = ["Open", "In Progress", "Done"];
+const taskPriorityOptions: InternalTaskPriority[] = ["Low", "Normal", "High", "Urgent"];
+const initialInternalTasks: InternalTask[] = [
+  { id: "task1", title: "Call customer for approval", reference: "RO 104582", assignee: "M. Torres", dueDate: "Today", priority: "High", status: "Open" },
+  { id: "task2", title: "Order backordered part", reference: "Part 8M0123456", assignee: "P. Walsh", dueDate: "Tomorrow", priority: "Urgent", status: "In Progress" },
+  { id: "task3", title: "Follow up warranty claim", reference: "Claim WTY-9012", assignee: "S. Lee", dueDate: "Fri", priority: "Normal", status: "Open" },
+  { id: "task4", title: "Collect payment", reference: "Invoice INV-4418", assignee: "A. Jensen", dueDate: "Today", priority: "High", status: "Done" }
+];
+
+interface ExceptionItem {
+  id: string;
+  type: "Unpaid Finalized Invoices" | "Past Promised ROs" | "Negative Inventory" | "Open Warranty Claims" | "Unsent Signatures" | "Sync Errors";
+  reference: string;
+  severity: "Low" | "Medium" | "High" | "Critical";
+  owner: string;
+  isAcknowledged: boolean;
+}
+
+const initialExceptions: ExceptionItem[] = [
+  { id: "ex1", type: "Unpaid Finalized Invoices", reference: "INV-4418", severity: "High", owner: "Receivables", isAcknowledged: false },
+  { id: "ex2", type: "Past Promised ROs", reference: "RO 104211", severity: "Medium", owner: "Service", isAcknowledged: false },
+  { id: "ex3", type: "Negative Inventory", reference: "Part 8M0123456", severity: "Critical", owner: "Parts", isAcknowledged: false },
+  { id: "ex4", type: "Open Warranty Claims", reference: "WTY-9012", severity: "Medium", owner: "Warranty", isAcknowledged: true },
+  { id: "ex5", type: "Unsent Signatures", reference: "Deal WKS-22014", severity: "Low", owner: "Sales", isAcknowledged: false },
+  { id: "ex6", type: "Sync Errors", reference: "Lightspeed DMS", severity: "High", owner: "Admin", isAcknowledged: false }
+];
+
+interface DataToolDefinition {
+  id: "customers" | "units" | "parts" | "vendors" | "service-history";
+  label: string;
+  description: string;
+  sampleRows: string[][];
+  templateHeaders: string[];
+}
+
+const dataToolDefinitions: DataToolDefinition[] = [
+  { id: "customers", label: "Customers", description: "Customer contacts, consent flags, and account owners.", templateHeaders: ["Customer Name", "Email", "Phone", "Preferred Store"], sampleRows: [["James Holloway", "james@email.com", "555-0108", "Clearwater"], ["Maria Santos", "msantos@email.com", "555-0142", "Tampa"]] },
+  { id: "units", label: "Units", description: "Boat inventory, HIN/VIN, year, make, and model.", templateHeaders: ["Stock", "Year", "Make", "Model", "Status"], sampleRows: [["STK-7782", "2023", "Sea Ray", "230 SLX", "Available"], ["STK-8801", "2024", "Yamaha", "252XE", "Reserved"]] },
+  { id: "parts", label: "Parts", description: "On-hand counts, bin locations, and reorder points.", templateHeaders: ["Part Number", "Description", "On Hand", "Bin", "Reorder Point"], sampleRows: [["8M0123456", "Fuel filter", "14", "A-12", "6"], ["33-8M0097854", "Spark plug", "48", "B-04", "20"]] },
+  { id: "vendors", label: "Vendors", description: "Supplier contacts, terms, lead times, and notes.", templateHeaders: ["Vendor", "Contact", "Email", "Terms", "Lead Days"], sampleRows: [["Mercury Marine Parts", "John Wells", "jwells@mercurymarine.com", "Net 30", "5"], ["West Marine Wholesale", "Tom Rivera", "trivera@westmarine.com", "COD", "2"]] },
+  { id: "service-history", label: "Service History", description: "Historical ROs, labor lines, parts, and completion dates.", templateHeaders: ["RO Number", "Customer", "Unit", "Closed Date", "Total"], sampleRows: [["RO 104582", "James Holloway", "2021 Sea Ray 230 SLX", "2026-02-11", "2418.33"], ["RO 104211", "Maria Santos", "2019 Bayliner VR5", "2026-02-09", "684.50"]] }
+];
+
+type NotificationAlertKey = "serviceDue" | "paymentReceived" | "approvalNeeded" | "lowInventory" | "syncErrors" | "warrantyUpdates";
+type NotificationChannel = "inApp" | "email" | "sms";
+interface NotificationPreferences {
+  alerts: Record<NotificationAlertKey, boolean>;
+  channels: Record<NotificationChannel, boolean>;
+  quietStart: string;
+  quietEnd: string;
+}
+
+const notificationAlertOptions: Array<{ key: NotificationAlertKey; label: string }> = [
+  { key: "serviceDue", label: "Service Due" },
+  { key: "paymentReceived", label: "Payment Received" },
+  { key: "approvalNeeded", label: "Approval Needed" },
+  { key: "lowInventory", label: "Low Inventory" },
+  { key: "syncErrors", label: "Sync Errors" },
+  { key: "warrantyUpdates", label: "Warranty Updates" }
+];
+const notificationChannelOptions: Array<{ key: NotificationChannel; label: string }> = [
+  { key: "inApp", label: "In-App" },
+  { key: "email", label: "Email" },
+  { key: "sms", label: "SMS" }
+];
+
+interface HealthService {
+  id: string;
+  label: string;
+  status: "Operational" | "Degraded" | "Down";
+  latency: string;
+  detail: string;
+  lastCheck: string;
+}
+
+interface FailedJob {
+  id: string;
+  job: string;
+  workspace: string;
+  lastError: string;
+  retries: number;
+  dismissed: boolean;
+}
+
+const initialHealthServices: HealthService[] = [
+  { id: "api", label: "API", status: "Operational", latency: "82 ms", detail: "Gateway responding normally", lastCheck: "Just now" },
+  { id: "db", label: "Database", status: "Operational", latency: "41 ms", detail: "Primary pool healthy", lastCheck: "Just now" },
+  { id: "sync", label: "Sync Engine", status: "Degraded", latency: "214 ms", detail: "One dealer feed retrying", lastCheck: "2m ago" },
+  { id: "backup", label: "Backup", status: "Operational", latency: "Last 01:15 AM", detail: "Nightly backup verified", lastCheck: "1h ago" },
+  { id: "jobs", label: "Job Queue", status: "Degraded", latency: "3 retries", detail: "Invoice sync retry pending", lastCheck: "5m ago" },
+  { id: "storage", label: "Storage", status: "Operational", latency: "68% used", detail: "Document bucket within limits", lastCheck: "Just now" }
+];
+const initialFailedJobs: FailedJob[] = [
+  { id: "job1", job: "Invoice export", workspace: "Receivables", lastError: "Gateway timeout from accounting bridge", retries: 2, dismissed: false },
+  { id: "job2", job: "Signature packet send", workspace: "Sales", lastError: "Customer email bounced", retries: 1, dismissed: false },
+  { id: "job3", job: "Inventory sync", workspace: "Parts", lastError: "Negative quantity rejected", retries: 3, dismissed: false }
+];
+
+function reportStatusClass(status: string) {
+  return status.toLowerCase().replace(/\s+/g, "-");
+}
+
+function ReportSectionShell({ children, eyebrow, title }: { children: ReactNode; eyebrow: string; title: string }) {
+  return (
+    <div className="legacy-report-section-shell">
+      <div className="legacy-command-log-header legacy-report-section-header">
+        <div>
+          <span>{eyebrow}</span>
+          <h3>{title}</h3>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function ApprovalWorkflowCenter() {
+  const [requests, setRequests] = useState<ApprovalRequest[]>(initialApprovalRequests);
+  const [notice, setNotice] = useState("Approval queue ready.");
+
+  function updateApprovalStatus(id: string, status: ApprovalStatus) {
+    const request = requests.find(r => r.id === id);
+    setRequests(current => current.map(r => r.id === id ? { ...r, status } : r));
+    setNotice(request ? `${request.reference} marked ${status}.` : `Request marked ${status}.`);
+  }
+
+  function viewRequest(request: ApprovalRequest) {
+    setNotice(`${request.reference}: ${request.reason}`);
+  }
+
+  return (
+    <ReportSectionShell eyebrow="Manager controls" title="Approval Workflow Center">
+      {notice && <div className="legacy-workbench-notice">{notice}</div>}
+      <div className="legacy-approval-table-wrap">
+        <table className="legacy-approval-table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Reference</th>
+              <th>Requested By</th>
+              <th>Amount/Impact</th>
+              <th>Status</th>
+              <th>Age</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {requests.map(request => (
+              <tr key={request.id}>
+                <td><strong>{request.type}</strong><span>{request.reason}</span></td>
+                <td>{request.reference}</td>
+                <td>{request.requestedBy}</td>
+                <td>{request.impact}</td>
+                <td><span className={`legacy-chip legacy-approval-status-${reportStatusClass(request.status)}`}>{request.status}</span></td>
+                <td>{request.age}</td>
+                <td>
+                  <div className="legacy-approval-actions">
+                    <button className="legacy-task-status-button" disabled={request.status === "Approved"} onClick={() => updateApprovalStatus(request.id, "Approved")} type="button">Approve</button>
+                    <button className="legacy-task-status-button" disabled={request.status === "Rejected"} onClick={() => updateApprovalStatus(request.id, "Rejected")} type="button">Reject</button>
+                    <button className="legacy-task-status-button" onClick={() => viewRequest(request)} type="button">View</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </ReportSectionShell>
+  );
+}
+
+function DocumentCenter() {
+  const [documents, setDocuments] = useState<DocumentRecord[]>(initialDocuments);
+  const [typeFilter, setTypeFilter] = useState<"All" | DocumentType>("All");
+  const [searchText, setSearchText] = useState("");
+  const [notice, setNotice] = useState("Document center ready.");
+  const normalizedSearch = searchText.trim().toLowerCase();
+  const filteredDocuments = documents.filter(doc => {
+    const matchesType = typeFilter === "All" || doc.type === typeFilter;
+    const matchesSearch = !normalizedSearch || [doc.type, doc.reference, doc.party, doc.status].some(value => value.toLowerCase().includes(normalizedSearch));
+    return matchesType && matchesSearch;
+  });
+
+  function handleDocumentAction(documentRecord: DocumentRecord, action: "Preview" | "Download" | "Send") {
+    if (action === "Send") {
+      setDocuments(current => current.map(doc => doc.id === documentRecord.id ? { ...doc, status: "Sent", lastUpdated: "Just now" } : doc));
+    }
+    setNotice(`${action} queued for ${documentRecord.reference}.`);
+  }
+
+  return (
+    <ReportSectionShell eyebrow="Document hub" title="Document Center">
+      <div className="legacy-document-toolbar">
+        <select onChange={e => setTypeFilter(e.target.value as "All" | DocumentType)} value={typeFilter}>
+          {documentTypeOptions.map(type => <option key={type}>{type}</option>)}
+        </select>
+        <input onChange={e => setSearchText(e.target.value)} placeholder="Search reference, customer, vendor, status…" type="search" value={searchText} />
+        <span>{filteredDocuments.length} docs</span>
+      </div>
+      {notice && <div className="legacy-workbench-notice">{notice}</div>}
+      <div className="legacy-document-table-wrap">
+        <table className="legacy-document-table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Reference</th>
+              <th>Customer/Vendor</th>
+              <th>Status</th>
+              <th>Last Updated</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredDocuments.map(doc => (
+              <tr key={doc.id}>
+                <td>{doc.type}</td>
+                <td><strong>{doc.reference}</strong></td>
+                <td>{doc.party}</td>
+                <td><span className={`legacy-chip legacy-document-status-${reportStatusClass(doc.status)}`}>{doc.status}</span></td>
+                <td>{doc.lastUpdated}</td>
+                <td>
+                  <div className="legacy-document-actions">
+                    {(["Preview", "Download", "Send"] as const).map(action => (
+                      <button className="legacy-task-status-button" key={action} onClick={() => handleDocumentAction(doc, action)} type="button">{action}</button>
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </ReportSectionShell>
+  );
+}
+
+function InternalTaskQueuePanel() {
+  const [tasks, setTasks] = useState<InternalTask[]>(initialInternalTasks);
+  const [draft, setDraft] = useState<InternalTaskDraft>({ title: "", assignee: "", dueDate: "", priority: "Normal", reference: "" });
+  const [notice, setNotice] = useState("Internal task queue ready.");
+
+  function moveTask(taskId: string, direction: "forward" | "back") {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const currentIndex = taskStatusColumns.indexOf(task.status);
+    const nextIndex = direction === "forward" ? Math.min(currentIndex + 1, taskStatusColumns.length - 1) : Math.max(currentIndex - 1, 0);
+    const nextStatus = taskStatusColumns[nextIndex];
+    setTasks(current => current.map(t => t.id === taskId ? { ...t, status: nextStatus } : t));
+    setNotice(`${task.title} moved to ${nextStatus}.`);
+  }
+
+  function addTask() {
+    const title = draft.title.trim();
+    if (!title) {
+      setNotice("Task title is required.");
+      return;
+    }
+    const newTask: InternalTask = {
+      id: `task-${Date.now()}`,
+      title,
+      assignee: draft.assignee.trim() || "Unassigned",
+      dueDate: draft.dueDate.trim() || "No due date",
+      priority: draft.priority,
+      reference: draft.reference.trim() || "General",
+      status: "Open"
+    };
+    setTasks(current => [newTask, ...current]);
+    setDraft({ title: "", assignee: "", dueDate: "", priority: "Normal", reference: "" });
+    setNotice(`${newTask.title} added to Open.`);
+  }
+
+  return (
+    <ReportSectionShell eyebrow="Internal work" title="Tasks / To-Do Queue">
+      {notice && <div className="legacy-workbench-notice">{notice}</div>}
+      <div className="legacy-task-board-quick-add">
+        <input onChange={e => setDraft(current => ({ ...current, title: e.target.value }))} placeholder="Task title" type="text" value={draft.title} />
+        <input onChange={e => setDraft(current => ({ ...current, reference: e.target.value }))} placeholder="Reference" type="text" value={draft.reference} />
+        <input onChange={e => setDraft(current => ({ ...current, assignee: e.target.value }))} placeholder="Assignee" type="text" value={draft.assignee} />
+        <input onChange={e => setDraft(current => ({ ...current, dueDate: e.target.value }))} placeholder="Due date" type="text" value={draft.dueDate} />
+        <select onChange={e => setDraft(current => ({ ...current, priority: e.target.value as InternalTaskPriority }))} value={draft.priority}>
+          {taskPriorityOptions.map(priority => <option key={priority}>{priority}</option>)}
+        </select>
+        <button className="legacy-task-status-button" onClick={addTask} type="button">+ Add Task</button>
+      </div>
+      <div className="legacy-task-board-grid">
+        {taskStatusColumns.map(status => (
+          <div className="legacy-task-board-column" key={status}>
+            <div className="legacy-task-board-column-header"><span>{status}</span><strong>{tasks.filter(task => task.status === status).length}</strong></div>
+            {tasks.filter(task => task.status === status).map(task => (
+              <div className="legacy-task-board-card" key={task.id}>
+                <div className="legacy-task-board-card-title">{task.title}</div>
+                <div className="legacy-task-board-card-meta"><span>{task.reference}</span><span>{task.assignee}</span><span>{task.dueDate}</span></div>
+                <div className="legacy-task-board-card-actions">
+                  <span className={`legacy-chip legacy-task-board-priority-${reportStatusClass(task.priority)}`}>{task.priority}</span>
+                  <button className="legacy-task-status-button" disabled={task.status === "Open"} onClick={() => moveTask(task.id, "back")} type="button">Back</button>
+                  <button className="legacy-task-status-button" disabled={task.status === "Done"} onClick={() => moveTask(task.id, "forward")} type="button">Next</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </ReportSectionShell>
+  );
+}
+
+function ExceptionDashboard() {
+  const [exceptions, setExceptions] = useState<ExceptionItem[]>(initialExceptions);
+  const [notice, setNotice] = useState("Exception dashboard monitoring active.");
+  const types = Array.from(new Set(exceptions.map(item => item.type)));
+  const openExceptions = exceptions.filter(item => !item.isAcknowledged);
+
+  function acknowledgeException(item: ExceptionItem) {
+    setExceptions(current => current.map(exception => exception.id === item.id ? { ...exception, isAcknowledged: true } : exception));
+    setNotice(`${item.reference} acknowledged for ${item.owner}.`);
+  }
+
+  return (
+    <ReportSectionShell eyebrow="Operational controls" title="Exception Dashboard">
+      <div className="legacy-exception-summary-grid">
+        {types.map(type => (
+          <div className="legacy-exception-summary-tile" key={type}>
+            <span>{type}</span>
+            <strong>{exceptions.filter(item => item.type === type && !item.isAcknowledged).length}</strong>
+          </div>
+        ))}
+      </div>
+      {notice && <div className="legacy-workbench-notice">{notice}</div>}
+      <div className="legacy-exception-group-stack">
+        {types.map(type => (
+          <div className="legacy-exception-group" key={type}>
+            <div className="legacy-exception-group-header"><span>{type}</span><strong>{exceptions.filter(item => item.type === type && !item.isAcknowledged).length} open</strong></div>
+            {exceptions.filter(item => item.type === type).map(item => (
+              <div className={`legacy-exception-row${item.isAcknowledged ? " is-acknowledged" : ""}`} key={item.id}>
+                <span>{item.type}</span>
+                <strong>{item.reference}</strong>
+                <span className={`legacy-chip legacy-exception-severity-${reportStatusClass(item.severity)}`}>{item.severity}</span>
+                <span>{item.owner}</span>
+                <button className="legacy-task-status-button" disabled={item.isAcknowledged} onClick={() => acknowledgeException(item)} type="button">{item.isAcknowledged ? "Acknowledged" : "Acknowledge"}</button>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="legacy-exception-footer">{openExceptions.length} actionable exceptions remain.</div>
+    </ReportSectionShell>
+  );
+}
+
+function DataToolsPanel() {
+  const [notice, setNotice] = useState("Choose an import/export tool.");
+
+  function downloadDataToolCsv(tool: DataToolDefinition, mode: "export" | "template") {
+    const headers = tool.templateHeaders;
+    const rows = mode === "export" ? tool.sampleRows : [];
+    const csv = buildCsvExport([headers], rows);
+    downloadTextFile(`${tool.id}-${mode}.csv`, csv, "text/csv;charset=utf-8");
+    setNotice(`${tool.label} ${mode === "export" ? "export" : "template"} downloaded.`);
+  }
+
+  function handleImport(tool: DataToolDefinition, fileName?: string) {
+    setNotice(fileName ? `${tool.label} import staged from ${fileName}.` : `${tool.label} import opened.`);
+  }
+
+  return (
+    <ReportSectionShell eyebrow="Admin utilities" title="Data Import / Export Tools">
+      {notice && <div className="legacy-workbench-notice">{notice}</div>}
+      <div className="legacy-data-tools-grid">
+        {dataToolDefinitions.map(tool => (
+          <div className="legacy-data-tools-card" key={tool.id}>
+            <div>
+              <strong>{tool.label}</strong>
+              <p>{tool.description}</p>
+            </div>
+            <div className="legacy-data-tools-actions">
+              <button className="legacy-task-status-button" onClick={() => downloadDataToolCsv(tool, "export")} type="button">Export CSV</button>
+              <label className="legacy-data-tools-file-button">
+                Import CSV
+                <input accept=".csv,text/csv" onChange={e => handleImport(tool, e.target.files?.[0]?.name)} type="file" />
+              </label>
+              <button className="legacy-task-status-button" onClick={() => downloadDataToolCsv(tool, "template")} type="button">Template</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </ReportSectionShell>
+  );
+}
+
+function NotificationPreferencesPanel() {
+  const [preferences, setPreferences] = useState<NotificationPreferences>({
+    alerts: { serviceDue: true, paymentReceived: true, approvalNeeded: true, lowInventory: true, syncErrors: true, warrantyUpdates: false },
+    channels: { inApp: true, email: true, sms: false },
+    quietStart: "18:00",
+    quietEnd: "07:00"
+  });
+  const [notice, setNotice] = useState("Preferences loaded for current user.");
+
+  function toggleAlert(key: NotificationAlertKey) {
+    setPreferences(current => ({ ...current, alerts: { ...current.alerts, [key]: !current.alerts[key] } }));
+  }
+
+  function toggleChannel(key: NotificationChannel) {
+    setPreferences(current => ({ ...current, channels: { ...current.channels, [key]: !current.channels[key] } }));
+  }
+
+  return (
+    <ReportSectionShell eyebrow="User settings" title="Notification Preferences">
+      {notice && <div className="legacy-workbench-notice">{notice}</div>}
+      <div className="legacy-preferences-grid">
+        <div className="legacy-preferences-card">
+          <h4>Alert Settings</h4>
+          <div className="legacy-preferences-option-grid">
+            {notificationAlertOptions.map(option => (
+              <label className="legacy-preferences-check" key={option.key}>
+                <input checked={preferences.alerts[option.key]} onChange={() => toggleAlert(option.key)} type="checkbox" />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="legacy-preferences-card">
+          <h4>Delivery Channels</h4>
+          <div className="legacy-preferences-option-grid is-compact">
+            {notificationChannelOptions.map(option => (
+              <label className="legacy-preferences-check" key={option.key}>
+                <input checked={preferences.channels[option.key]} onChange={() => toggleChannel(option.key)} type="checkbox" />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+          <div className="legacy-preferences-quiet-row">
+            <label><span>Quiet Start</span><input onChange={e => setPreferences(current => ({ ...current, quietStart: e.target.value }))} type="time" value={preferences.quietStart} /></label>
+            <label><span>Quiet End</span><input onChange={e => setPreferences(current => ({ ...current, quietEnd: e.target.value }))} type="time" value={preferences.quietEnd} /></label>
+          </div>
+          <button className="legacy-task-status-button" onClick={() => setNotice("Notification preferences saved.")} type="button">Save Preferences</button>
+        </div>
+      </div>
+    </ReportSectionShell>
+  );
+}
+
+function SystemHealthPanel() {
+  const [services, setServices] = useState<HealthService[]>(initialHealthServices);
+  const [jobs, setJobs] = useState<FailedJob[]>(initialFailedJobs);
+  const [notice, setNotice] = useState("System health snapshot loaded.");
+  const visibleJobs = jobs.filter(job => !job.dismissed);
+
+  function refreshHealth() {
+    const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    setServices(current => current.map((service, index) => ({
+      ...service,
+      lastCheck: now,
+      latency: service.id === "backup" ? service.latency : `${65 + ((Date.now() + index * 17) % 180)} ms`
+    })));
+    setNotice(`Health refreshed at ${now}.`);
+  }
+
+  function handleJobAction(job: FailedJob, action: "Retry" | "Dismiss") {
+    if (action === "Retry") {
+      setJobs(current => current.map(currentJob => currentJob.id === job.id ? { ...currentJob, retries: currentJob.retries + 1 } : currentJob));
+      setNotice(`${job.job} retry queued.`);
+      return;
+    }
+    setJobs(current => current.map(currentJob => currentJob.id === job.id ? { ...currentJob, dismissed: true } : currentJob));
+    setNotice(`${job.job} dismissed from failed jobs.`);
+  }
+
+  return (
+    <ReportSectionShell eyebrow="Admin console" title="System Health">
+      <div className="legacy-health-toolbar">
+        <button className="legacy-task-status-button" onClick={refreshHealth} type="button">Refresh Health</button>
+        {notice && <span>{notice}</span>}
+      </div>
+      <div className="legacy-health-card-grid">
+        {services.map(service => (
+          <div className="legacy-health-card" key={service.id}>
+            <div className="legacy-health-card-header"><strong>{service.label}</strong><span className={`legacy-chip legacy-health-status-${reportStatusClass(service.status)}`}>{service.status}</span></div>
+            <div className="legacy-health-latency">{service.latency}</div>
+            <p>{service.detail}</p>
+            <span>{service.lastCheck}</span>
+          </div>
+        ))}
+      </div>
+      <div className="legacy-health-admin-grid">
+        <div className="legacy-health-failed-jobs">
+          <div className="legacy-health-subheader">Failed Jobs</div>
+          <table className="legacy-health-table">
+            <thead><tr><th>Job</th><th>Workspace</th><th>Last Error</th><th>Retries</th><th>Actions</th></tr></thead>
+            <tbody>
+              {visibleJobs.map(job => (
+                <tr key={job.id}>
+                  <td>{job.job}</td>
+                  <td>{job.workspace}</td>
+                  <td>{job.lastError}</td>
+                  <td>{job.retries}</td>
+                  <td><div className="legacy-health-actions"><button className="legacy-task-status-button" onClick={() => handleJobAction(job, "Retry")} type="button">Retry</button><button className="legacy-task-status-button" onClick={() => handleJobAction(job, "Dismiss")} type="button">Dismiss</button></div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="legacy-health-env-grid">
+          <div><span>App Version</span><strong>0.1.0</strong></div>
+          <div><span>Branch</span><strong>copilot/workspace-tools-purpose</strong></div>
+          <div><span>Mode</span><strong>Production Preview</strong></div>
+          <div><span>Last Deploy</span><strong>Today 08:30</strong></div>
+        </div>
+      </div>
+    </ReportSectionShell>
+  );
+}
 // ─── Report Center Workspace ───────────────────────────────────────────────────
-type ReportCenterSection = "reports" | "vendors" | "pricing" | "campaigns" | "audit";
+type ReportCenterSection = "reports" | "vendors" | "pricing" | "campaigns" | "audit" | "approvals" | "documents" | "tasks" | "exceptions" | "data-tools" | "preferences" | "system-health";
 
 function ReportCenterWorkspace({ auditLog }: { auditLog: CommandLogEntry[] }) {
   const reports = [
@@ -19450,12 +20017,19 @@ function ReportCenterWorkspace({ auditLog }: { auditLog: CommandLogEntry[] }) {
     ? auditLog.filter(e => e.label.toLowerCase().includes(auditFilter.toLowerCase()) || (e.detail ?? "").toLowerCase().includes(auditFilter.toLowerCase()))
     : auditLog;
 
-  const sidebarSections: Array<{ id: ReportCenterSection; label: string }> = [
-    { id: "reports", label: "Reports" },
+  const sidebarSections: Array<{ id: ReportCenterSection; label: string; group?: string }> = [
+    { id: "reports", label: "Reports", group: "Reporting" },
     { id: "vendors", label: "Vendors" },
     { id: "pricing", label: "Pricing Matrix" },
     { id: "campaigns", label: "Campaigns" },
     { id: "audit", label: "Audit Trail" },
+    { id: "approvals", label: "Approvals", group: "Workflow" },
+    { id: "documents", label: "Documents" },
+    { id: "tasks", label: "Tasks" },
+    { id: "exceptions", label: "Exceptions" },
+    { id: "data-tools", label: "Data Tools", group: "Admin" },
+    { id: "preferences", label: "Preferences" },
+    { id: "system-health", label: "System Health" },
   ];
 
   return (
@@ -19463,6 +20037,7 @@ function ReportCenterWorkspace({ auditLog }: { auditLog: CommandLogEntry[] }) {
       <div className="legacy-report-sidebar">
         {sidebarSections.map(s => (
           <div key={s.id}>
+            {s.group && <div className="legacy-report-sidebar-group">{s.group}</div>}
             <button
               className={`legacy-report-sidebar-item${activeSection === s.id ? " is-active" : ""}`}
               onClick={() => setActiveSection(s.id)}
@@ -19503,6 +20078,13 @@ function ReportCenterWorkspace({ auditLog }: { auditLog: CommandLogEntry[] }) {
         {activeSection === "vendors" && <VendorManagementPanel />}
         {activeSection === "pricing" && <PricingMatrixPanel />}
         {activeSection === "campaigns" && <CampaignPanel />}
+        {activeSection === "approvals" && <ApprovalWorkflowCenter />}
+        {activeSection === "documents" && <DocumentCenter />}
+        {activeSection === "tasks" && <InternalTaskQueuePanel />}
+        {activeSection === "exceptions" && <ExceptionDashboard />}
+        {activeSection === "data-tools" && <DataToolsPanel />}
+        {activeSection === "preferences" && <NotificationPreferencesPanel />}
+        {activeSection === "system-health" && <SystemHealthPanel />}
         {activeSection === "audit" && (
           <div style={{ padding: 16, overflow: "auto" }}>
             <div style={{ alignItems: "center", display: "flex", gap: 10, marginBottom: 12 }}>
@@ -19545,7 +20127,6 @@ function ReportCenterWorkspace({ auditLog }: { auditLog: CommandLogEntry[] }) {
     </div>
   );
 }
-
 function SalesDealWorkbench({
   actorUserId,
   dealWindow,
