@@ -297,6 +297,7 @@ export type ServiceOrderDetailMutation =
       mode: "updateJob";
       jobId: string;
       title: string;
+      unitLabel: string;
       customerApproval: string;
       status: string;
       appliance: string;
@@ -568,6 +569,7 @@ export function applyServiceOrderDetailMutation(
       }
 
       targetJob.title = mutation.title.trim();
+      targetJob.unitLabel = mutation.unitLabel.trim();
       targetJob.customerApproval = mutation.customerApproval.trim();
       targetJob.status = mutation.status.trim();
       targetJob.appliance = mutation.appliance.trim();

@@ -5692,6 +5692,12 @@ body.is-desktop-dragging {
   padding: 2px 8px;
 }
 
+.legacy-service-workbench.is-lightspeed-layout .workflow-primary.is-unsaved {
+  background: linear-gradient(180deg, #ff7a69 0%, #b51f18 100%);
+  border-color: #7e1510;
+  color: #fff8f5;
+}
+
 .legacy-service-workbench.is-lightspeed-layout .legacy-service-workbench-tabs,
 .legacy-service-workbench.is-lightspeed-layout .legacy-service-work-subtabs {
   align-items: end;
@@ -6264,6 +6270,92 @@ body.is-desktop-dragging {
 
 .legacy-service-workbench.is-lightspeed-layout .legacy-service-work-field-grid .workflow-field.is-wide {
   grid-column: 1 / -1;
+}
+
+.legacy-service-workbench.is-lightspeed-layout .legacy-service-unit-control {
+  display: grid;
+  gap: 2px;
+  grid-template-columns: minmax(0, 1fr) 24px;
+}
+
+.legacy-service-workbench.is-lightspeed-layout .legacy-service-unit-control button {
+  background: linear-gradient(180deg, #f7f7f7 0%, #b8c1c7 100%);
+  border: 1px solid #69777f;
+  border-radius: 2px;
+  color: #0f2d3f;
+  font-size: 0.62rem;
+  font-weight: 700;
+  min-height: 18px;
+  padding: 0;
+}
+
+.legacy-service-workbench.is-lightspeed-layout .legacy-service-unit-control button.is-active {
+  background: #bcd5e0;
+}
+
+.legacy-service-workbench.is-lightspeed-layout .legacy-service-unit-search {
+  background: #d7d7d7;
+  border: 1px solid #8b969d;
+  display: grid;
+  gap: 4px;
+  margin: 4px 0;
+  padding: 4px;
+}
+
+.legacy-service-workbench.is-lightspeed-layout .legacy-service-unit-search-toolbar {
+  align-items: end;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.legacy-service-workbench.is-lightspeed-layout .legacy-service-unit-search-toolbar label {
+  display: grid;
+  gap: 1px;
+}
+
+.legacy-service-workbench.is-lightspeed-layout .legacy-service-unit-search-toolbar label span,
+.legacy-service-workbench.is-lightspeed-layout .legacy-service-unit-search-toolbar > span {
+  color: #0b2f45;
+  font-size: 0.58rem;
+  font-weight: 700;
+}
+
+.legacy-service-workbench.is-lightspeed-layout .legacy-service-unit-search-toolbar input {
+  border: 1px solid #8b969d;
+  border-radius: 0;
+  font-size: 0.64rem;
+  min-height: 20px;
+  padding: 2px 4px;
+}
+
+.legacy-service-workbench.is-lightspeed-layout .legacy-service-unit-search-results {
+  display: grid;
+  gap: 3px;
+  max-height: 120px;
+  overflow: auto;
+}
+
+.legacy-service-workbench.is-lightspeed-layout .legacy-service-unit-search-results button {
+  background: #edf3f6;
+  border: 1px solid #8b969d;
+  border-radius: 0;
+  color: #0f2d3f;
+  display: grid;
+  gap: 1px;
+  padding: 4px 5px;
+  text-align: left;
+}
+
+.legacy-service-workbench.is-lightspeed-layout .legacy-service-unit-search-results button:hover,
+.legacy-service-workbench.is-lightspeed-layout .legacy-service-unit-search-results button:focus {
+  background: #cfe2ec;
+}
+
+.legacy-service-workbench.is-lightspeed-layout .legacy-service-unit-search-results strong,
+.legacy-service-workbench.is-lightspeed-layout .legacy-service-unit-search-results span,
+.legacy-service-workbench.is-lightspeed-layout .legacy-service-unit-search-results p {
+  font-size: 0.62rem;
 }
 
 .legacy-service-workbench.is-lightspeed-layout .legacy-service-work-field-grid .workflow-field span,

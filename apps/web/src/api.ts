@@ -167,6 +167,7 @@ export type ServiceOrderActionRequest =
       actorUserId: string;
       jobId: string;
       title: string;
+      unitLabel: string;
       customerApproval: string;
       status: string;
       appliance: string;

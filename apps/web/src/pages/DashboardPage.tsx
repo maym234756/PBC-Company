@@ -4799,6 +4799,7 @@ function renderWorkspace(
     onUpdateJob: (payload: {
       jobId: string;
       title: string;
+      unitLabel: string;
       customerApproval: string;
       status: string;
       appliance: string;
@@ -10217,6 +10218,7 @@ interface ServiceRepairWorkbenchProps extends ServiceUtilityInlinePanelProps {
   onUpdateJob: (payload: {
     jobId: string;
     title: string;
+    unitLabel: string;
     customerApproval: string;
     status: string;
     appliance: string;
@@ -10319,9 +10321,14 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
   const [activeWorkSubTab, setActiveWorkSubTab] = useState<ServiceWorkSubTab>("jobGeneral");
   const model = selectedServiceRow ? serviceDetail ?? buildServiceRepairWorkbenchModel(selectedServiceRow, entries, activityEntries) : null;
   const [selectedJobId, setSelectedJobId] = useState<string | null>(model?.jobs[0]?.id ?? null);
+  const selectedJobForDraft = model?.jobs.find((job) => job.id === selectedJobId) ?? model?.jobs[0];
   const [serviceCalendarYear, setServiceCalendarYear] = useState(() => buildPartsInventoryCurrentSalesCalendarYear());
   const [serviceNotesDraft, setServiceNotesDraft] = useState(model?.notes ?? "");
   const [serviceTransferNotesDraft, setServiceTransferNotesDraft] = useState(model?.transferNotes ?? "");
+  const [isJobGeneralDirty, setIsJobGeneralDirty] = useState(false);
+  const [isUnitSearchOpen, setIsUnitSearchOpen] = useState(false);
+  const [unitSearchTerm, setUnitSearchTerm] = useState("");
+  const [jobUnitDraft, setJobUnitDraft] = useState(selectedJobForDraft?.unitLabel ?? "");
   const [customerToolMode, setCustomerToolMode] = useState<"edit" | "search" | null>(null);
   const [customerSearchTerm, setCustomerSearchTerm] = useState("");
   const [customerDraft, setCustomerDraft] = useState<ServiceWorkbenchCustomerPayload>(
@@ -10344,6 +10351,8 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
     setActiveTab("general");
     setActiveWorkSubTab("jobGeneral");
     setSelectedJobId(model?.jobs[0]?.id ?? null);
+    setIsUnitSearchOpen(false);
+    setUnitSearchTerm("");
     setCustomerToolMode(null);
     setCustomerSearchTerm("");
   }, [selectedServiceRow?.id]);
@@ -10353,6 +10362,13 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
       setActiveTab("general");
     }
   }, [activeTab, isEstimate]);
+
+  useEffect(() => {
+    setIsJobGeneralDirty(false);
+    setIsUnitSearchOpen(false);
+    setUnitSearchTerm("");
+    setJobUnitDraft(selectedJobForDraft?.unitLabel ?? "");
+  }, [selectedServiceRow?.id, selectedJobForDraft?.id, selectedJobForDraft?.unitLabel]);
 
   useEffect(() => {
     setServiceNotesDraft(model?.notes ?? "");
@@ -10414,6 +10430,12 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
   const selectedJobSubletTotal = roundWorkbenchCurrency(selectedJob.subletLines.reduce((total, line) => total + line.price, 0));
   const selectedJobMiscTotal = roundWorkbenchCurrency(model.miscCharges.reduce((total, charge) => total + charge.amount, 0));
   const isSelectedJobBlank = isBlankServiceWorkbenchJob(selectedJob);
+  const selectedJobUnit = model.units.find((unit) => unit.label === jobUnitDraft) ?? model.units.find((unit) => unit.label === selectedJob.unitLabel);
+  const selectedJobUnitLocation = jobUnitDraft
+    ? selectedJobUnit?.location ?? ""
+    : isSelectedJobBlank
+      ? ""
+      : selectedJobUnit?.location ?? model.units[0]?.location ?? selectedServiceRow.stockNumber;
   const isSavingServiceNotes = updatingServiceDetailKey === "notes:update";
   const isSavingCustomerInfo = updatingServiceDetailKey === "customer:update";
   const normalizedCustomerSearchTerm = customerSearchTerm.trim().toLowerCase();
@@ -10429,6 +10451,19 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
         .includes(normalizedCustomerSearchTerm);
     })
     .slice(0, 4);
+  const normalizedUnitSearchTerm = unitSearchTerm.trim().toLowerCase();
+  const unitSearchResults = model.units
+    .filter((unit) => {
+      if (!normalizedUnitSearchTerm) {
+        return true;
+      }
+
+      return [unit.label, unit.stockNumber, unit.make, unit.model, unit.year, unit.serialNumber, unit.unitType, unit.location]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedUnitSearchTerm);
+    })
+    .slice(0, 8);
 
   function saveServiceNotes() {
     if (!model) {
@@ -10998,26 +11033,34 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
         <form
           className="workflow-form legacy-service-job-general-form"
           key={`${selectedJob.id}-job-edit`}
+          onChange={() => setIsJobGeneralDirty(true)}
           onSubmit={(event) => {
             event.preventDefault();
             const formData = new FormData(event.currentTarget);
 
-            void props.onUpdateJob({
-              jobId: selectedJob.id,
-              title: readWorkbenchFormText(formData, "title"),
-              customerApproval: readWorkbenchFormText(formData, "customerApproval"),
-              status: readWorkbenchFormText(formData, "status"),
-              appliance: readWorkbenchFormText(formData, "appliance"),
-              warranty: readWorkbenchFormText(formData, "warranty"),
-              description: readWorkbenchFormText(formData, "description"),
-              resolution: readWorkbenchFormText(formData, "resolution"),
-              recommendations: readWorkbenchFormText(formData, "recommendations"),
-              technician: readWorkbenchFormText(formData, "technician"),
-              laborRate: readWorkbenchFormText(formData, "laborRate"),
-              chargeBy: readWorkbenchFormText(formData, "chargeBy"),
-              rate: readWorkbenchFormNumber(formData, "rate"),
-              quantity: readWorkbenchFormNumber(formData, "quantity")
-            });
+            void props
+              .onUpdateJob({
+                jobId: selectedJob.id,
+                title: readWorkbenchFormText(formData, "title"),
+                unitLabel: readWorkbenchFormText(formData, "unitLabel"),
+                customerApproval: readWorkbenchFormText(formData, "customerApproval"),
+                status: readWorkbenchFormText(formData, "status"),
+                appliance: readWorkbenchFormText(formData, "appliance"),
+                warranty: readWorkbenchFormText(formData, "warranty"),
+                description: readWorkbenchFormText(formData, "description"),
+                resolution: readWorkbenchFormText(formData, "resolution"),
+                recommendations: readWorkbenchFormText(formData, "recommendations"),
+                technician: readWorkbenchFormText(formData, "technician"),
+                laborRate: readWorkbenchFormText(formData, "laborRate"),
+                chargeBy: readWorkbenchFormText(formData, "chargeBy"),
+                rate: readWorkbenchFormNumber(formData, "rate"),
+                quantity: readWorkbenchFormNumber(formData, "quantity")
+              })
+              .then((saved) => {
+                if (saved) {
+                  setIsJobGeneralDirty(false);
+                }
+              });
           }}
         >
           <div className="legacy-service-job-general-grid">
@@ -11026,19 +11069,73 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
                 <h4>Unit Information</h4>
               </div>
               <div className="legacy-service-work-field-grid">
-                <label className="workflow-field is-wide">
+                <label className="workflow-field is-wide legacy-service-unit-field">
                   <span>Unit</span>
-                  <input readOnly value={isSelectedJobBlank ? "" : selectedJob.unitLabel} />
+                  <div className="legacy-service-unit-control">
+                    <input name="unitLabel" readOnly value={jobUnitDraft} />
+                    <button
+                      aria-label="Search customer units"
+                      className={isUnitSearchOpen ? "is-active" : ""}
+                      disabled={isMutatingServiceDetail}
+                      onClick={() => setIsUnitSearchOpen((current) => !current)}
+                      type="button"
+                    >
+                      🔎
+                    </button>
+                  </div>
                 </label>
                 <label className="workflow-field">
                   <span>Location</span>
-                  <input readOnly value={isSelectedJobBlank ? "" : model.units[0]?.location ?? selectedServiceRow.stockNumber} />
+                  <input readOnly value={selectedJobUnitLocation} />
                 </label>
                 <label className="workflow-field">
                   <span>Appliance</span>
                   <input defaultValue={selectedJob.appliance} name="appliance" />
                 </label>
               </div>
+              {isUnitSearchOpen ? (
+                <div className="legacy-service-unit-search">
+                  <div className="legacy-service-unit-search-toolbar">
+                    <label>
+                      <span>Customer Unit Search</span>
+                      <input
+                        autoFocus
+                        disabled={isMutatingServiceDetail}
+                        onChange={(event) => {
+                          event.stopPropagation();
+                          setUnitSearchTerm(event.target.value);
+                        }}
+                        placeholder="Search stock, make, model, year, serial, or location"
+                        value={unitSearchTerm}
+                      />
+                    </label>
+                    <span>Found: {unitSearchResults.length}</span>
+                  </div>
+                  <div className="legacy-service-unit-search-results">
+                    {unitSearchResults.length > 0 ? (
+                      unitSearchResults.map((unit) => (
+                        <button
+                          disabled={isMutatingServiceDetail}
+                          key={`${selectedJob.id}-${unit.id}`}
+                          onClick={() => {
+                            setJobUnitDraft(unit.label);
+                            setIsUnitSearchOpen(false);
+                            setUnitSearchTerm("");
+                            setIsJobGeneralDirty(true);
+                          }}
+                          type="button"
+                        >
+                          <strong>{unit.label}</strong>
+                          <span>{unit.year} {unit.make} {unit.model}</span>
+                          <span>{unit.serialNumber} · {unit.location}</span>
+                        </button>
+                      ))
+                    ) : (
+                      <p>No matching customer units found.</p>
+                    )}
+                  </div>
+                </div>
+              ) : null}
               <div className="legacy-service-pane-header">
                 <h4>Job Information</h4>
               </div>
@@ -11147,7 +11244,7 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
                 <textarea defaultValue={selectedJob.resolution} name="resolution" />
               </label>
               <div className="workflow-actions">
-                <button className="workflow-primary" disabled={isMutatingServiceDetail} type="submit">
+                <button className={`workflow-primary${isJobGeneralDirty ? " is-unsaved" : ""}`} disabled={isMutatingServiceDetail} type="submit">
                   Save Job
                 </button>
               </div>
