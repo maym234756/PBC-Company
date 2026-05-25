@@ -334,6 +334,13 @@ export type ServiceOrderActionRequest =
       docType: string;
       recipient: string;
       message: string;
+    }
+  | {
+      mode: "recordPayment";
+      actorUserId: string;
+      method: string;
+      amount: number;
+      reference: string;
     };
 
 export interface ServiceOrderActionResponse extends ServiceOrderDetailResponse {

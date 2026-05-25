@@ -1071,6 +1071,11 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     { id: "n3", title: "Customer Waiting", detail: "J. Smith arrived for RO #1041.", tone: "neutral", read: false, timestamp: "1d ago" },
   ]);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [globalSearchTerm, setGlobalSearchTerm] = useState("");
+  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+  const [activeCustomerProfile, setActiveCustomerProfile] = useState<{ name: string; roNumber: string } | null>(null);
+  const [customerProfileTab, setCustomerProfileTab] = useState<"overview" | "ros" | "units" | "comms">("overview");
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const unreadCount = notifications.filter((n) => !n.read).length;
   const [lastWorkspaceSyncLabel, setLastWorkspaceSyncLabel] = useState<string | null>(null);
   const [commandLog, setCommandLog] = useState<CommandLogEntry[]>([]);
@@ -1301,6 +1306,10 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const serviceReturnCleanupStore = requestedAuditCleanupStoreId
     ? session.stores.find((store) => store.id === requestedAuditCleanupStoreId) ?? null
     : null;
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", isDarkMode ? "light" : "dark");
+  }, [isDarkMode]);
 
   useEffect(() => {
     setPartsQuickAddTerm("");
@@ -4072,6 +4081,49 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                 <div className="legacy-toolbar-summary">
                   {lastWorkspaceSyncLabel ? <div className="legacy-toolbar-meta">{lastWorkspaceSyncLabel}</div> : null}
                 </div>
+                <div className="legacy-global-search-wrap">
+                  <input
+                    className="legacy-global-search-input"
+                    onChange={(e) => { setGlobalSearchTerm(e.target.value); setIsGlobalSearchOpen(e.target.value.length > 0); }}
+                    onFocus={() => { if (globalSearchTerm.length > 0) setIsGlobalSearchOpen(true); }}
+                    onBlur={() => setTimeout(() => setIsGlobalSearchOpen(false), 150)}
+                    placeholder="Search ROs, parts…"
+                    type="search"
+                    value={globalSearchTerm}
+                  />
+                  {isGlobalSearchOpen && (
+                    <div className="legacy-global-search-results">
+                      {serviceRows.filter((r) => r.roNumber.toLowerCase().includes(globalSearchTerm.toLowerCase()) || r.customerName.toLowerCase().includes(globalSearchTerm.toLowerCase())).slice(0, 5).length > 0 && (
+                        <div className="legacy-global-search-group">
+                          <span className="legacy-global-search-group-label">Service Orders</span>
+                          {serviceRows.filter((r) => r.roNumber.toLowerCase().includes(globalSearchTerm.toLowerCase()) || r.customerName.toLowerCase().includes(globalSearchTerm.toLowerCase())).slice(0, 5).map((r) => (
+                            <button className="legacy-global-search-item" key={r.id} onClick={() => { setGlobalSearchTerm(""); setIsGlobalSearchOpen(false); }} type="button">
+                              <strong>{r.roNumber}</strong><span>{r.customerName}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {partsRows.filter((r) => r.partNumber.toLowerCase().includes(globalSearchTerm.toLowerCase()) || r.description.toLowerCase().includes(globalSearchTerm.toLowerCase())).slice(0, 5).length > 0 && (
+                        <div className="legacy-global-search-group">
+                          <span className="legacy-global-search-group-label">Parts</span>
+                          {partsRows.filter((r) => r.partNumber.toLowerCase().includes(globalSearchTerm.toLowerCase()) || r.description.toLowerCase().includes(globalSearchTerm.toLowerCase())).slice(0, 5).map((r) => (
+                            <button className="legacy-global-search-item" key={r.id} onClick={() => { setGlobalSearchTerm(""); setIsGlobalSearchOpen(false); }} type="button">
+                              <strong>{r.partNumber}</strong><span>{r.description}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <button
+                  className="legacy-theme-toggle"
+                  onClick={() => setIsDarkMode((d) => !d)}
+                  title={isDarkMode ? "Switch to dark mode" : "Switch to light mode"}
+                  type="button"
+                >
+                  {isDarkMode ? "🌙" : "☀️"}
+                </button>
                 <div className="legacy-notif-bell-wrap">
                   <button
                     className="legacy-notif-bell"
@@ -4306,6 +4358,12 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                             "Invoice updated.",
                             "invoice:finalize"
                           ),
+                        onRecordPayment: (method, amount, reference) =>
+                          handleServiceOrderAction(
+                            { mode: "recordPayment", actorUserId: session.user.id, method, amount, reference },
+                            "Payment processed.",
+                            "payment:record"
+                          ),
                         onUpdateJobStatus: (jobId, status) =>
                           handleServiceOrderAction({ mode: "updateJobStatus", jobId, status, actorUserId: session.user.id }, "Job status updated.", `updateJobStatus-${jobId}`),
                         onRequestSignature: (docType, recipient, message) =>
@@ -4372,7 +4430,8 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                                   : serviceReturnStore.name
                             }
                           : null,
-                        updatingTaskId
+                        updatingTaskId,
+                        onViewCustomer: (name: string, roNumber: string) => { setActiveCustomerProfile({ name, roNumber }); setCustomerProfileTab("overview"); }
                       },
                       {
                         onViewChange: setWebsiteWorkspaceView,
@@ -4470,6 +4529,59 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         onSubmit={handleWorkflowSubmit}
         workflow={activeWorkflow}
       />
+      {activeCustomerProfile && (
+        <>
+          <div className="legacy-customer-profile-overlay" onClick={() => setActiveCustomerProfile(null)} />
+          <div className="legacy-customer-profile-panel">
+            <div className="legacy-customer-profile-header">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <strong style={{ color: "#f3f6fa" }}>{activeCustomerProfile.name}</strong>
+                <button className="legacy-task-status-button" onClick={() => setActiveCustomerProfile(null)} type="button">✕</button>
+              </div>
+              <div className="legacy-customer-profile-tabs">
+                {(["overview", "ros", "units", "comms"] as const).map((tab) => (
+                  <button
+                    className={`legacy-customer-profile-tab${customerProfileTab === tab ? " is-active" : ""}`}
+                    key={tab}
+                    onClick={() => setCustomerProfileTab(tab)}
+                    type="button"
+                  >
+                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="legacy-customer-profile-body">
+              {customerProfileTab === "overview" && (
+                <div className="legacy-customer-profile-meta">
+                  <div><strong>Customer:</strong> {activeCustomerProfile.name}</div>
+                  <div><strong>Current RO:</strong> {activeCustomerProfile.roNumber}</div>
+                  <div style={{ marginTop: 8, color: "rgba(255,255,255,0.4)", fontSize: "0.75rem" }}>Full CRM data available in customer record.</div>
+                </div>
+              )}
+              {customerProfileTab === "ros" && (
+                <div>
+                  {serviceRows.filter((r) => r.customerName === activeCustomerProfile.name).map((r) => (
+                    <div key={r.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", padding: "8px 0" }}>
+                      <div style={{ color: "#f3f6fa", fontSize: "0.82rem" }}>{r.roNumber} — {r.roStatus}</div>
+                      <div style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.75rem" }}>{r.inDate} · {r.model}</div>
+                    </div>
+                  ))}
+                  {serviceRows.filter((r) => r.customerName === activeCustomerProfile.name).length === 0 && (
+                    <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.8rem" }}>No service orders found.</div>
+                  )}
+                </div>
+              )}
+              {customerProfileTab === "units" && (
+                <div style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.8rem" }}>Unit history coming soon.</div>
+              )}
+              {customerProfileTab === "comms" && (
+                <div style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.8rem" }}>Communication history coming soon.</div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -4481,6 +4593,7 @@ interface ServiceQueueBoardProps {
   onSelectQueueView: React.Dispatch<React.SetStateAction<ServiceQueueView>>;
   onSelectRow: (row: ServiceWorkspaceRow) => void;
   onUpdateRow: (row: ServiceWorkspaceRow) => Promise<boolean>;
+  onViewCustomer?: (name: string, roNumber: string) => void;
   recentServiceRowHighlights: Record<string, number>;
   rows: ServiceWorkspaceRow[];
   searchState: WorkspaceSearchState;
@@ -4497,6 +4610,7 @@ function ServiceQueueBoard({
   onSelectQueueView,
   onSelectRow,
   onUpdateRow,
+  onViewCustomer,
   recentServiceRowHighlights,
   rows,
   searchState,
@@ -4509,6 +4623,7 @@ function ServiceQueueBoard({
   const [quickFilters, setQuickFilters] = useState<ServiceQueueQuickFilterState>(initialServiceQueueQuickFilterState);
   const [editingCell, setEditingCell] = useState<ServiceQueueEditingCell | null>(null);
   const [draftValue, setDraftValue] = useState("");
+  const [isScheduleView, setIsScheduleView] = useState(false);
   const serviceNotificationsByRo = groupServiceNotificationsByRo(serviceNotificationEntries);
   const noteEditorRow = editingCell?.field === "note" ? rows.find((candidate) => candidate.id === editingCell.rowId) ?? null : null;
   const filterOptions = buildFilterOptions(rows.map((row) => row.roStatus));
@@ -4590,6 +4705,9 @@ function ServiceQueueBoard({
         <button className="legacy-task-status-button" onClick={() => setIsQueueViewsCollapsed((current) => !current)} type="button">
           {isQueueViewsCollapsed ? "Show queue views" : "Hide queue views"}
         </button>
+        <button className="legacy-task-status-button" onClick={() => setIsScheduleView((s) => !s)} type="button">
+          {isScheduleView ? "📋 List View" : "📅 Schedule"}
+        </button>
         <button className="legacy-task-status-button" onClick={() => exportServiceQueueCsv(filteredRows)} type="button">Export CSV</button>
       </div>
 
@@ -4653,7 +4771,42 @@ function ServiceQueueBoard({
       </div>
 
       <div className="legacy-grid-shell">
-        {serviceQueueView === "Workload" ? (() => {
+        {isScheduleView ? (() => {
+          const today = new Date();
+          const dayOfWeek = today.getDay();
+          const monday = new Date(today);
+          monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+          const weekDays = Array.from({ length: 5 }, (_, i) => {
+            const d = new Date(monday);
+            d.setDate(monday.getDate() + i);
+            return d;
+          });
+          return (
+            <div className="legacy-schedule-grid">
+              {weekDays.map((day) => {
+                const label = day.toLocaleDateString("en-US", { weekday: "short", month: "numeric", day: "numeric" });
+                const isToday = day.toDateString() === today.toDateString();
+                const dayRows = filteredRows.filter((r) => {
+                  if (!r.inDate) return false;
+                  const d = new Date(r.inDate);
+                  return d.toDateString() === day.toDateString();
+                });
+                return (
+                  <div className="legacy-schedule-day" key={label}>
+                    <div className={`legacy-schedule-day-header${isToday ? " is-today" : ""}`}>{label}</div>
+                    {dayRows.map((r) => (
+                      <button className="legacy-schedule-ro-chip" key={r.id} onClick={() => onSelectRow(r)} type="button">
+                        <strong>{r.roNumber}</strong>
+                        <span>{r.customerName}</span>
+                      </button>
+                    ))}
+                    {dayRows.length === 0 && <span style={{ color: "rgba(255,255,255,0.3)", fontSize: "0.72rem" }}>No ROs</span>}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })() : serviceQueueView === "Workload" ? (() => {
           const techMap = new Map<string, { roCount: number; totalHours: number }>();
           for (const row of rows) {
             const tech = row.serviceWriter || "Unassigned";
@@ -4844,12 +4997,24 @@ function ServiceQueueBoard({
                             </form>
                           ) : (
                             <div className="legacy-service-grid-cell">
-                              <span
-                                className={`legacy-service-grid-value${column.key === "note" ? " is-note" : ""}`}
-                                title={column.key === "note" ? currentValue : undefined}
-                              >
-                                {currentValue || (column.key === "note" ? "No note added" : "")}
-                              </span>
+                              {column.key === "customerName" && onViewCustomer ? (
+                                <button
+                                  className="legacy-service-grid-value"
+                                  onClick={(event) => { event.stopPropagation(); onViewCustomer(row.customerName, row.roNumber); }}
+                                  style={{ background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline dotted" }}
+                                  title="View customer profile"
+                                  type="button"
+                                >
+                                  {currentValue}
+                                </button>
+                              ) : (
+                                <span
+                                  className={`legacy-service-grid-value${column.key === "note" ? " is-note" : ""}`}
+                                  title={column.key === "note" ? currentValue : undefined}
+                                >
+                                  {currentValue || (column.key === "note" ? "No note added" : "")}
+                                </span>
+                              )}
                               {column.editableField ? (
                                 <button
                                   aria-label={`Edit ${column.label}`}
@@ -5042,6 +5207,7 @@ function renderWorkspace(
     onReturnToAuditCleanup: (() => void) | null;
     onUpdateROHeader: (payload: { purchaseOrder: string; promisedDate: string; closedDate: string }) => Promise<boolean>;
     onFinalizeInvoice: (status: "Draft" | "Finalized" | "Paid" | "Voided") => Promise<boolean>;
+    onRecordPayment: (method: string, amount: number, reference: string) => Promise<boolean>;
     onUpdateJobStatus: (jobId: string, status: string) => Promise<boolean>;
     onRequestSignature: (docType: string, recipient: string, message: string) => Promise<boolean>;
     onUpdateQueueRow: (row: ServiceWorkspaceRow) => Promise<boolean>;
@@ -5096,6 +5262,7 @@ function renderWorkspace(
     updatingServiceDetailKey: string | null;
     updatingServiceQueueRowId: string | null;
     updatingTaskId: string | null;
+    onViewCustomer?: (name: string, roNumber: string) => void;
   },
   websiteControls: {
     onViewChange: React.Dispatch<React.SetStateAction<WebsiteWorkspaceView>>;
@@ -5188,6 +5355,7 @@ function renderWorkspace(
             onOpenRow={interactionState.onOpenServiceRow}
             onSelectRow={interactionState.onSelectServiceRow}
             onUpdateRow={taskControls.onUpdateQueueRow}
+            onViewCustomer={taskControls.onViewCustomer}
             recentServiceRowHighlights={taskControls.recentServiceRowHighlights}
             rows={rows}
             searchState={searchState}
@@ -5230,6 +5398,7 @@ function renderWorkspace(
             onUpdateOrderType={taskControls.onUpdateOrderType}
             onUpdateROHeader={taskControls.onUpdateROHeader}
             onFinalizeInvoice={taskControls.onFinalizeInvoice}
+            onRecordPayment={taskControls.onRecordPayment}
             onUpdateJobStatus={taskControls.onUpdateJobStatus}
             onRequestSignature={taskControls.onRequestSignature}
             onUpdateStatus={taskControls.onUpdateStatus}
@@ -10708,6 +10877,7 @@ interface ServiceRepairWorkbenchProps extends ServiceUtilityInlinePanelProps {
   onRemovePart: (jobId: string, partNumber: string) => Promise<boolean>;
   onUpdateROHeader: (payload: { purchaseOrder: string; promisedDate: string; closedDate: string }) => Promise<boolean>;
   onFinalizeInvoice: (status: "Draft" | "Finalized" | "Paid" | "Voided") => Promise<boolean>;
+  onRecordPayment: (method: string, amount: number, reference: string) => Promise<boolean>;
   onUpdateJobStatus: (jobId: string, status: string) => Promise<boolean>;
   onRequestSignature: (docType: string, recipient: string, message: string) => Promise<boolean>;
   onCloseLabor: (payload: { jobId: string; lineIndex: number; actorName: string }) => Promise<boolean>;
@@ -10891,6 +11061,10 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
   const [commsType, setCommsType] = useState<"Email" | "SMS">("Email");
   const [commsTemplate, setCommsTemplate] = useState("Appt Reminder");
   const [commsMessage, setCommsMessage] = useState("");
+  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"Cash" | "Card" | "Check" | "Finance">("Card");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentRef, setPaymentRef] = useState("");
 
   useEffect(() => {
     setActiveTab("general");
@@ -11415,8 +11589,24 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
       break;
     }
     case "warranty1": {
+      const warrantySteps = ["Draft", "Submitted", "Under Review", "Authorized", "Closed"];
+      const currentWarrantyStep = selectedJob.warrantyClaim.status || "Draft";
+      const currentWarrantyIdx = warrantySteps.findIndex((s) => s === currentWarrantyStep);
       workSubTabContent = (
         <div className="legacy-service-pane-grid is-split">
+          <div style={{ gridColumn: "1 / -1" }}>
+            <div className="legacy-warranty-stepper">
+              {warrantySteps.map((step, idx) => (
+                <div
+                  className={`legacy-warranty-step${idx < currentWarrantyIdx ? " is-complete" : idx === currentWarrantyIdx ? " is-active" : ""}`}
+                  key={step}
+                >
+                  <div className="legacy-warranty-step-dot" />
+                  {step}
+                </div>
+              ))}
+            </div>
+          </div>
           <section className="legacy-service-pane-section">
             <div className="legacy-service-key-grid">
               <LabelValue label="Warranty Claim #" value={selectedJob.warrantyClaim.warrantyClaimNumber} />
@@ -12629,10 +12819,50 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
               <div className="legacy-invoice-actions">
                 <button className="legacy-task-status-button" disabled={blockedJobs.length > 0} onClick={() => handleInvoiceStatus("Finalized")} type="button">Finalize Invoice</button>
                 <button className="legacy-task-status-button" disabled={blockedJobs.length > 0} onClick={() => handleInvoiceStatus("Paid")} type="button">Mark Paid</button>
+                <button className="legacy-task-status-button" disabled={blockedJobs.length > 0} onClick={() => setIsPaymentOpen((o) => !o)} type="button">💳 Take Payment</button>
                 <button className="legacy-task-status-button" onClick={() => handleInvoiceStatus("Voided")} type="button">Void</button>
                 <button className="legacy-task-status-button" onClick={() => window.print()} type="button">Print</button>
                 <button className="legacy-task-status-button" onClick={() => exportInvoiceCsv(model)} type="button">Export CSV</button>
               </div>
+              {isPaymentOpen && (
+                <div className="legacy-payment-panel">
+                  <div className="legacy-payment-panel-header">
+                    <span>Record Payment</span>
+                    <button className="legacy-task-status-button" onClick={() => setIsPaymentOpen(false)} type="button">✕</button>
+                  </div>
+                  <div className="legacy-payment-row">
+                    <label>Method</label>
+                    <select onChange={(e) => setPaymentMethod(e.target.value as "Cash" | "Card" | "Check" | "Finance")} style={{ border: "1px solid #c8d8e1", borderRadius: 6, fontSize: "0.85rem", padding: "5px 8px" }} value={paymentMethod}>
+                      {(["Cash", "Card", "Check", "Finance"] as const).map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                  <div className="legacy-payment-row">
+                    <label>Amount ($)</label>
+                    <input onChange={(e) => setPaymentAmount(e.target.value)} placeholder="0.00" type="number" value={paymentAmount} />
+                  </div>
+                  <div className="legacy-payment-row">
+                    <label>Reference</label>
+                    <input onChange={(e) => setPaymentRef(e.target.value)} placeholder="Check # / Auth code" type="text" value={paymentRef} />
+                  </div>
+                  <div className="legacy-payment-actions">
+                    <button className="legacy-task-status-button" onClick={() => setIsPaymentOpen(false)} type="button">Cancel</button>
+                    <button
+                      className="legacy-task-status-button"
+                      onClick={() => {
+                        const amt = parseFloat(paymentAmount);
+                        if (!isNaN(amt) && amt > 0) {
+                          void props.onRecordPayment(paymentMethod, amt, paymentRef);
+                          setInvoiceStatus("Paid");
+                          setIsPaymentOpen(false);
+                        }
+                      }}
+                      type="button"
+                    >
+                      Confirm Payment
+                    </button>
+                  </div>
+                </div>
+              )}
             </section>
 
             {/* Job line items */}
@@ -16226,6 +16456,10 @@ function PartsOrderingBoard({
   const [stagedQuantities, setStagedQuantities] = useState<Record<string, string>>({});
   const [isReceivingOpen, setIsReceivingOpen] = useState(false);
   const [receivingRows, setReceivingRows] = useState<Array<{ id: string; receivedQty: string; status: "pending" | "partial" | "received" }>>([]);
+  const [isNewPoOpen, setIsNewPoOpen] = useState(false);
+  const [newPoVendor, setNewPoVendor] = useState("");
+  const [newPoNote, setNewPoNote] = useState("");
+  const [newPoLines, setNewPoLines] = useState([{ partNumber: "", description: "", qty: "1", cost: "" }]);
   const partsQuickAddInputRef = useRef<HTMLInputElement | null>(null);
   const partsSearchInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -16751,7 +16985,68 @@ function PartsOrderingBoard({
           >
             {isReceivingOpen ? "Close Receiving" : "Receive PO"}
           </button>
+          <button
+            className={`legacy-parts-receive-toggle${isNewPoOpen ? " is-active" : ""}`}
+            onClick={() => setIsNewPoOpen((o) => !o)}
+            type="button"
+          >
+            {isNewPoOpen ? "Cancel New PO" : "+ New PO"}
+          </button>
         </div>
+        {isNewPoOpen && (
+          <div className="legacy-po-create-panel" style={{ margin: "0 0 12px" }}>
+            <div className="legacy-po-create-header">
+              <span>Create Purchase Order</span>
+              <button className="legacy-task-status-button" onClick={() => setIsNewPoOpen(false)} type="button">✕</button>
+            </div>
+            <div className="legacy-po-create-fields">
+              <div className="legacy-po-create-field">
+                <label>Vendor</label>
+                <input onChange={(e) => setNewPoVendor(e.target.value)} placeholder="Vendor name" type="text" value={newPoVendor} />
+              </div>
+              <div className="legacy-po-create-field">
+                <label>Notes</label>
+                <textarea onChange={(e) => setNewPoNote(e.target.value)} placeholder="Order notes…" value={newPoNote} />
+              </div>
+            </div>
+            <table className="legacy-po-lines-table">
+              <thead>
+                <tr>
+                  <th>Part #</th><th>Description</th><th>Qty</th><th>Cost</th><th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {newPoLines.map((line, idx) => (
+                  <tr key={idx}>
+                    <td><input onChange={(e) => setNewPoLines((ls) => ls.map((l, i) => i === idx ? { ...l, partNumber: e.target.value } : l))} placeholder="Part #" type="text" value={line.partNumber} /></td>
+                    <td><input onChange={(e) => setNewPoLines((ls) => ls.map((l, i) => i === idx ? { ...l, description: e.target.value } : l))} placeholder="Description" type="text" value={line.description} /></td>
+                    <td><input onChange={(e) => setNewPoLines((ls) => ls.map((l, i) => i === idx ? { ...l, qty: e.target.value } : l))} placeholder="1" style={{ width: 50 }} type="number" value={line.qty} /></td>
+                    <td><input onChange={(e) => setNewPoLines((ls) => ls.map((l, i) => i === idx ? { ...l, cost: e.target.value } : l))} placeholder="0.00" style={{ width: 80 }} type="number" value={line.cost} /></td>
+                    <td><button onClick={() => setNewPoLines((ls) => ls.filter((_, i) => i !== idx))} style={{ background: "none", border: "none", cursor: "pointer", color: "#c0392b" }} title="Remove line" type="button">✕</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="legacy-po-total-row">
+              Total: ${newPoLines.reduce((s, l) => s + (parseFloat(l.cost) || 0) * (parseFloat(l.qty) || 0), 0).toFixed(2)}
+            </div>
+            <div className="legacy-po-actions">
+              <button className="legacy-task-status-button" onClick={() => setNewPoLines((ls) => [...ls, { partNumber: "", description: "", qty: "1", cost: "" }])} type="button">+ Add Line</button>
+              <button
+                className="legacy-task-status-button"
+                onClick={() => {
+                  setIsNewPoOpen(false);
+                  setNewPoVendor("");
+                  setNewPoNote("");
+                  setNewPoLines([{ partNumber: "", description: "", qty: "1", cost: "" }]);
+                }}
+                type="button"
+              >
+                Submit PO
+              </button>
+            </div>
+          </div>
+        )}
         <div className="legacy-grid-shell">
           <table className="legacy-grid legacy-parts-ordering-grid">
             <thead>

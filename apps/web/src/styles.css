@@ -12170,3 +12170,160 @@ body.is-desktop-dragging {
 .legacy-cross-store-card span { color: #567185; font-size: 0.78rem; }
 .legacy-cross-store-card strong { color: #1a3a4a; font-size: 1.1rem; }
 .legacy-cross-store-card.is-total { background: #eef5f9; border-color: #b0ccd9; }
+
+/* ─── Feature 1: Payment Panel ─────────────────────────────────────── */
+.legacy-payment-panel { background: #f5f9fb; border: 1px solid #dce7ed; border-radius: 8px; display: grid; gap: 10px; margin-top: 12px; padding: 14px; }
+.legacy-payment-panel-header { align-items: center; display: flex; font-weight: 700; font-size: 0.85rem; gap: 8px; justify-content: space-between; }
+.legacy-payment-row { align-items: center; display: flex; gap: 10px; }
+.legacy-payment-row label { color: #567185; font-size: 0.78rem; font-weight: 600; min-width: 80px; }
+.legacy-payment-row input { border: 1px solid #c8d8e1; border-radius: 6px; font-size: 0.85rem; padding: 5px 8px; width: 160px; }
+.legacy-payment-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ─── Feature 2: PO Create Panel ────────────────────────────────────── */
+.legacy-po-create-panel { background: #f5f9fb; border: 1px solid #dce7ed; border-radius: 10px; display: grid; gap: 12px; padding: 16px; }
+.legacy-po-create-header { align-items: center; display: flex; font-weight: 700; gap: 8px; justify-content: space-between; }
+.legacy-po-create-fields { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; }
+.legacy-po-create-field { display: grid; gap: 3px; font-size: 0.8rem; font-weight: 600; }
+.legacy-po-create-field input, .legacy-po-create-field textarea { border: 1px solid #c8d8e1; border-radius: 6px; font-size: 0.85rem; padding: 5px 8px; width: 100%; }
+.legacy-po-create-field textarea { min-height: 50px; resize: vertical; }
+.legacy-po-lines-table { border-collapse: collapse; font-size: 0.8rem; width: 100%; }
+.legacy-po-lines-table th { background: #eef5f9; color: #567185; font-size: 0.72rem; font-weight: 700; padding: 5px 8px; text-align: left; text-transform: uppercase; }
+.legacy-po-lines-table td { border-top: 1px solid #edf1f4; padding: 4px 6px; }
+.legacy-po-lines-table input { border: 1px solid #c8d8e1; border-radius: 4px; font-size: 0.8rem; padding: 3px 5px; width: 100%; }
+.legacy-po-total-row { font-size: 0.85rem; font-weight: 700; padding: 6px 0; text-align: right; }
+.legacy-po-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ─── Feature 3: Warranty Stepper ───────────────────────────────────── */
+.legacy-warranty-stepper { display: flex; gap: 0; margin-bottom: 14px; }
+.legacy-warranty-step { align-items: center; background: #eef5f9; border-right: 2px solid #fff; display: flex; flex: 1; flex-direction: column; font-size: 0.7rem; gap: 2px; padding: 7px 6px; text-align: center; }
+.legacy-warranty-step:first-child { border-radius: 7px 0 0 7px; }
+.legacy-warranty-step:last-child { border-radius: 0 7px 7px 0; border-right: none; }
+.legacy-warranty-step.is-complete { background: #2a7f62; color: #fff; }
+.legacy-warranty-step.is-active { background: #173446; color: #fff; font-weight: 700; }
+.legacy-warranty-step-dot { border-radius: 50%; height: 6px; margin: 0 auto 2px; opacity: 0.4; width: 6px; background: currentColor; }
+.legacy-warranty-step.is-active .legacy-warranty-step-dot, .legacy-warranty-step.is-complete .legacy-warranty-step-dot { opacity: 1; }
+
+/* ─── Feature 4: Global Search ──────────────────────────────────────── */
+.legacy-global-search-wrap { position: relative; }
+.legacy-global-search-input { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 20px; color: inherit; font-size: 0.82rem; outline: none; padding: 5px 14px; width: 220px; }
+.legacy-global-search-input::placeholder { color: rgba(255,255,255,0.4); }
+.legacy-global-search-input:focus { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.3); }
+.legacy-global-search-results { background: #0f2535; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); display: grid; gap: 0; left: 0; min-width: 280px; position: absolute; top: calc(100% + 6px); z-index: 300; }
+.legacy-global-search-group { padding: 8px 0; }
+.legacy-global-search-group-label { color: rgba(255,255,255,0.4); display: block; font-size: 0.68rem; font-weight: 700; padding: 2px 12px 4px; text-transform: uppercase; }
+.legacy-global-search-item { align-items: baseline; background: none; border: none; cursor: pointer; display: flex; gap: 8px; padding: 6px 12px; text-align: left; width: 100%; }
+.legacy-global-search-item:hover { background: rgba(255,255,255,0.07); }
+.legacy-global-search-item strong { color: #f3f6fa; font-size: 0.82rem; }
+.legacy-global-search-item span { color: rgba(255,255,255,0.5); font-size: 0.75rem; }
+
+/* ─── Feature 5: Customer Profile Panel ─────────────────────────────── */
+.legacy-customer-profile-overlay { background: rgba(0,0,0,0.3); bottom: 0; left: 0; position: fixed; right: 0; top: 0; z-index: 400; }
+.legacy-customer-profile-panel { background: #0f2535; border-left: 1px solid rgba(255,255,255,0.1); bottom: 0; box-shadow: -8px 0 40px rgba(0,0,0,0.4); display: grid; grid-template-rows: auto 1fr; overflow: hidden; position: fixed; right: 0; top: 0; width: 400px; z-index: 401; }
+.legacy-customer-profile-header { border-bottom: 1px solid rgba(255,255,255,0.1); display: grid; gap: 8px; padding: 16px; }
+.legacy-customer-profile-tabs { display: flex; gap: 0; }
+.legacy-customer-profile-tab { background: none; border: none; border-bottom: 2px solid transparent; color: rgba(255,255,255,0.5); cursor: pointer; font-size: 0.8rem; padding: 8px 14px; }
+.legacy-customer-profile-tab.is-active { border-bottom-color: #ff7448; color: #fff; font-weight: 600; }
+.legacy-customer-profile-body { overflow-y: auto; padding: 14px; }
+.legacy-customer-profile-meta { color: rgba(255,255,255,0.55); font-size: 0.8rem; display: grid; gap: 4px; }
+
+/* ─── Feature 6: Schedule Grid ──────────────────────────────────────── */
+.legacy-schedule-grid { display: grid; gap: 8px; grid-template-columns: repeat(5, 1fr); padding: 12px; }
+.legacy-schedule-day { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; display: grid; gap: 6px; min-height: 120px; padding: 8px; }
+.legacy-schedule-day-header { color: rgba(255,255,255,0.5); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; }
+.legacy-schedule-day-header.is-today { color: #ff7448; }
+.legacy-schedule-ro-chip { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; cursor: pointer; display: grid; gap: 2px; padding: 5px 7px; text-align: left; width: 100%; }
+.legacy-schedule-ro-chip:hover { background: rgba(255,255,255,0.12); }
+.legacy-schedule-ro-chip strong { color: #f3f6fa; font-size: 0.75rem; }
+.legacy-schedule-ro-chip span { color: rgba(255,255,255,0.5); font-size: 0.68rem; }
+
+/* ─── Feature 8: Dark Mode Toggle ───────────────────────────────────── */
+.legacy-theme-toggle { background: none; border: none; cursor: pointer; font-size: 1rem; opacity: 0.7; padding: 4px 6px; }
+.legacy-theme-toggle:hover { opacity: 1; }
+
+[data-theme="light"] {
+  --bg: #f0f4f8;
+  --bg-soft: #e6ecf2;
+  --panel: rgba(255, 255, 255, 0.92);
+  --panel-strong: rgba(255, 255, 255, 0.98);
+  --line: rgba(0, 0, 0, 0.1);
+  --text: #0d1f2d;
+  --muted: #4a6070;
+  --accent: #e55a2b;
+  --accent-soft: #f08060;
+  --stable: #1f7a52;
+  --attention: #b07a10;
+  --shadow: 0 8px 40px rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="light"] body {
+  background: linear-gradient(135deg, #dce8f2 0%, #edf3f8 50%, #e0eaf5 100%) !important;
+}
+
+[data-theme="light"] .legacy-info-card {
+  background: rgba(255,255,255,0.9);
+  border-color: rgba(0,0,0,0.1);
+}
+
+/* ─── Feature 7: Print CSS ──────────────────────────────────────────── */
+@media print {
+  .legacy-workspace-nav,
+  .legacy-toolbar-strip,
+  .legacy-notif-bell-wrap,
+  .legacy-global-search-wrap,
+  .legacy-service-workbench-tabs,
+  .legacy-service-button-strip,
+  .legacy-invoice-actions,
+  .legacy-invoice-gate-warning,
+  .legacy-data-window-header,
+  .legacy-service-pane-tabs,
+  .legacy-desktop-board,
+  .website-feed-page,
+  .legacy-app-sidebar,
+  .legacy-workspace-rail,
+  button:not(.print-visible) {
+    display: none !important;
+  }
+  body { background: #fff !important; color: #000 !important; }
+  .legacy-invoice-layout { padding: 24px !important; }
+  .legacy-invoice-job-block { border: 1px solid #ccc !important; page-break-inside: avoid; }
+  .legacy-invoice-sub-table th { background: #f0f0f0 !important; color: #333 !important; }
+  .legacy-invoice-totals-row { border-color: #ccc !important; }
+  .legacy-invoice-totals-row.is-due { color: #000 !important; }
+  .legacy-info-card { background: #fff !important; border: 1px solid #ccc !important; box-shadow: none !important; }
+  .legacy-chip { border: 1px solid #999 !important; }
+  .legacy-service-tab-screen { page-break-before: avoid; }
+}
+
+/* ─── Feature 9: Responsive Breakpoints ─────────────────────────────── */
+@media (max-width: 1024px) {
+  .legacy-data-window { padding: 8px !important; }
+  .legacy-service-pane-grid.is-split { grid-template-columns: 1fr !important; }
+  .legacy-service-key-grid { grid-template-columns: 1fr 1fr !important; }
+  .legacy-invoice-layout { padding: 10px !important; }
+  .legacy-fi-grid { grid-template-columns: 1fr !important; }
+  .website-sync-settings-layout { grid-template-columns: 1fr !important; }
+  .legacy-workload-board { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)) !important; }
+  .legacy-schedule-grid { grid-template-columns: repeat(3, 1fr) !important; }
+}
+
+@media (max-width: 768px) {
+  .legacy-workspace-nav { display: none !important; }
+  .legacy-service-workbench-tabs { flex-wrap: wrap; gap: 4px !important; }
+  .legacy-service-workbench-tab { font-size: 0.72rem !important; padding: 4px 8px !important; }
+  .legacy-toolbar-strip { flex-wrap: wrap; gap: 6px !important; }
+  .legacy-invoice-header-meta { flex-wrap: wrap; gap: 6px !important; }
+  .legacy-deal-stage-bar { flex-wrap: wrap; gap: 4px !important; }
+  .legacy-deal-stage { min-width: 80px !important; }
+  .legacy-schedule-grid { grid-template-columns: 1fr 1fr !important; }
+  .legacy-cross-store-summary { flex-direction: column !important; }
+  .legacy-customer-profile-panel { width: 100% !important; }
+  .legacy-notif-panel { min-width: 260px !important; right: -20px !important; }
+  .legacy-global-search-input { width: 160px !important; }
+}
+
+@media (max-width: 480px) {
+  .legacy-schedule-grid { grid-template-columns: 1fr !important; }
+  .legacy-fi-grid { grid-template-columns: 1fr !important; }
+  .legacy-invoice-totals-grid { max-width: 100% !important; }
+  .legacy-global-search-input { width: 120px !important; }
+}

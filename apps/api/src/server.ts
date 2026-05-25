@@ -2018,7 +2018,8 @@ const serviceOrderDetailActionSchema = z.discriminatedUnion("mode", [
     docType: z.string().trim().min(1).max(120),
     recipient: z.string().trim().max(120).default(""),
     message: z.string().trim().max(1000).default("")
-  })
+  }),
+  z.object({ mode: z.literal("recordPayment"), actorUserId: z.string().trim().min(1), method: z.string(), amount: z.number(), reference: z.string() })
 ]);
 const createServiceOrderSchema = z.object({
   actorUserId: z.string().trim().min(1),

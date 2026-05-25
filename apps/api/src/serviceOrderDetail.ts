@@ -439,7 +439,8 @@ export type ServiceOrderDetailMutation =
       invoiceStatus: "Draft" | "Finalized" | "Paid" | "Voided";
     }
   | { mode: "updateJobStatus"; jobId: string; status: string }
-  | { mode: "requestSignature"; docType: string; recipient: string; message: string };
+  | { mode: "requestSignature"; docType: string; recipient: string; message: string }
+  | { mode: "recordPayment"; method: string; amount: number; reference: string };
 
 type ServiceOrderWorkspaceRowPatch = Partial<
   Pick<
@@ -1008,6 +1009,13 @@ export function applyServiceOrderDetailMutation(
       activityLabel = "Signature requested";
       activityDetail = `RO ${row.roNumber} signature requested for ${mutation.docType}.`;
       message = "Signature request sent.";
+      break;
+    }
+    case "recordPayment": {
+      nextDetail.invoiceStatus = "Paid";
+      activityLabel = "Payment recorded";
+      activityDetail = `RO ${row.roNumber} payment of $${mutation.amount.toFixed(2)} via ${mutation.method}${mutation.reference ? ` (ref: ${mutation.reference})` : ""}.`;
+      message = "Payment processed.";
       break;
     }
   }
