@@ -1757,7 +1757,7 @@ export const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
     id: "desktop",
     title: "Desktop",
     subtitle: "Compact command surface for multi-department operators",
-    tools: ["Designer", "Refresh", "Store Status"]
+    tools: ["Designer", "Refresh", "Store Status", "Workspace Tools"]
   },
   service: {
     id: "service",
@@ -1769,7 +1769,7 @@ export const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
     id: "parts",
     title: "Parts Ordering",
     subtitle: "Fast ordering flow with line visibility and supplier detail",
-    tools: ["Guide", "Purchase Order", "Delete Selected", "Refresh"]
+    tools: ["Delete", "Delete Selected", "Guide", "Purchase Order", "Refresh"]
   },
   sales: {
     id: "sales",
@@ -1794,14 +1794,20 @@ export const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
     title: "Website Feed",
     subtitle: "Inventory publishing and lead sync command rail",
     tools: ["Publish Feed", "Lead Sync", "Open Queue", "Refresh"]
+  },
+  reports: {
+    id: "reports",
+    title: "Report Center",
+    subtitle: "Business intelligence reports for revenue, parts, technicians, and aging",
+    tools: ["Refresh", "Export"]
   }
 };
 
-export const workspaceOrder: WorkspaceId[] = ["desktop", "service", "parts", "sales", "analytics", "website", "audit"];
+export const workspaceOrder: WorkspaceId[] = ["desktop", "service", "parts", "sales", "analytics", "website", "audit", "reports"];
 
 export const quickLaunchButtons: QuickLaunchButton[] = [
   { slot: "1", label: "Desktop", workspaceId: "desktop" },
-  { slot: "2", label: "Service ROs", workspaceId: "service" },
+  { slot: "2", label: "Estimates & Repair Orders", workspaceId: "service" },
   { slot: "3", label: "Parts Ordering", workspaceId: "parts" },
   { slot: "4", label: "Sales Board", workspaceId: "sales" },
   { slot: "5", label: "Exec Board", workspaceId: "analytics" },

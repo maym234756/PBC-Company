@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { resolveWorkspaceFromMenuItem } from "../src/lightspeedReference.ts";
 import {
+  resolveApplicationWorkspaceToolsTarget,
   resolveApplicationMenuIntent,
   resolveGeneralLedgerMenuIntent,
   resolveHelpMenuIntent,
@@ -14,6 +15,22 @@ import {
   resolveSystemMenuIntent,
   resolveWorkspaceMenuIntent
 } from "../src/workspaceMenuIntents.ts";
+
+test("application workspace tools leaves resolve to first-class desktop panel targets", () => {
+  const preferencesTarget = resolveApplicationWorkspaceToolsTarget("Preferences");
+  const exceptionTarget = resolveApplicationWorkspaceToolsTarget("Exception Inbox");
+
+  assert.ok(preferencesTarget);
+  assert.equal(preferencesTarget.sectionId, "setup");
+  assert.equal(preferencesTarget.sectionLabel, "Setup");
+  assert.equal(preferencesTarget.workspaceId, "desktop");
+
+  assert.ok(exceptionTarget);
+  assert.equal(exceptionTarget.sectionId, "alertsNotices");
+  assert.equal(exceptionTarget.workspaceId, "audit");
+
+  assert.equal(resolveApplicationWorkspaceToolsTarget("Pending Quotes"), null);
+});
 
 test("management intents preserve the visible menu label but submit the canonical management action", () => {
   const intent = resolveManagementMenuIntent("Forecast Snapshot");

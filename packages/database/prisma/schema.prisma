@@ -51,6 +51,7 @@ model Store {
   tasks         StoreTask[]
   taskSlaPolicies StoreTaskSlaPolicy[]
   salesDeals    SalesDeal[]
+  salesDealDeposits SalesDealDeposit[]
   serviceOrders ServiceOrder[]
   partsLines    PartsOrderLine[]
   websiteFeeds  WebsiteFeed[]
@@ -127,11 +128,47 @@ model SalesDeal {
   tone         String
   storeId      String
   store        Store    @relation(fields: [storeId], references: [id])
+  deposits     SalesDealDeposit[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@unique([storeId, worksheet])
   @@index([storeId, openedAt])
+}
+
+model SalesDealDeposit {
+  id          String   @id @default(cuid())
+  invoice     String
+  dateLabel   String
+  cashier     String
+  method      String
+  arName      String
+  amountCents Int
+  description String
+  notes       String
+  reference   String
+  salesDealId String
+  salesDeal   SalesDeal @relation(fields: [salesDealId], references: [id], onDelete: Cascade)
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  activities  SalesDealDepositActivity[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([salesDealId, createdAt])
+  @@index([storeId, createdAt])
+}
+
+model SalesDealDepositActivity {
+  id                 String   @id @default(cuid())
+  title              String
+  detail             String
+  meta               String
+  salesDealDepositId String
+  salesDealDeposit   SalesDealDeposit @relation(fields: [salesDealDepositId], references: [id], onDelete: Cascade)
+  createdAt          DateTime @default(now())
+
+  @@index([salesDealDepositId, createdAt])
 }
 
 model ServiceOrder {

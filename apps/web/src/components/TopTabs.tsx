@@ -3,6 +3,7 @@ import type { NavigationGroup, NavigationMenuItem } from "../types";
 
 interface TopTabsProps {
   items: NavigationGroup[];
+  isItemVisible?: (groupLabel: string, item: string) => boolean;
   isItemPinnable?: (groupLabel: string, item: string) => boolean;
   isItemPinned?: (groupLabel: string, item: string) => boolean;
   onPinItem?: (groupLabel: string, item: string) => void;
@@ -17,8 +18,17 @@ function isNavigationSubmenu(item: NavigationMenuItem): item is Exclude<Navigati
   return typeof item !== "string" && "items" in item && Array.isArray(item.items);
 }
 
-export function TopTabs({ items, isItemPinnable, isItemPinned, onPinItem, onSelectItem }: TopTabsProps) {
+export function TopTabs({ items, isItemVisible, isItemPinnable, isItemPinned, onPinItem, onSelectItem }: TopTabsProps) {
   const [openLabel, setOpenLabel] = useState<string | null>(null);
+
+  function hasVisibleLeaf(groupLabel: string, menuItem: NavigationMenuItem): boolean {
+    if (isNavigationSubmenu(menuItem)) {
+      return menuItem.items.some((childItem) => hasVisibleLeaf(groupLabel, childItem));
+    }
+
+    const label = getNavigationItemLabel(menuItem);
+    return isItemVisible?.(groupLabel, label) ?? true;
+  }
 
   function renderMenuItems(groupLabel: string, menuItems: NavigationMenuItem[], parentPath: string[] = []) {
     return menuItems.map((item) => {
@@ -26,6 +36,12 @@ export function TopTabs({ items, isItemPinnable, isItemPinned, onPinItem, onSele
       const itemPath = [...parentPath, label];
 
       if (isNavigationSubmenu(item)) {
+        const hasVisibleChildren = item.items.some((childItem) => hasVisibleLeaf(groupLabel, childItem));
+
+        if (!hasVisibleChildren) {
+          return null;
+        }
+
         return (
           <div className="tab-menu-entry tab-menu-submenu-shell" key={`${groupLabel}:${itemPath.join("/")}`}>
             <button className="tab-menu-item tab-menu-item-submenu" type="button">
@@ -39,6 +55,10 @@ export function TopTabs({ items, isItemPinnable, isItemPinned, onPinItem, onSele
             </div>
           </div>
         );
+      }
+
+      if (!(isItemVisible?.(groupLabel, label) ?? true)) {
+        return null;
       }
 
       const pinned = isItemPinned?.(groupLabel, label) ?? false;
@@ -64,8 +84,8 @@ export function TopTabs({ items, isItemPinnable, isItemPinned, onPinItem, onSele
           title={
             pinnable
               ? pinned
-                ? "Already in Open Windows. Right-clicking keeps this workspace pinned."
-                : "Right-click to add this workspace to Open Windows"
+                ? "Already in top buttons. Right-clicking keeps this widget pinned."
+                : "Right-click to add this to top buttons"
               : undefined
           }
           type="button"

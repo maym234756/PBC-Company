@@ -2,6 +2,85 @@ import type { WorkspaceId } from "./types";
 
 type WorkspaceMenuWorkspaceId = WorkspaceId;
 
+export type ApplicationWorkspaceToolsSectionId = "windowControl" | "alertsNotices" | "storeOperations" | "setup";
+
+export interface ApplicationWorkspaceToolsAction {
+  detail: string;
+  label: string;
+  workspaceId: WorkspaceMenuWorkspaceId;
+}
+
+export interface ApplicationWorkspaceToolsSection {
+  actions: ApplicationWorkspaceToolsAction[];
+  id: ApplicationWorkspaceToolsSectionId;
+  label: string;
+}
+
+export interface ApplicationWorkspaceToolsTarget {
+  action: string;
+  actionDetail: string;
+  sectionId: ApplicationWorkspaceToolsSectionId;
+  sectionLabel: string;
+  workspaceId: WorkspaceMenuWorkspaceId;
+}
+
+export const applicationWorkspaceToolsSections: ApplicationWorkspaceToolsSection[] = [
+  {
+    id: "windowControl",
+    label: "Window Control",
+    actions: [
+      { label: "Pinned Windows", detail: "Open Windows rail", workspaceId: "desktop" },
+      { label: "Window Layout Presets", detail: "Saved desktop dashboards", workspaceId: "desktop" },
+      { label: "Workspace Reset", detail: "Desktop layout reset", workspaceId: "desktop" }
+    ]
+  },
+  {
+    id: "alertsNotices",
+    label: "Alerts & Notices",
+    actions: [
+      { label: "Notifications", detail: "Recent operator activity", workspaceId: "desktop" },
+      { label: "Follow-Up Prompts", detail: "Work that needs attention", workspaceId: "desktop" },
+      { label: "Exception Inbox", detail: "Audit-side exception review", workspaceId: "audit" }
+    ]
+  },
+  {
+    id: "storeOperations",
+    label: "Store Operations",
+    actions: [
+      { label: "Store Summary", detail: "Store KPI snapshot", workspaceId: "desktop" },
+      { label: "Store Roster", detail: "Active operator roster", workspaceId: "desktop" },
+      { label: "Shift Notes", detail: "Recent handoff notes", workspaceId: "desktop" }
+    ]
+  },
+  {
+    id: "setup",
+    label: "Setup",
+    actions: [
+      { label: "Preferences", detail: "Operator workspace preferences", workspaceId: "desktop" },
+      { label: "Personal Shortcuts", detail: "Quick launch coverage", workspaceId: "desktop" },
+      { label: "Quick Launch Setup", detail: "Launch strip readiness", workspaceId: "desktop" }
+    ]
+  }
+];
+
+export function resolveApplicationWorkspaceToolsTarget(item: string): ApplicationWorkspaceToolsTarget | null {
+  for (const section of applicationWorkspaceToolsSections) {
+    const action = section.actions.find((candidate) => candidate.label === item);
+
+    if (action) {
+      return {
+        action: action.label,
+        actionDetail: action.detail,
+        sectionId: section.id,
+        sectionLabel: section.label,
+        workspaceId: action.workspaceId
+      };
+    }
+  }
+
+  return null;
+}
+
 export type WorkflowPresentationOverrides = {
   commandLabel?: string;
   description?: string;

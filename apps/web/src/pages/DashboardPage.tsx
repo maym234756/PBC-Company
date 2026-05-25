@@ -1,6 +1,18 @@
-import { Fragment, startTransition, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  startTransition,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FocusEvent as ReactFocusEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode
+} from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
+  createSalesDealDeposit,
+  createSalesDealDepositActivity,
   cleanupServiceUtilityQaTasks,
   createActivityLog,
   createServiceOrder,
@@ -9,12 +21,14 @@ import {
   getActivityLog,
   getDashboard,
   getServiceOrderDetail,
+  getSalesDealDeposits,
   getTaskQueue,
   getWorkspace,
   previewTaskSlaPolicyCopy,
   runTaskSlaPolicyAction,
   submitWorkflowAction,
   type CreateServiceOrderResponse,
+  type SalesDealDepositsResponse,
   type ServiceOrderActionRequest,
   type ServiceOrderPartCatalogEntry,
   type TaskSlaPolicyCopyPreviewResponse,
@@ -35,7 +49,16 @@ import {
   workspaceOrder,
   type QuickLaunchButton
 } from "../lightspeedReference";
-import { resolveWorkspaceMenuIntent, type WorkspaceMenuIntent } from "../workspaceMenuIntents";
+import {
+  applicationWorkspaceToolsSections,
+  resolveApplicationWorkspaceToolsTarget,
+  resolveWorkspaceMenuIntent,
+  type ApplicationWorkspaceToolsAction,
+  type ApplicationWorkspaceToolsSection,
+  type ApplicationWorkspaceToolsSectionId,
+  type ApplicationWorkspaceToolsTarget,
+  type WorkspaceMenuIntent
+} from "../workspaceMenuIntents";
 import type {
   ActivityLogEntry,
   AuditWorkspaceRow,
@@ -83,6 +106,19 @@ interface ServiceDetailWindow {
   storeId: string;
 }
 
+interface PartsInventoryDetailWindow {
+  description: string;
+  partNumber: string;
+  storeId: string;
+}
+
+interface SalesDealDetailWindow {
+  customer: string;
+  worksheet: string;
+  dealId: string;
+  storeId: string;
+}
+
 interface ServiceAuditReturnContext {
   label: string;
   subtitle: string;
@@ -90,6 +126,10 @@ interface ServiceAuditReturnContext {
 
 interface OpenWindowsContextMenuState {
   targetWorkspaceId: WorkspaceId | null;
+}
+
+interface QuickLaunchContextMenuState {
+  targetSlot: string | null;
 }
 
 interface OpenWindowDropState {
@@ -107,8 +147,20 @@ type OpenWindowRailItem =
   | {
       isActive: boolean;
       key: string;
-      kind: "detail";
+      kind: "serviceDetail";
       windowEntry: ServiceDetailWindow;
+    }
+  | {
+      isActive: boolean;
+      key: string;
+      kind: "partsInventoryDetail";
+      windowEntry: PartsInventoryDetailWindow;
+    }
+  | {
+      isActive: boolean;
+      key: string;
+      kind: "salesDeal";
+      windowEntry: SalesDealDetailWindow;
     };
 
 type DesktopWidgetType =
@@ -121,7 +173,10 @@ type DesktopWidgetType =
   | "attentionBoard"
   | "openWindows"
   | "operatingLanes"
-  | "activityFeed";
+  | "activityFeed"
+  | "revenuePeriod"
+  | "roAging"
+  | "partsBurnRate";
 
 type DesktopWidgetView = "cards" | "compact" | "line" | "area" | "bars" | "donut" | "list" | "timeline" | "table" | "gauge" | "funnel";
 type DesktopWidgetWidth = "half" | "full";
@@ -205,7 +260,25 @@ interface DesktopFunnelStep {
 
 const OPEN_WINDOWS_STORAGE_PREFIX = "marine-cloud-open-windows";
 const OPEN_WINDOW_ORDER_STORAGE_PREFIX = "marine-cloud-open-window-order";
+const QUICK_LAUNCH_HIDDEN_STORAGE_PREFIX = "marine-cloud-hidden-quick-launch-slots";
+const OPEN_WINDOW_WORKSPACE_DRAG_MIME = "application/x-marine-open-window-workspace";
+const QUICK_LAUNCH_ORDER_STORAGE_PREFIX = "marine-cloud-quick-launch-order";
+const QUICK_LAUNCH_ROUTE_STORAGE_PREFIX = "marine-cloud-quick-launch-routes";
+const QUICK_LAUNCH_SLOT_DRAG_MIME = "application/x-marine-quick-launch-slot";
 const OPEN_SERVICE_DETAIL_WINDOWS_STORAGE_PREFIX = "marine-cloud-open-service-detail-windows";
+
+interface QuickLaunchDropState {
+  position: "before" | "after";
+  slot: string;
+}
+
+interface QuickLaunchRouteMetadata {
+  groupLabel: string;
+  item: string;
+  label: string;
+}
+const OPEN_PARTS_INVENTORY_DETAIL_WINDOWS_STORAGE_PREFIX = "marine-cloud-open-parts-inventory-detail-windows";
+const OPEN_SALES_DEAL_DETAIL_WINDOWS_STORAGE_PREFIX = "marine-cloud-open-sales-deal-detail-windows";
 const SERVICE_NOTIFICATION_RAIL_STORAGE_PREFIX = "marine-cloud-service-notification-rail";
 const RECENT_SERVICE_ROW_HIGHLIGHTS_STORAGE_PREFIX = "marine-cloud-recent-service-row-highlights";
 const DESKTOP_WIDGETS_STORAGE_PREFIX = "marine-cloud-desktop-widgets";
@@ -360,6 +433,51 @@ const desktopWidgetCatalog: DesktopWidgetDefinition[] = [
       { id: "timeline", label: "Timeline" },
       { id: "list", label: "List" }
     ]
+  },
+  {
+    type: "revenuePeriod",
+    label: "Revenue by Period",
+    description: "Gross revenue trending by day, week, or month across all departments.",
+    defaultTitle: "Revenue by Period",
+    defaultView: "bars",
+    defaultWidth: "full",
+    defaultHeight: "standard",
+    defaultLane: "spotlight",
+    defaultShape: "rectangle",
+    views: [
+      { id: "bars", label: "Bars" },
+      { id: "line", label: "Line" }
+    ]
+  },
+  {
+    type: "roAging",
+    label: "RO Aging",
+    description: "Service repair orders grouped by age bucket to surface stale work orders.",
+    defaultTitle: "RO Aging",
+    defaultView: "bars",
+    defaultWidth: "half",
+    defaultHeight: "standard",
+    defaultLane: "left",
+    defaultShape: "rectangle",
+    views: [
+      { id: "bars", label: "Bars" },
+      { id: "table", label: "Table" }
+    ]
+  },
+  {
+    type: "partsBurnRate",
+    label: "Parts Burn Rate",
+    description: "Parts inventory consumption rate versus replenishment over the last 30 days.",
+    defaultTitle: "Parts Burn Rate",
+    defaultView: "area",
+    defaultWidth: "half",
+    defaultHeight: "standard",
+    defaultLane: "right",
+    defaultShape: "rectangle",
+    views: [
+      { id: "area", label: "Area" },
+      { id: "line", label: "Line" }
+    ]
   }
 ];
 
@@ -411,7 +529,7 @@ interface HeaderSearchCommand {
 
 type CommandLogEntry = ActivityLogEntry;
 
-type ServiceQueueView = "All" | "Estimates" | "Repair Orders" | "Customer Reply" | "Tech Complete" | "Parts Received" | "Parts Hold";
+type ServiceQueueView = "All" | "Estimates" | "Repair Orders" | "Customer Reply" | "Tech Complete" | "Parts Received" | "Parts Hold" | "Workload";
 
 type PendingSalesMenuIntent =
   | {
@@ -455,7 +573,8 @@ const serviceQueueViews: ServiceQueueView[] = [
   "Customer Reply",
   "Tech Complete",
   "Parts Received",
-  "Parts Hold"
+  "Parts Hold",
+  "Workload"
 ];
 
 function resolveSalesMenuIntent(item: string): PendingSalesMenuIntent | null {
@@ -640,6 +759,113 @@ interface ActionWorkflowState {
 }
 
 type PartsLookupSearchField = "partNumber" | "secondary" | "description";
+type PartsDetailTab = "info" | "pricing" | "bins" | "history" | "notes";
+type PartsColumnPreset = "counter" | "purchasing" | "inventory" | "compact";
+type PartsQuickFilter = "all" | "special" | "ro" | "web" | "lowMargin" | "noBin" | "qtyRisk";
+type PartsBandKey = "orderInfo" | "history" | "purchaseOrders";
+type PartsInspectorKind = "source" | "supplier" | "pricing";
+type PartsSalesHistoryDepth = 24 | 36;
+type PartsWorkspaceView = "ordering" | "inventory";
+type PartsInventorySearchField = "all" | "partNumber" | "secondary" | "upc" | "description" | "supplier" | "category" | "bin";
+type PartsInventoryColumnKey =
+  | "select"
+  | "partNumber"
+  | "secondaryNumber"
+  | "upc"
+  | "description"
+  | "supplier"
+  | "category"
+  | "onHand"
+  | "price"
+  | "bin"
+  | "activeMarker"
+  | "supersededTo"
+  | "cost";
+type PartsInventoryColumnPreset = "lookup" | "stock" | "pricing" | "supersession";
+type PartsInventoryDetailTab = "general" | "serials" | "similar" | "history" | "detailHistory";
+type PartsInventoryExportFormat = "csv" | "pdf";
+type PartsInventoryExportKind = "sales" | "tracking";
+type PartsInventorySavedView = "active" | "onHand" | "yamaha" | "noBin" | "superseded" | "highValue";
+type PartsInventoryInspectorKind = "supplier" | "bin" | "price" | "supersession";
+
+interface PartsInventoryParsedSearch {
+  active: boolean | null;
+  fieldTerms: Array<{ field: PartsInventorySearchField; value: string }>;
+  hasStructuredTerms: boolean;
+  noBin: boolean;
+  onHandComparison: { operator: ">" | ">=" | "<" | "<=" | "="; value: number } | null;
+  plainTerms: string[];
+  raw: string;
+  superseded: boolean | null;
+  wildcard: boolean;
+}
+
+interface PartsInventoryContextMenuState {
+  rowId: string;
+  x: number;
+  y: number;
+}
+
+interface PartsInventoryInspectorState {
+  kind: PartsInventoryInspectorKind;
+  rowId: string;
+  x: number;
+  y: number;
+}
+
+interface PartsInventoryToolRequest {
+  id: number;
+  tool: string;
+}
+
+interface PartsInventoryRow {
+  id: string;
+  partNumber: string;
+  secondaryNumber: string;
+  upc: string;
+  description: string;
+  supplier: string;
+  category: string;
+  onHand: number;
+  price: string;
+  bin: string;
+  active: boolean;
+  supersededTo: string;
+  cost: string;
+  tone: RowTone;
+}
+
+interface PartsInventoryDetailDraft {
+  bin1: string;
+  bin2: string;
+  bin3: string;
+  cost: string;
+  description: string;
+  mapPrice: string;
+  marginPercent: string;
+  movementCode: string;
+  partNumber: string;
+  price: string;
+  salePrice: string;
+  secondaryNumber: string;
+  special1Price: string;
+  special2Price: string;
+  special3Price: string;
+  upc: string;
+}
+
+interface PartsContextMenuState {
+  rowId: string;
+  x: number;
+  y: number;
+}
+
+interface PartsSourcePreviewState {
+  kind: PartsInspectorKind;
+  rowId: string;
+  x: number;
+  y: number;
+}
 
 interface WorkflowContext {
   storeName: string;
@@ -652,14 +878,15 @@ interface WorkflowContext {
 }
 
 interface WorkspaceInteractionState {
-  selectedSalesRowId: string | null;
-  onSelectSalesRow: (row: SalesWorkspaceRow) => void;
-  selectedServiceRowId: string | null;
-  onSelectServiceRow: (row: ServiceWorkspaceRow) => void;
-  selectedPartsRowId: string | null;
-  onSelectPartsRow: (row: PartsWorkspaceRow) => void;
-  selectedWebsiteRowId: string | null;
-  onSelectWebsiteRow: (row: WebsiteWorkspaceRow) => void;
+    selectedSalesRowId: string | null;
+    onSelectSalesRow: (row: SalesWorkspaceRow) => void;
+    selectedServiceRowId: string | null;
+    onOpenServiceRow: (row: ServiceWorkspaceRow) => void;
+    onSelectServiceRow: (row: ServiceWorkspaceRow) => void;
+    selectedPartsRowId: string | null;
+    onSelectPartsRow: (row: PartsWorkspaceRow) => void;
+    selectedWebsiteRowId: string | null;
+    onSelectWebsiteRow: (row: WebsiteWorkspaceRow) => void;
 }
 
 const salesColumns: LegacyGridColumn<SalesWorkspaceRow>[] = [
@@ -685,15 +912,99 @@ const partsColumns: LegacyGridColumn<PartsWorkspaceRow>[] = [
   { label: "Supplier", render: (row) => row.supplier },
   { label: "Category", render: (row) => row.category },
   { label: "Order Type", render: (row) => row.orderType },
+  { label: "Web Order", render: (row) => buildPartsWebOrderLabel(row) },
   { className: "align-right", label: "Qty", render: (row) => row.quantity },
   { className: "align-right", label: "Order Cost", render: (row) => row.orderCost },
-  { label: "SO Invoice", render: (row) => row.source }
+  { label: "OEM Message", render: (row) => buildPartsOemMessage(row) },
+  { label: "SO Invoice Type", render: (row) => row.source }
 ];
 
 const partsLookupFieldOptions: Array<{ label: string; value: PartsLookupSearchField }> = [
   { label: "Part Number", value: "partNumber" },
   { label: "Secondary", value: "secondary" },
   { label: "Description", value: "description" }
+];
+
+const partsInventorySearchFieldOptions: Array<{ label: string; value: PartsInventorySearchField }> = [
+  { label: "All", value: "all" },
+  { label: "Part Number", value: "partNumber" },
+  { label: "Secondary", value: "secondary" },
+  { label: "UPC", value: "upc" },
+  { label: "Description", value: "description" },
+  { label: "Supplier", value: "supplier" },
+  { label: "Category", value: "category" },
+  { label: "Bin", value: "bin" }
+];
+
+const partsInventorySavedViews: Array<{ label: string; value: PartsInventorySavedView }> = [
+  { value: "active", label: "All Active" },
+  { value: "onHand", label: "On Hand" },
+  { value: "yamaha", label: "Yamaha" },
+  { value: "noBin", label: "No Bin" },
+  { value: "superseded", label: "Superseded" },
+  { value: "highValue", label: "High Value" }
+];
+
+const partsInventoryColumnPresets: Array<{ label: string; value: PartsInventoryColumnPreset }> = [
+  { value: "lookup", label: "Lookup" },
+  { value: "stock", label: "Stock" },
+  { value: "pricing", label: "Pricing" },
+  { value: "supersession", label: "Supersession" }
+];
+
+const partsInventoryDetailTabs: Array<{ label: string; value: PartsInventoryDetailTab }> = [
+  { value: "general", label: "General" },
+  { value: "serials", label: "Serial Numbers" },
+  { value: "similar", label: "Similar Parts" },
+  { value: "history", label: "History / Orders" },
+  { value: "detailHistory", label: "Detail History" }
+];
+
+const partsInventoryColumnDefinitions: Array<{
+  align?: "center" | "right";
+  key: PartsInventoryColumnKey;
+  label: string;
+  presets: PartsInventoryColumnPreset[];
+  width: string;
+}> = [
+  { align: "center", key: "select", label: "SPP", presets: ["lookup", "stock", "pricing", "supersession"], width: "54px" },
+  { key: "partNumber", label: "Part Number", presets: ["lookup", "stock", "pricing", "supersession"], width: "9%" },
+  { key: "secondaryNumber", label: "Secondary Number", presets: ["lookup", "supersession"], width: "9%" },
+  { key: "upc", label: "UPC", presets: ["lookup"], width: "9%" },
+  { key: "description", label: "Description ^", presets: ["lookup", "stock", "pricing", "supersession"], width: "20%" },
+  { key: "supplier", label: "Supplier", presets: ["lookup", "stock", "pricing", "supersession"], width: "7%" },
+  { key: "category", label: "Category", presets: ["lookup", "stock"], width: "7%" },
+  { align: "right", key: "onHand", label: "On Hand", presets: ["lookup", "stock", "pricing"], width: "7%" },
+  { align: "right", key: "price", label: "Price", presets: ["lookup", "pricing"], width: "8%" },
+  { key: "bin", label: "Bin", presets: ["lookup", "stock"], width: "7%" },
+  { align: "center", key: "activeMarker", label: "Active", presets: ["lookup", "stock", "supersession"], width: "5%" },
+  { key: "supersededTo", label: "Superseded To", presets: ["lookup", "supersession"], width: "7%" },
+  { align: "right", key: "cost", label: "Cost", presets: ["lookup", "pricing"], width: "5%" }
+];
+
+const partsDetailTabs: Array<{ label: string; value: PartsDetailTab }> = [
+  { value: "info", label: "Info" },
+  { value: "pricing", label: "Pricing" },
+  { value: "bins", label: "Bins" },
+  { value: "history", label: "History" },
+  { value: "notes", label: "Notes" }
+];
+
+const partsColumnPresets: Array<{ label: string; value: PartsColumnPreset }> = [
+  { value: "counter", label: "Counter" },
+  { value: "purchasing", label: "Purch" },
+  { value: "inventory", label: "Inv" },
+  { value: "compact", label: "Compact" }
+];
+
+const partsQuickFilterOptions: Array<{ label: string; value: PartsQuickFilter }> = [
+  { value: "all", label: "All" },
+  { value: "special", label: "Special" },
+  { value: "ro", label: "RO" },
+  { value: "web", label: "Web" },
+  { value: "lowMargin", label: "Low $" },
+  { value: "noBin", label: "No Bin" },
+  { value: "qtyRisk", label: "Qty" }
 ];
 
 const partsLookupColumns: LegacyGridColumn<PartsWorkspaceRow>[] = [
@@ -712,8 +1023,13 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const activeStore = session.stores.find((store) => store.id === activeStoreId) ?? session.stores[0];
   const openWindowsStorageKey = `${OPEN_WINDOWS_STORAGE_PREFIX}:${session.user.id}`;
   const openWindowOrderStorageKey = `${OPEN_WINDOW_ORDER_STORAGE_PREFIX}:${session.user.id}`;
+  const quickLaunchHiddenStorageKey = `${QUICK_LAUNCH_HIDDEN_STORAGE_PREFIX}:${session.user.id}`;
+  const quickLaunchOrderStorageKey = `${QUICK_LAUNCH_ORDER_STORAGE_PREFIX}:${session.user.id}`;
+  const quickLaunchRouteStorageKey = `${QUICK_LAUNCH_ROUTE_STORAGE_PREFIX}:${session.user.id}`;
   const desktopWidgetsStorageKey = `${DESKTOP_WIDGETS_STORAGE_PREFIX}:${session.user.id}:${activeStore.id}`;
   const serviceDetailWindowsStorageKey = `${OPEN_SERVICE_DETAIL_WINDOWS_STORAGE_PREFIX}:${session.user.id}`;
+  const partsInventoryDetailWindowsStorageKey = `${OPEN_PARTS_INVENTORY_DETAIL_WINDOWS_STORAGE_PREFIX}:${session.user.id}`;
+  const salesDealDetailWindowsStorageKey = `${OPEN_SALES_DEAL_DETAIL_WINDOWS_STORAGE_PREFIX}:${session.user.id}`;
   const serviceNotificationRailStorageKey = `${SERVICE_NOTIFICATION_RAIL_STORAGE_PREFIX}:${session.user.id}`;
   const recentServiceRowHighlightsStorageKey = `${RECENT_SERVICE_ROW_HIGHLIGHTS_STORAGE_PREFIX}:${session.user.id}:${activeStore.id}`;
   const activeServiceDetailRoNumber = searchParams.get("detailRo");
@@ -721,6 +1037,9 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const requestedServiceTaskId = searchParams.get("task");
   const requestedAuditCleanupStoreId = searchParams.get("cleanupStore");
   const serviceReturnStoreId = searchParams.get("returnStore");
+  const activeSalesDealId = workspaceId === "sales" ? searchParams.get("activeDeal") : null;
+  const partsWorkspaceView: PartsWorkspaceView = workspaceId === "parts" && searchParams.get("view") === "inventory" ? "inventory" : "ordering";
+  const activePartsInventoryPartNumber = workspaceId === "parts" && partsWorkspaceView === "inventory" ? searchParams.get("inventoryPart") : null;
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [workspace, setWorkspace] = useState<WorkspacePayload | null>(null);
   const [isDashboardLoading, setIsDashboardLoading] = useState(true);
@@ -728,6 +1047,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isStorePickerOpen, setIsStorePickerOpen] = useState(false);
   const [openWindowsContextMenu, setOpenWindowsContextMenu] = useState<OpenWindowsContextMenuState | null>(null);
+  const [quickLaunchContextMenu, setQuickLaunchContextMenu] = useState<QuickLaunchContextMenuState | null>(null);
   const [searchState, setSearchState] = useState<WorkspaceSearchState>({ searchTerm: "", filterValue: "All" });
   const [headerSearchTerm, setHeaderSearchTerm] = useState("");
   const [selectedSalesRowId, setSelectedSalesRowId] = useState<string | null>(null);
@@ -738,6 +1058,26 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const [refreshToken, setRefreshToken] = useState(0);
   const [isManualRefreshPending, setIsManualRefreshPending] = useState(false);
   const [toolbarNotice, setToolbarNotice] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<Array<{
+    id: string;
+    title: string;
+    detail: string;
+    tone: "neutral" | "attention" | "stable";
+    read: boolean;
+    timestamp: string;
+  }>>([
+    { id: "n1", title: "RO #1042 Overdue", detail: "Past promised date by 2 days.", tone: "attention", read: false, timestamp: "2h ago" },
+    { id: "n2", title: "Parts Order Arrived", detail: "PO-8801 received at warehouse.", tone: "stable", read: false, timestamp: "4h ago" },
+    { id: "n3", title: "Customer Waiting", detail: "J. Smith arrived for RO #1041.", tone: "neutral", read: false, timestamp: "1d ago" },
+  ]);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [globalSearchTerm, setGlobalSearchTerm] = useState("");
+  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+  const [activeCustomerProfile, setActiveCustomerProfile] = useState<{ name: string; roNumber: string } | null>(null);
+  const [customerProfileTab, setCustomerProfileTab] = useState<"overview" | "ros" | "units" | "comms">("overview");
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [userRole, setUserRole] = useState<"admin" | "manager" | "tech" | "writer">("writer");
+  const unreadCount = notifications.filter((n) => !n.read).length;
   const [lastWorkspaceSyncLabel, setLastWorkspaceSyncLabel] = useState<string | null>(null);
   const [commandLog, setCommandLog] = useState<CommandLogEntry[]>([]);
   const [isActivityLoading, setIsActivityLoading] = useState(true);
@@ -754,6 +1094,8 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const [updatingServiceQueueRowId, setUpdatingServiceQueueRowId] = useState<string | null>(null);
   const [updatingTaskPolicyKey, setUpdatingTaskPolicyKey] = useState<string | null>(null);
   const [activeWorkflow, setActiveWorkflow] = useState<ActionWorkflowState | null>(null);
+  const [workspaceToolsTarget, setWorkspaceToolsTarget] = useState<ApplicationWorkspaceToolsTarget | null>(null);
+  const [websiteWorkspaceView, setWebsiteWorkspaceView] = useState<WebsiteWorkspaceView>("feed");
   const [isWorkflowSubmitting, setIsWorkflowSubmitting] = useState(false);
   const [partsQuickAddTerm, setPartsQuickAddTerm] = useState("");
   const [isPartsLookupOpen, setIsPartsLookupOpen] = useState(false);
@@ -762,10 +1104,27 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const [partsLookupSelectedRowId, setPartsLookupSelectedRowId] = useState<string | null>(null);
   const [partsLookupQuantity, setPartsLookupQuantity] = useState("1");
   const [isPartsLookupSubmitting, setIsPartsLookupSubmitting] = useState(false);
+  const [partsInventoryToolRequest, setPartsInventoryToolRequest] = useState<PartsInventoryToolRequest | null>(null);
+  const [purchasePadRows, setPurchasePadRows] = useState<PartsWorkspaceRow[]>([]);
+  const [quickLaunchOrderSlots, setQuickLaunchOrderSlots] = useState<string[]>(() => readQuickLaunchOrderPreference(session.user.id));
+  const [quickLaunchRoutesBySlot, setQuickLaunchRoutesBySlot] = useState<Record<string, QuickLaunchRouteMetadata>>(() =>
+    readQuickLaunchRouteMetadataPreference(session.user.id)
+  );
+  const [hiddenQuickLaunchSlots, setHiddenQuickLaunchSlots] = useState<string[]>(() => readHiddenQuickLaunchSlots(session.user.id));
   const [configuredOpenWorkspaceIds, setConfiguredOpenWorkspaceIds] = useState<WorkspaceId[]>(() => readOpenWorkspacePreference(session.user.id));
   const [openWindowOrderKeys, setOpenWindowOrderKeys] = useState<string[]>(() => readOpenWindowOrderPreference(session.user.id));
   const [serviceDetailWindows, setServiceDetailWindows] = useState<ServiceDetailWindow[]>(() => readOpenServiceDetailWindowPreference(session.user.id));
+  const [partsInventoryDetailWindows, setPartsInventoryDetailWindows] = useState<PartsInventoryDetailWindow[]>(() =>
+    readOpenPartsInventoryDetailWindowPreference(session.user.id)
+  );
+  const [salesDealDetailWindows, setSalesDealDetailWindows] = useState<SalesDealDetailWindow[]>(() =>
+    readOpenSalesDealDetailWindowPreference(session.user.id)
+  );
   const [draggingOpenWindowKey, setDraggingOpenWindowKey] = useState<string | null>(null);
+  const [draggingOpenWindowWorkspaceId, setDraggingOpenWindowWorkspaceId] = useState<WorkspaceId | null>(null);
+  const [draggingQuickLaunchSlot, setDraggingQuickLaunchSlot] = useState<string | null>(null);
+  const [quickLaunchDropState, setQuickLaunchDropState] = useState<QuickLaunchDropState | null>(null);
+  const [isQuickLaunchStripDropTarget, setIsQuickLaunchStripDropTarget] = useState(false);
   const [openWindowDropState, setOpenWindowDropState] = useState<OpenWindowDropState | null>(null);
   const [serviceQueueView, setServiceQueueView] = useState<ServiceQueueView>("All");
   const [isServiceNotificationRailCollapsed, setIsServiceNotificationRailCollapsed] = useState(() =>
@@ -779,15 +1138,22 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const [pendingWorkspaceMenuIntent, setPendingWorkspaceMenuIntent] = useState<WorkspaceMenuIntent | null>(null);
   const [pendingServiceMenuIntent, setPendingServiceMenuIntent] = useState<PendingServiceMenuIntent | null>(null);
   const currentActivityKeyRef = useRef(`${activeStore.id}:${workspaceId}`);
+  const quickLaunchDropHandledRef = useRef(false);
 
   const menuGroups = dashboard?.navigation ?? legacyFallbackNavigation;
+  const orderedQuickLaunchButtons = sortQuickLaunchButtonsByOrder(quickLaunchButtons, quickLaunchOrderSlots);
+  const visibleQuickLaunchButtons = orderedQuickLaunchButtons.filter((button) => !hiddenQuickLaunchSlots.includes(button.slot));
+  const hiddenQuickLaunchButtons = orderedQuickLaunchButtons.filter((button) => hiddenQuickLaunchSlots.includes(button.slot));
+  const quickLaunchContextTarget = quickLaunchButtons.find((button) => button.slot === quickLaunchContextMenu?.targetSlot) ?? null;
   const headerSearchResults = searchHeaderCommands(buildHeaderSearchCommands(menuGroups), headerSearchTerm);
   const serviceRows = workspace?.workspaceId === "service" ? workspace.rows : [];
   const activeWorkspace = workspaceDefinitions[workspaceId];
-  const shouldRenderCommandLogRail = workspaceId !== "service" && workspaceId !== "parts" && workspaceId !== "sales" && workspaceId !== "desktop";
-  const shouldRenderTaskQueueRail = workspaceId !== "service" && workspaceId !== "sales" && workspaceId !== "desktop";
-  const shouldFetchActivityLog = shouldRenderCommandLogRail || workspaceId === "service";
-  const shouldFetchTaskQueue = shouldRenderTaskQueueRail || workspaceId === "service";
+  const shouldRenderCommandLogRail =
+    workspaceId !== "service" && workspaceId !== "parts" && workspaceId !== "sales" && workspaceId !== "desktop" && workspaceId !== "website";
+  const shouldRenderTaskQueueRail =
+    workspaceId !== "service" && workspaceId !== "sales" && workspaceId !== "desktop" && workspaceId !== "website" && workspaceId !== "parts";
+  const shouldFetchActivityLog = shouldRenderCommandLogRail || workspaceId === "service" || workspaceId === "website";
+  const shouldFetchTaskQueue = shouldRenderTaskQueueRail || workspaceId === "service" || workspaceId === "website";
   const availableOpenWorkspaceIds = workspaceOrder.filter((candidateWorkspaceId) => {
     if (candidateWorkspaceId === "website") {
       return (dashboard?.workspaceCounts.website ?? 0) > 0;
@@ -806,10 +1172,42 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     serviceDetailWindows.filter((windowEntry) => windowEntry.storeId === activeStore.id),
     openWindowOrderKeys
   );
+  const storedVisiblePartsInventoryDetailWindows = sortPartsInventoryDetailWindowsByOpenWindowOrder(
+    partsInventoryDetailWindows.filter((windowEntry) => windowEntry.storeId === activeStore.id),
+    openWindowOrderKeys
+  );
+  const matchedPartsInventoryDetailWindow = activePartsInventoryPartNumber
+    ? storedVisiblePartsInventoryDetailWindows.find((windowEntry) => windowEntry.partNumber === activePartsInventoryPartNumber) ?? null
+    : null;
+  const activePartsInventoryDetailWindow = activePartsInventoryPartNumber
+    ? matchedPartsInventoryDetailWindow ?? {
+        description: "",
+        partNumber: activePartsInventoryPartNumber,
+        storeId: activeStore.id
+      }
+    : null;
+  const visiblePartsInventoryDetailWindows =
+    activePartsInventoryDetailWindow && !matchedPartsInventoryDetailWindow
+      ? [activePartsInventoryDetailWindow, ...storedVisiblePartsInventoryDetailWindows]
+      : storedVisiblePartsInventoryDetailWindows;
+  const visibleSalesDealDetailWindows = sortSalesDealDetailWindowsByOpenWindowOrder(
+    salesDealDetailWindows.filter((windowEntry) => windowEntry.storeId === activeStore.id),
+    openWindowOrderKeys
+  );
+  const matchedSalesDealDetailWindow = activeSalesDealId
+    ? visibleSalesDealDetailWindows.find((windowEntry) => windowEntry.dealId === activeSalesDealId) ?? null
+    : null;
+  const activeSalesDealDetailWindow = activeSalesDealId
+    ? matchedSalesDealDetailWindow ?? { customer: "", worksheet: "", dealId: activeSalesDealId, storeId: activeStore.id }
+    : null;
   const visibleOpenWindowItems = sortOpenWindowRailItems<OpenWindowRailItem>(
     [
       ...openWorkspaceIds.map((candidateWorkspaceId) => ({
-        isActive: candidateWorkspaceId === workspaceId && !(candidateWorkspaceId === "service" && activeServiceDetailRoNumber),
+        isActive:
+          candidateWorkspaceId === workspaceId &&
+          !(candidateWorkspaceId === "service" && activeServiceDetailRoNumber) &&
+          !(candidateWorkspaceId === "parts" && activePartsInventoryDetailWindow) &&
+          !(candidateWorkspaceId === "sales" && activeSalesDealDetailWindow),
         key: buildOpenWindowWorkspaceKey(candidateWorkspaceId),
         kind: "workspace" as const,
         workspaceId: candidateWorkspaceId
@@ -817,7 +1215,19 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       ...visibleServiceDetailWindows.map((windowEntry) => ({
         isActive: workspaceId === "service" && activeServiceDetailRoNumber === windowEntry.roNumber,
         key: buildOpenWindowDetailKey(windowEntry),
-        kind: "detail" as const,
+        kind: "serviceDetail" as const,
+        windowEntry
+      })),
+      ...visiblePartsInventoryDetailWindows.map((windowEntry) => ({
+        isActive: workspaceId === "parts" && activePartsInventoryDetailWindow?.partNumber === windowEntry.partNumber,
+        key: buildOpenWindowPartsInventoryDetailKey(windowEntry),
+        kind: "partsInventoryDetail" as const,
+        windowEntry
+      })),
+      ...visibleSalesDealDetailWindows.map((windowEntry) => ({
+        isActive: workspaceId === "sales" && activeSalesDealDetailWindow?.dealId === windowEntry.dealId,
+        key: buildOpenWindowSalesDealKey(windowEntry),
+        kind: "salesDeal" as const,
         windowEntry
       }))
     ],
@@ -841,12 +1251,17 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const contextMenuTargetIsPinned = contextMenuTargetWorkspaceId
     ? configuredOpenWorkspaceIds.includes(contextMenuTargetWorkspaceId)
     : false;
-  const hasAnyOpenWindows = configuredOpenWorkspaceIds.length > 0 || serviceDetailWindows.length > 0;
+  const hasAnyOpenWindows = configuredOpenWorkspaceIds.length > 0 || serviceDetailWindows.length > 0 || partsInventoryDetailWindows.length > 0 || salesDealDetailWindows.length > 0;
   const activeOpenWindowKey = activeServiceDetailWindow
     ? buildOpenWindowDetailKey(activeServiceDetailWindow)
+    : activePartsInventoryDetailWindow
+      ? buildOpenWindowPartsInventoryDetailKey(activePartsInventoryDetailWindow)
+    : activeSalesDealDetailWindow
+      ? buildOpenWindowSalesDealKey(activeSalesDealDetailWindow)
     : buildOpenWindowWorkspaceKey(workspaceId);
   const shouldRenderActiveWorkspace = visibleOpenWindowItems.some((item) => item.key === activeOpenWindowKey);
-  const partsRows = workspace?.workspaceId === "parts" ? workspace.rows : [];
+  const basePartsRows = workspace?.workspaceId === "parts" ? workspace.rows : [];
+  const partsRows = workspace?.workspaceId === "parts" ? mergePurchasePadRows(basePartsRows, purchasePadRows) : [];
   const selectedSalesRow = workspace?.workspaceId === "sales" ? resolveSelectedRow(workspace.rows, selectedSalesRowId) : null;
   const selectedServiceRow = workspace?.workspaceId === "service" ? resolveSelectedRow(workspace.rows, selectedServiceRowId) : null;
   const selectedPartsRow = workspace?.workspaceId === "parts" ? resolveSelectedRow(partsRows, selectedPartsRowId) : null;
@@ -854,17 +1269,48 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const partsLookupRows = filterPartsLookupRows(partsRows, partsLookupSearchTerm, partsLookupSearchField);
   const activePartsLookupRow = resolveSelectedRow(partsLookupRows, partsLookupSelectedRowId);
   const serviceNotificationEntries = workspace?.workspaceId === "service" ? workspace.notifications ?? [] : [];
-  const activeWindowTitle = activeServiceDetailWindow ? formatServiceDetailWindowTitle(activeServiceDetailWindow) : activeWorkspace.title;
+  const websiteWindowTitle = websiteWorkspaceView === "customSettings" ? "Sync Monitor" : activeWorkspace.title;
+  const websiteWindowSubtitle =
+    websiteWorkspaceView === "customSettings" ? "Custom Settings / integrations, rules, and configurations" : activeWorkspace.subtitle;
+  const activeWindowTitle = activeServiceDetailWindow
+    ? formatServiceDetailWindowTitle(activeServiceDetailWindow)
+    : activePartsInventoryDetailWindow
+      ? formatPartsInventoryDetailWindowTitle(activePartsInventoryDetailWindow)
+    : activeSalesDealDetailWindow
+      ? formatSalesDealWindowTitle(activeSalesDealDetailWindow)
+    : workspaceId === "parts" && partsWorkspaceView === "inventory"
+      ? "Parts Inventory"
+    : workspaceId === "website"
+      ? websiteWindowTitle
+      : activeWorkspace.title;
   const activeWindowSubtitle = activeServiceDetailRow
     ? `${activeServiceDetailRow.customerName} · ${activeServiceDetailRow.maker} ${activeServiceDetailRow.model}`
     : activeServiceDetailWindow
       ? `Repair order detail workbench`
+      : activePartsInventoryDetailWindow
+        ? activePartsInventoryDetailWindow.description || "Parts Inventory detail"
+      : activeSalesDealDetailWindow
+        ? `Deal worksheet ${activeSalesDealDetailWindow.worksheet || activeSalesDealDetailWindow.dealId}`
+      : workspaceId === "website"
+        ? websiteWindowSubtitle
       : activeWorkspace.subtitle;
+  const activeWorkspaceTools =
+    workspaceId === "sales" && activeSalesDealDetailWindow
+      ? ["New Deal", "New Quote", "Take Deposit", "Send Message"]
+      : workspaceId === "parts" && activePartsInventoryDetailWindow
+        ? ["New", "Delete", "Duplicate", "List"]
+        : workspaceId === "parts" && partsWorkspaceView === "inventory"
+          ? ["New", "Delete", "Duplicate", "Detail"]
+          : activeWorkspace.tools;
   const isLoading = isDashboardLoading || isWorkspaceLoading;
   const serviceReturnStore = serviceReturnStoreId ? session.stores.find((store) => store.id === serviceReturnStoreId) ?? null : null;
   const serviceReturnCleanupStore = requestedAuditCleanupStoreId
     ? session.stores.find((store) => store.id === requestedAuditCleanupStoreId) ?? null
     : null;
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", isDarkMode ? "light" : "dark");
+  }, [isDarkMode]);
 
   useEffect(() => {
     setPartsQuickAddTerm("");
@@ -925,16 +1371,28 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   }, [activeStore.id, workspaceId]);
 
   useEffect(() => {
+    setQuickLaunchOrderSlots(readQuickLaunchOrderPreference(session.user.id));
+    setQuickLaunchRoutesBySlot(readQuickLaunchRouteMetadataPreference(session.user.id));
     setConfiguredOpenWorkspaceIds(readOpenWorkspacePreference(session.user.id));
     setOpenWindowOrderKeys(readOpenWindowOrderPreference(session.user.id));
+    setHiddenQuickLaunchSlots(readHiddenQuickLaunchSlots(session.user.id));
     setServiceDetailWindows(readOpenServiceDetailWindowPreference(session.user.id));
+    setPartsInventoryDetailWindows(readOpenPartsInventoryDetailWindowPreference(session.user.id));
+    setSalesDealDetailWindows(readOpenSalesDealDetailWindowPreference(session.user.id));
     setIsServiceNotificationRailCollapsed(readServiceNotificationRailCollapsedPreference(session.user.id));
     setOpenWindowsContextMenu(null);
+    setQuickLaunchContextMenu(null);
   }, [session.user.id]);
 
   useEffect(() => {
-    setOpenWindowOrderKeys((current) => normalizeOpenWindowOrderPreference(current, configuredOpenWorkspaceIds, serviceDetailWindows));
-  }, [configuredOpenWorkspaceIds, serviceDetailWindows]);
+    setQuickLaunchOrderSlots((current) => normalizeQuickLaunchOrderPreference(current));
+  }, []);
+
+  useEffect(() => {
+    setOpenWindowOrderKeys((current) =>
+      normalizeOpenWindowOrderPreference(current, configuredOpenWorkspaceIds, serviceDetailWindows, partsInventoryDetailWindows, salesDealDetailWindows)
+    );
+  }, [configuredOpenWorkspaceIds, partsInventoryDetailWindows, salesDealDetailWindows, serviceDetailWindows]);
 
   useEffect(() => {
     setRecentServiceRowHighlights(readRecentServiceRowHighlightsPreference(recentServiceRowHighlightsStorageKey));
@@ -959,10 +1417,44 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   }, [openWindowsContextMenu]);
 
   useEffect(() => {
+    if (!quickLaunchContextMenu || typeof window === "undefined") {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setQuickLaunchContextMenu(null);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [quickLaunchContextMenu]);
+
+  useEffect(() => {
     setOpenWindowsContextMenu(null);
     setDraggingOpenWindowKey(null);
     setOpenWindowDropState(null);
   }, [activeStore.id, workspaceId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.sessionStorage.setItem(quickLaunchOrderStorageKey, JSON.stringify(quickLaunchOrderSlots));
+  }, [quickLaunchOrderSlots, quickLaunchOrderStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.sessionStorage.setItem(quickLaunchRouteStorageKey, JSON.stringify(quickLaunchRoutesBySlot));
+  }, [quickLaunchRouteStorageKey, quickLaunchRoutesBySlot]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -985,8 +1477,32 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       return;
     }
 
+    window.sessionStorage.setItem(quickLaunchHiddenStorageKey, JSON.stringify(hiddenQuickLaunchSlots));
+  }, [hiddenQuickLaunchSlots, quickLaunchHiddenStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
     window.sessionStorage.setItem(serviceDetailWindowsStorageKey, JSON.stringify(serviceDetailWindows));
   }, [serviceDetailWindows, serviceDetailWindowsStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.sessionStorage.setItem(partsInventoryDetailWindowsStorageKey, JSON.stringify(partsInventoryDetailWindows));
+  }, [partsInventoryDetailWindows, partsInventoryDetailWindowsStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.sessionStorage.setItem(salesDealDetailWindowsStorageKey, JSON.stringify(salesDealDetailWindows));
+  }, [salesDealDetailWindows, salesDealDetailWindowsStorageKey]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -1340,7 +1856,11 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   }, [workspace, workspaceId]);
 
   function navigateToWorkspace(nextWorkspaceId: WorkspaceId, sourceLabel?: string) {
-    if (nextWorkspaceId === workspaceId && !(nextWorkspaceId === "service" && activeServiceDetailRoNumber)) {
+    if (
+      nextWorkspaceId === workspaceId &&
+      !(nextWorkspaceId === "service" && activeServiceDetailRoNumber) &&
+      !(nextWorkspaceId === "parts" && partsWorkspaceView !== "ordering")
+    ) {
       return;
     }
 
@@ -1365,6 +1885,35 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     navigate(`/dashboard/${activeStore.id}/${nextWorkspaceId}`);
   }
 
+  function navigateToPartsInventory(sourceLabel: string) {
+    addOpenWorkspace("parts");
+    setActiveWorkflow(null);
+    setPendingWorkspaceMenuIntent(null);
+    setToolbarNotice("Parts Inventory ready. Search a term, or enter % to pull inventory.");
+    appendCommandLog(
+      {
+        label: "Parts Inventory opened",
+        detail: `Inventory lookup via ${sourceLabel}.`,
+        tone: "neutral"
+      },
+      {
+        optimistic: false,
+        workspaceId: "parts"
+      }
+    );
+    navigate(`/dashboard/${activeStore.id}/parts?view=inventory`);
+  }
+
+  function openWorkspaceTools(target: ApplicationWorkspaceToolsTarget, sourceLabel: string) {
+    setWorkspaceToolsTarget(target);
+    setActiveWorkflow(null);
+    setToolbarNotice(`${target.sectionLabel} / ${target.action} opened in Workspace Tools.`);
+
+    if (workspaceId !== "desktop") {
+      navigateToWorkspace("desktop", sourceLabel);
+    }
+  }
+
   function addOpenWorkspace(targetWorkspaceId: WorkspaceId) {
     setConfiguredOpenWorkspaceIds((current) =>
       current.includes(targetWorkspaceId) ? current : normalizeOpenWorkspacePreference([...current, targetWorkspaceId])
@@ -1383,6 +1932,8 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     setConfiguredOpenWorkspaceIds([]);
     setOpenWindowOrderKeys([]);
     setServiceDetailWindows([]);
+    setPartsInventoryDetailWindows([]);
+    setSalesDealDetailWindows([]);
     setOpenWindowsContextMenu(null);
     setDraggingOpenWindowKey(null);
     setOpenWindowDropState(null);
@@ -1395,6 +1946,14 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       navigate(`/dashboard/${activeStore.id}/service${nextSearchParams.size > 0 ? `?${nextSearchParams.toString()}` : ""}`, {
         replace: true
       });
+    }
+
+    if (workspaceId === "parts" && activePartsInventoryPartNumber) {
+      navigate(`/dashboard/${activeStore.id}/parts?view=inventory`, { replace: true });
+    }
+
+    if (workspaceId === "sales" && activeSalesDealId) {
+      navigate(`/dashboard/${activeStore.id}/sales`, { replace: true });
     }
   }
 
@@ -1411,12 +1970,125 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     }
   }
 
+  function closePartsInventoryDetailWindow(targetStoreId: string, partNumber: string) {
+    setPartsInventoryDetailWindows((current) =>
+      current.filter((windowEntry) => !(windowEntry.storeId === targetStoreId && windowEntry.partNumber === partNumber))
+    );
+
+    if (workspaceId === "parts" && activeStore.id === targetStoreId && activePartsInventoryPartNumber === partNumber) {
+      navigate(`/dashboard/${targetStoreId}/parts?view=inventory`, { replace: true });
+    }
+  }
+
   function openOpenWindowsContextMenu(event: React.MouseEvent<HTMLElement>, targetWorkspaceId: WorkspaceId | null) {
     event.preventDefault();
     event.stopPropagation();
+    setQuickLaunchContextMenu(null);
     setOpenWindowsContextMenu({
       targetWorkspaceId
     });
+  }
+
+  function openQuickLaunchContext(event: React.MouseEvent<HTMLElement>, targetSlot: string | null) {
+    event.preventDefault();
+    event.stopPropagation();
+    setOpenWindowsContextMenu(null);
+    setQuickLaunchContextMenu({
+      targetSlot
+    });
+  }
+
+  function hideQuickLaunchButton(button: QuickLaunchButton) {
+    setHiddenQuickLaunchSlots((current) => normalizeHiddenQuickLaunchSlots([...current, button.slot]));
+    setQuickLaunchContextMenu(null);
+    setToolbarNotice(`${resolveQuickLaunchButtonDisplayLabel(button)} removed from top buttons.`);
+  }
+
+  function showQuickLaunchButton(button: QuickLaunchButton) {
+    setHiddenQuickLaunchSlots((current) => current.filter((slot) => slot !== button.slot));
+    setQuickLaunchContextMenu(null);
+    setToolbarNotice(`${resolveQuickLaunchButtonDisplayLabel(button)} added to top buttons.`);
+  }
+
+  function handleQuickLaunchStripContextMenu(event: React.MouseEvent<HTMLElement>) {
+    const eventTarget = event.target;
+
+    if (eventTarget instanceof HTMLElement && eventTarget.closest(".legacy-launch-button")) {
+      return;
+    }
+
+    openQuickLaunchContext(event, null);
+  }
+
+  function readDraggedQuickLaunchSlot(event: React.DragEvent<HTMLElement>) {
+    const mimeSlot = event.dataTransfer.getData(QUICK_LAUNCH_SLOT_DRAG_MIME);
+
+    if (quickLaunchButtons.some((button) => button.slot === mimeSlot)) {
+      return mimeSlot;
+    }
+
+    const textSlot = event.dataTransfer.getData("text/plain");
+
+    if (quickLaunchButtons.some((button) => button.slot === textSlot)) {
+      return textSlot;
+    }
+
+    return draggingQuickLaunchSlot;
+  }
+
+  function handleQuickLaunchDragStart(event: React.DragEvent<HTMLElement>, slot: string) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", slot);
+    event.dataTransfer.setData(QUICK_LAUNCH_SLOT_DRAG_MIME, slot);
+    setDraggingQuickLaunchSlot(slot);
+    setQuickLaunchDropState(null);
+    setQuickLaunchContextMenu(null);
+  }
+
+  function handleQuickLaunchDragOver(event: React.DragEvent<HTMLDivElement>, slot: string) {
+    const sourceSlot = readDraggedQuickLaunchSlot(event);
+
+    if (!sourceSlot || sourceSlot === slot) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const nextDropPosition = event.clientX >= bounds.left + bounds.width / 2 ? "after" : "before";
+
+    setQuickLaunchDropState((current) =>
+      current?.slot === slot && current.position === nextDropPosition ? current : { slot, position: nextDropPosition }
+    );
+  }
+
+  function handleQuickLaunchDrop(event: React.DragEvent<HTMLDivElement>, slot: string) {
+    const sourceSlot = readDraggedQuickLaunchSlot(event);
+
+    if (!sourceSlot || sourceSlot === slot) {
+      setDraggingQuickLaunchSlot(null);
+      setQuickLaunchDropState(null);
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const fallbackDropPosition = event.clientX >= bounds.left + bounds.width / 2 ? "after" : "before";
+    const dropPosition = quickLaunchDropState?.slot === slot ? quickLaunchDropState.position : fallbackDropPosition;
+
+    setQuickLaunchOrderSlots((current) => reorderQuickLaunchOrderPreference(current, sourceSlot, slot, dropPosition));
+    setDraggingQuickLaunchSlot(null);
+    setQuickLaunchDropState(null);
+    setToolbarNotice("Top buttons reordered.");
+  }
+
+  function handleQuickLaunchDragEnd() {
+    setDraggingQuickLaunchSlot(null);
+    setQuickLaunchDropState(null);
   }
 
   function handleOpenWindowsRailContextMenu(event: React.MouseEvent<HTMLElement>) {
@@ -1429,10 +2101,17 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     openOpenWindowsContextMenu(event, null);
   }
 
-  function handleOpenWindowDragStart(event: React.DragEvent<HTMLElement>, itemKey: string) {
+  function handleOpenWindowDragStart(event: React.DragEvent<HTMLElement>, itemKey: string, workspaceForItem: WorkspaceId | null) {
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", itemKey);
+
+    if (workspaceForItem) {
+      event.dataTransfer.setData(OPEN_WINDOW_WORKSPACE_DRAG_MIME, workspaceForItem);
+    }
+
+    quickLaunchDropHandledRef.current = false;
     setDraggingOpenWindowKey(itemKey);
+    setDraggingOpenWindowWorkspaceId(workspaceForItem);
     setOpenWindowDropState(null);
     setOpenWindowsContextMenu(null);
   }
@@ -1476,7 +2155,9 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         targetKey,
         dropPosition,
         configuredOpenWorkspaceIds,
-        serviceDetailWindows
+        serviceDetailWindows,
+        partsInventoryDetailWindows,
+        salesDealDetailWindows
       )
     );
     setDraggingOpenWindowKey(null);
@@ -1484,9 +2165,154 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     setToolbarNotice("Open Windows reordered.");
   }
 
-  function handleOpenWindowDragEnd() {
+  function handleOpenWindowDragEnd(event: React.DragEvent<HTMLElement>) {
+    if (!quickLaunchDropHandledRef.current && draggingOpenWindowWorkspaceId && typeof document !== "undefined") {
+      const dropElement = document.elementFromPoint(event.clientX, event.clientY);
+
+      if (dropElement instanceof HTMLElement && dropElement.closest(".legacy-app-frame")) {
+        pinQuickLaunchWorkspaceButton(draggingOpenWindowWorkspaceId, inferQuickLaunchRouteMetadataForWorkspace(draggingOpenWindowWorkspaceId));
+      }
+    }
+
+    quickLaunchDropHandledRef.current = false;
     setDraggingOpenWindowKey(null);
+    setDraggingOpenWindowWorkspaceId(null);
     setOpenWindowDropState(null);
+    setIsQuickLaunchStripDropTarget(false);
+  }
+
+  function readDraggedOpenWindowWorkspaceId(event: React.DragEvent<HTMLElement>) {
+    const workspaceCandidate = event.dataTransfer.getData(OPEN_WINDOW_WORKSPACE_DRAG_MIME);
+
+    if (isWorkspaceId(workspaceCandidate)) {
+      return workspaceCandidate;
+    }
+
+    const draggedItemKey = event.dataTransfer.getData("text/plain");
+
+    if (!draggedItemKey) {
+      return null;
+    }
+
+    const matchedOpenWindowItem = visibleOpenWindowItems.find((item) => item.key === draggedItemKey);
+
+    return matchedOpenWindowItem?.kind === "workspace" ? matchedOpenWindowItem.workspaceId : null;
+  }
+
+  function resolveDraggingWorkspaceId(event: React.DragEvent<HTMLElement>) {
+    const workspaceFromDataTransfer = readDraggedOpenWindowWorkspaceId(event);
+
+    if (workspaceFromDataTransfer) {
+      return workspaceFromDataTransfer;
+    }
+
+    if (!draggingOpenWindowKey) {
+      return null;
+    }
+
+    const matchedOpenWindowItem = visibleOpenWindowItems.find((item) => item.key === draggingOpenWindowKey);
+
+    return matchedOpenWindowItem?.kind === "workspace" ? matchedOpenWindowItem.workspaceId : null;
+  }
+
+  function resolveQuickLaunchButtonForWorkspace(workspace: WorkspaceId) {
+    return quickLaunchButtons.find((button) => button.workspaceId === workspace);
+  }
+
+  function resolveQuickLaunchButtonDisplayLabel(button: QuickLaunchButton) {
+    return quickLaunchRoutesBySlot[button.slot]?.label ?? button.label;
+  }
+
+  function inferQuickLaunchRouteMetadataForWorkspace(workspace: WorkspaceId): QuickLaunchRouteMetadata | null {
+    if (workspace === "parts" && workspaceId === "parts" && partsWorkspaceView === "inventory") {
+      return {
+        groupLabel: "Parts",
+        item: "Parts Inventory",
+        label: "Parts Inventory"
+      };
+    }
+
+    if (workspace === "service") {
+      return {
+        groupLabel: "Service",
+        item: "Estimates & Repair Orders",
+        label: "Estimates & Repair Orders"
+      };
+    }
+
+    return null;
+  }
+
+  function pinQuickLaunchWorkspaceButton(workspace: WorkspaceId, routeMetadata?: QuickLaunchRouteMetadata | null) {
+    const targetQuickLaunchButton = resolveQuickLaunchButtonForWorkspace(workspace);
+
+    if (!targetQuickLaunchButton) {
+      setToolbarNotice(`No top button is configured for ${workspaceDefinitions[workspace].title}.`);
+      return;
+    }
+
+    setQuickLaunchContextMenu(null);
+
+    if (routeMetadata) {
+      setQuickLaunchRoutesBySlot((current) => ({
+        ...current,
+        [targetQuickLaunchButton.slot]: routeMetadata
+      }));
+    }
+
+    const quickLaunchLabel = routeMetadata?.label ?? resolveQuickLaunchButtonDisplayLabel(targetQuickLaunchButton);
+
+    if (!hiddenQuickLaunchSlots.includes(targetQuickLaunchButton.slot)) {
+      setToolbarNotice(`${quickLaunchLabel} is already pinned in top buttons.`);
+      return;
+    }
+
+    setHiddenQuickLaunchSlots((current) => current.filter((slot) => slot !== targetQuickLaunchButton.slot));
+    setToolbarNotice(`${quickLaunchLabel} added to top buttons.`);
+  }
+
+  function handleQuickLaunchStripDragOver(event: React.DragEvent<HTMLElement>) {
+    const draggedWorkspaceId = resolveDraggingWorkspaceId(event);
+
+    if (!draggedWorkspaceId) {
+      setIsQuickLaunchStripDropTarget(false);
+      return;
+    }
+
+    const targetQuickLaunchButton = resolveQuickLaunchButtonForWorkspace(draggedWorkspaceId);
+
+    if (!targetQuickLaunchButton) {
+      setIsQuickLaunchStripDropTarget(false);
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setIsQuickLaunchStripDropTarget(true);
+  }
+
+  function handleQuickLaunchStripDragLeave(event: React.DragEvent<HTMLElement>) {
+    const relatedTarget = event.relatedTarget;
+
+    if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) {
+      return;
+    }
+
+    setIsQuickLaunchStripDropTarget(false);
+  }
+
+  function handleQuickLaunchStripDrop(event: React.DragEvent<HTMLElement>) {
+    event.preventDefault();
+    quickLaunchDropHandledRef.current = true;
+    setIsQuickLaunchStripDropTarget(false);
+
+    const draggedWorkspaceId = draggingOpenWindowWorkspaceId ?? resolveDraggingWorkspaceId(event);
+
+    if (!draggedWorkspaceId) {
+      return;
+    }
+
+    pinQuickLaunchWorkspaceButton(draggedWorkspaceId, inferQuickLaunchRouteMetadataForWorkspace(draggedWorkspaceId));
   }
 
   function openServiceRepairOrder(targetStoreId: string, options: OpenServiceRepairOrderOptions) {
@@ -1513,6 +2339,34 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     );
 
     navigate(`/dashboard/${targetStoreId}/service?${nextSearchParams.toString()}`);
+  }
+
+  function openPartsInventoryDetail(targetStoreId: string, row: PartsWorkspaceRow) {
+    const nextSearchParams = new URLSearchParams({ view: "inventory", inventoryPart: row.partNumber });
+
+    addOpenWorkspace("parts");
+    setActiveWorkflow(null);
+    setPendingWorkspaceMenuIntent(null);
+    setPartsInventoryDetailWindows((current) =>
+      upsertPartsInventoryDetailWindow(current, {
+        description: row.description,
+        partNumber: row.partNumber,
+        storeId: targetStoreId
+      })
+    );
+    setSelectedPartsRowId(row.id);
+    appendCommandLog(
+      {
+        label: "Parts Inventory detail opened",
+        detail: `${row.partNumber} opened from Parts Inventory.`,
+        tone: "neutral"
+      },
+      {
+        optimistic: false,
+        workspaceId: "parts"
+      }
+    );
+    navigate(`/dashboard/${targetStoreId}/parts?${nextSearchParams.toString()}`);
   }
 
   function returnToAuditCleanup(targetStoreId: string, cleanupStoreId?: string | null) {
@@ -1557,6 +2411,20 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
 
     if (item === "Logout" || item === "Exit") {
       onSignOut();
+      return;
+    }
+
+    if (groupLabel === "Application") {
+      const workspaceToolsTarget = resolveApplicationWorkspaceToolsTarget(item);
+
+      if (workspaceToolsTarget) {
+        openWorkspaceTools(workspaceToolsTarget, `${groupLabel} / ${item}`);
+        return;
+      }
+    }
+
+    if (groupLabel === "Parts" && (item === "Parts Inventory" || item === "Part Number Lookup")) {
+      navigateToPartsInventory(`${groupLabel} / ${item}`);
       return;
     }
 
@@ -1614,33 +2482,142 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       return;
     }
 
+    const targetQuickLaunchButton = resolveQuickLaunchButtonForMenuItem(groupLabel, item, nextWorkspaceId);
+
+    if (!targetQuickLaunchButton) {
+      setToolbarNotice(`No top button is configured for ${item}.`);
+      return;
+    }
+
     if (!availableOpenWorkspaceIds.includes(nextWorkspaceId)) {
       setToolbarNotice(`${workspaceDefinitions[nextWorkspaceId].title} is not available for this store yet.`);
       return;
     }
 
-    if (configuredOpenWorkspaceIds.includes(nextWorkspaceId)) {
-      setToolbarNotice(`${workspaceDefinitions[nextWorkspaceId].title} is already pinned in Open Windows.`);
+    setQuickLaunchRoutesBySlot((current) => ({
+      ...current,
+      [targetQuickLaunchButton.slot]: {
+        groupLabel,
+        item,
+        label: item
+      }
+    }));
+
+    if (!hiddenQuickLaunchSlots.includes(targetQuickLaunchButton.slot)) {
+      setToolbarNotice(`${item} is already pinned in top buttons.`);
       return;
     }
 
-    addOpenWorkspace(nextWorkspaceId);
-    setToolbarNotice(`${workspaceDefinitions[nextWorkspaceId].title} added to Open Windows.`);
+    setHiddenQuickLaunchSlots((current) => current.filter((slot) => slot !== targetQuickLaunchButton.slot));
+    setToolbarNotice(`${item} added to top buttons.`);
+  }
+
+  function isMenuItemVisible(groupLabel: string, item: string) {
+    if (item === "Switch Store" || item === "Logout" || item === "Exit") {
+      return true;
+    }
+
+    if (groupLabel === "Application" && resolveApplicationWorkspaceToolsTarget(item)) {
+      return true;
+    }
+
+    if (groupLabel === "Parts" && (item === "Parts Inventory" || item === "Part Number Lookup")) {
+      return true;
+    }
+
+    if (resolveWorkspaceMenuIntent(groupLabel, item)) {
+      return true;
+    }
+
+    if (groupLabel === "Sales" && resolveSalesMenuIntent(item)) {
+      return true;
+    }
+
+    if (groupLabel === "Service" && resolveServiceMenuIntent(item)) {
+      return true;
+    }
+
+    return Boolean(resolveWorkspaceFromMenuItem(groupLabel, item));
   }
 
   function isMenuItemPinnable(groupLabel: string, item: string) {
     const nextWorkspaceId = resolveWorkspaceFromMenuItem(groupLabel, item);
 
-    return Boolean(nextWorkspaceId && availableOpenWorkspaceIds.includes(nextWorkspaceId));
+    if (!nextWorkspaceId || !availableOpenWorkspaceIds.includes(nextWorkspaceId)) {
+      return false;
+    }
+
+    return Boolean(resolveQuickLaunchButtonForMenuItem(groupLabel, item, nextWorkspaceId));
   }
 
   function isMenuItemPinned(groupLabel: string, item: string) {
     const nextWorkspaceId = resolveWorkspaceFromMenuItem(groupLabel, item);
 
-    return Boolean(nextWorkspaceId && configuredOpenWorkspaceIds.includes(nextWorkspaceId));
+    if (!nextWorkspaceId || !availableOpenWorkspaceIds.includes(nextWorkspaceId)) {
+      return false;
+    }
+
+    const targetQuickLaunchButton = resolveQuickLaunchButtonForMenuItem(groupLabel, item, nextWorkspaceId);
+
+    if (!targetQuickLaunchButton) {
+      return false;
+    }
+
+    return !hiddenQuickLaunchSlots.includes(targetQuickLaunchButton.slot);
+  }
+
+  function resolveQuickLaunchButtonForMenuItem(groupLabel: string, item: string, workspace: WorkspaceId) {
+    const itemLookupLabel = item.trim().toLowerCase();
+    const groupLookupLabel = groupLabel.trim().toLowerCase();
+
+    if (workspace === "analytics") {
+      const analyticsQuickLaunchLookup: Array<{ buttonLabel: string; match: boolean }> = [
+        {
+          buttonLabel: "Receivables",
+          match: groupLookupLabel === "receivables" || itemLookupLabel.includes("receivable")
+        },
+        {
+          buttonLabel: "Payroll Review",
+          match: itemLookupLabel.includes("payroll")
+        },
+        {
+          buttonLabel: "Exec Board",
+          match: true
+        }
+      ];
+
+      for (const candidate of analyticsQuickLaunchLookup) {
+        if (!candidate.match) {
+          continue;
+        }
+
+        const foundButton = quickLaunchButtons.find((button) => button.label.toLowerCase() === candidate.buttonLabel.toLowerCase());
+
+        if (foundButton) {
+          return foundButton;
+        }
+      }
+    }
+
+    const exactLabelMatch = quickLaunchButtons.find((button) => button.label.toLowerCase() === itemLookupLabel);
+
+    if (exactLabelMatch) {
+      return exactLabelMatch;
+    }
+
+    return resolveQuickLaunchButtonForWorkspace(workspace);
   }
 
   function handleQuickLaunch(button: QuickLaunchButton) {
+    setQuickLaunchContextMenu(null);
+
+    const routeMetadata = quickLaunchRoutesBySlot[button.slot];
+
+    if (routeMetadata) {
+      handleMenuSelect(routeMetadata.groupLabel, routeMetadata.item);
+      return;
+    }
+
     if (button.action === "switchStore") {
       setIsStorePickerOpen(true);
       return;
@@ -1657,16 +2634,36 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   }
 
   function handleSalesRowSelect(row: SalesWorkspaceRow) {
-    if (selectedSalesRowId === row.id) {
-      return;
-    }
-
     setSelectedSalesRowId(row.id);
+    openSalesDeal(row);
+  }
+
+  function openSalesDeal(row: SalesWorkspaceRow) {
+    addOpenWorkspace("sales");
+    setSalesDealDetailWindows((current) =>
+      upsertSalesDealDetailWindow(current, {
+        customer: row.customer,
+        worksheet: row.worksheet,
+        dealId: row.id,
+        storeId: activeStore.id
+      })
+    );
     appendCommandLog({
-      label: "Deal focused",
+      label: "Deal opened",
       detail: `${row.customer} · Worksheet ${row.worksheet} · ${row.finalized}.`,
       tone: "neutral"
     });
+    navigate(`/dashboard/${activeStore.id}/sales?activeDeal=${encodeURIComponent(row.id)}`);
+  }
+
+  function closeSalesDealWindow(dealId: string, storeId: string) {
+    setSalesDealDetailWindows((current) =>
+      current.filter((windowEntry) => !(windowEntry.storeId === storeId && windowEntry.dealId === dealId))
+    );
+
+    if (workspaceId === "sales" && activeStore.id === storeId && activeSalesDealId === dealId) {
+      navigate(`/dashboard/${storeId}/sales`);
+    }
   }
 
   function handleServiceRowSelect(row: ServiceWorkspaceRow) {
@@ -1680,6 +2677,20 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       label: "RO focused",
       detail: `${row.roNumber} · ${row.customerName} · ${row.roStatus}.`,
       tone: "neutral"
+    });
+  }
+
+  function handleServiceRowOpen(row: ServiceWorkspaceRow) {
+    setSelectedServiceRowId(row.id);
+    setFocusedServiceTaskId(null);
+    appendCommandLog({
+      label: "RO detail opened",
+      detail: `RO ${row.roNumber} opened for ${row.customerName}.`,
+      tone: "neutral"
+    });
+    openServiceRepairOrder(activeStore.id, {
+      customerName: row.customerName,
+      roNumber: row.roNumber
     });
   }
 
@@ -1728,6 +2739,42 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   }
 
   function handleWorkspaceTool(tool: string) {
+    const normalizedTool = workspaceId === "parts" && partsWorkspaceView === "ordering" && tool === "Delete" ? "Delete Selected" : tool;
+
+    if (workspaceId === "desktop" && tool === "Workspace Tools") {
+      const defaultWorkspaceToolsTarget = resolveApplicationWorkspaceToolsTarget("Pinned Windows");
+
+      if (defaultWorkspaceToolsTarget) {
+        openWorkspaceTools(defaultWorkspaceToolsTarget, "Desktop toolbar");
+      }
+
+      return;
+    }
+
+    if (workspaceId === "parts" && activePartsInventoryDetailWindow) {
+      if (normalizedTool === "List") {
+        navigate(`/dashboard/${activeStore.id}/parts?view=inventory`);
+        setToolbarNotice("Returned to Parts Inventory list.");
+        return;
+      }
+
+      setToolbarNotice(`${normalizedTool} ready for ${activePartsInventoryDetailWindow.partNumber}.`);
+      return;
+    }
+
+    if (workspaceId === "parts" && partsWorkspaceView === "inventory") {
+      if (normalizedTool === "Refresh") {
+        setToolbarNotice("Refreshing Parts Inventory...");
+        setIsManualRefreshPending(true);
+        setRefreshToken((current) => current + 1);
+        return;
+      }
+
+      setPartsInventoryToolRequest({ id: Date.now(), tool: normalizedTool });
+      setToolbarNotice(`${normalizedTool} ready in Parts Inventory.`);
+      return;
+    }
+
     if (workspaceId === "service" && tool === "Detail") {
       if (!selectedServiceRow) {
         setToolbarNotice("Select an RO row to open its detail window.");
@@ -1760,22 +2807,22 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       return;
     }
 
-    if (workspaceId === "parts" && tool === "Purchase Order") {
+    if (workspaceId === "parts" && normalizedTool === "Purchase Order") {
       handleOpenPartsLookup();
       return;
     }
 
-    if (workspaceId === "parts" && tool === "Delete Selected" && !selectedPartsRow) {
+    if (workspaceId === "parts" && normalizedTool === "Delete Selected" && !selectedPartsRow) {
       setToolbarNotice("Select a parts row before removing it.");
       return;
     }
 
-    if (workspaceId === "parts" && tool === "Guide" && !selectedPartsRow) {
+    if (workspaceId === "parts" && normalizedTool === "Guide" && !selectedPartsRow) {
       setToolbarNotice("Select a parts row before attaching a guide note.");
       return;
     }
 
-    if (tool === "Refresh") {
+    if (normalizedTool === "Refresh") {
       setToolbarNotice(`Refreshing ${workspaceDefinitions[workspaceId].title}...`);
       setIsManualRefreshPending(true);
       setRefreshToken((current) => current + 1);
@@ -1783,7 +2830,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     }
 
     setActiveWorkflow(
-      createActionWorkflow(workspaceId, tool, {
+      createActionWorkflow(workspaceId, normalizedTool, {
         storeName: activeStore.name,
         operatorName: session.user.name,
         salesRow: selectedSalesRow,
@@ -1822,6 +2869,44 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     setPartsLookupSearchTerm("");
     setPartsLookupSelectedRowId(null);
     setPartsLookupQuantity("1");
+  }
+
+  function handleSendInventoryRowsToPurchasePad(rows: PartsWorkspaceRow[]) {
+    if (rows.length === 0) {
+      setToolbarNotice("Select inventory rows before sending to Purchase Pad.");
+      return;
+    }
+
+    const existingPartNumbers = new Set(partsRows.map((row) => row.partNumber.toLowerCase()));
+    const rowsToAdd = rows.filter((row) => {
+      const partKey = row.partNumber.toLowerCase();
+
+      if (existingPartNumbers.has(partKey)) {
+        return false;
+      }
+
+      existingPartNumbers.add(partKey);
+      return true;
+    });
+    const addedCount = rowsToAdd.length;
+    const skippedCount = rows.length - addedCount;
+
+    if (rowsToAdd.length > 0) {
+      setPurchasePadRows((currentRows) => [...currentRows, ...rowsToAdd]);
+    }
+
+    setToolbarNotice(
+      addedCount === 0
+        ? `${skippedCount} part${skippedCount === 1 ? " is" : "s are"} already staged in Purchase Pad.`
+        : skippedCount > 0
+        ? `${addedCount} part${addedCount === 1 ? "" : "s"} sent to Purchase Pad. ${skippedCount} already staged.`
+        : `${addedCount} part${addedCount === 1 ? "" : "s"} sent to Purchase Pad.`
+    );
+    appendCommandLog({
+      label: "Purchase Pad updated",
+      detail: `${rows.length} inventory selection${rows.length === 1 ? "" : "s"} sent from Parts Inventory.`,
+      tone: "accent"
+    });
   }
 
   useEffect(() => {
@@ -1881,6 +2966,21 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   useEffect(() => {
     if (!pendingWorkspaceMenuIntent || workspaceId !== pendingWorkspaceMenuIntent.workspaceId) {
       return;
+    }
+
+    if (
+      pendingWorkspaceMenuIntent.workspaceId === "website" &&
+      pendingWorkspaceMenuIntent.workflowOverrides?.submitAction === "System Sync Monitor"
+    ) {
+      setWebsiteWorkspaceView("customSettings");
+      setActiveWorkflow(null);
+      setToolbarNotice("Sync monitor custom settings ready.");
+      setPendingWorkspaceMenuIntent(null);
+      return;
+    }
+
+    if (pendingWorkspaceMenuIntent.workspaceId === "website") {
+      setWebsiteWorkspaceView("feed");
     }
 
     const nextWorkflow = applyWorkflowIntent(
@@ -2388,7 +3488,6 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       setServicePartCatalog(result.partCatalog);
       setCommandLog((current) => [result.activityEntry, ...current.filter((entry) => entry.id !== result.activityEntry.id)].slice(0, 8));
       setToolbarNotice(result.message);
-      setRefreshToken((current) => current + 1);
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to update the service order.";
@@ -2596,7 +3695,12 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
 
   return (
     <div className="dashboard-screen legacy-dashboard">
-      <header className="legacy-app-frame">
+      <header
+        className={`legacy-app-frame${isQuickLaunchStripDropTarget ? " is-drop-target" : ""}`}
+        onDragLeave={handleQuickLaunchStripDragLeave}
+        onDragOver={handleQuickLaunchStripDragOver}
+        onDrop={handleQuickLaunchStripDrop}
+      >
         <div className="legacy-title-strip">
           <span>Premier Marine Cloud DMS</span>
           <span>
@@ -2606,6 +3710,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
 
         <div className="legacy-menu-row">
           <TopTabs
+            isItemVisible={isMenuItemVisible}
             isItemPinned={isMenuItemPinned}
             isItemPinnable={isMenuItemPinnable}
             items={menuGroups}
@@ -2662,29 +3767,79 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
           </div>
         </div>
 
-        <div className="legacy-launch-strip">
-          {quickLaunchButtons.map((button) => {
+        <div
+          className={`legacy-launch-strip${isQuickLaunchStripDropTarget ? " is-drop-target" : ""}`}
+          onContextMenu={handleQuickLaunchStripContextMenu}
+          onDragLeave={handleQuickLaunchStripDragLeave}
+          onDragOver={handleQuickLaunchStripDragOver}
+          onDrop={handleQuickLaunchStripDrop}
+        >
+          {visibleQuickLaunchButtons.map((button) => {
             const isActiveQuickLaunch = button.workspaceId === workspaceId;
+            const isQuickLaunchContextTarget = quickLaunchContextTarget?.slot === button.slot;
+            const isQuickLaunchDragging = draggingQuickLaunchSlot === button.slot;
+            const quickLaunchDropClass = quickLaunchDropState?.slot === button.slot ? ` is-drop-${quickLaunchDropState.position}` : "";
+            const quickLaunchLabel = resolveQuickLaunchButtonDisplayLabel(button);
 
             return (
-              <button
-                aria-current={isActiveQuickLaunch ? "page" : undefined}
-                className={`legacy-launch-button${isActiveQuickLaunch ? " is-active" : ""}`}
+              <div
+                className={`legacy-launch-button-shell${isQuickLaunchContextTarget ? " is-context-open" : ""}${isQuickLaunchDragging ? " is-dragging" : ""}${quickLaunchDropClass}`}
                 key={button.slot}
-                onClick={() => handleQuickLaunch(button)}
-                type="button"
+                onDragOver={(event) => handleQuickLaunchDragOver(event, button.slot)}
+                onDrop={(event) => handleQuickLaunchDrop(event, button.slot)}
               >
-                <span>{button.slot}</span>
-                <strong>{button.label}</strong>
-              </button>
+                <button
+                  aria-current={isActiveQuickLaunch ? "page" : undefined}
+                  className={`legacy-launch-button${isActiveQuickLaunch ? " is-active" : ""}`}
+                  draggable
+                  onDragEnd={handleQuickLaunchDragEnd}
+                  onDragStart={(event) => handleQuickLaunchDragStart(event, button.slot)}
+                  onClick={() => handleQuickLaunch(button)}
+                  onContextMenu={
+                    (event) => {
+                      openQuickLaunchContext(event, button.slot);
+                    }
+                  }
+                  type="button"
+                >
+                  <span>{button.slot}</span>
+                  <strong>{quickLaunchLabel}</strong>
+                </button>
+                  {isQuickLaunchContextTarget ? (
+                  <button
+                    aria-label={`Remove ${quickLaunchLabel} from top buttons`}
+                    className="legacy-launch-context-button"
+                    onClick={() => hideQuickLaunchButton(button)}
+                    type="button"
+                  >
+                    X
+                  </button>
+                ) : null}
+              </div>
             );
           })}
         </div>
+        {quickLaunchContextMenu && quickLaunchContextMenu.targetSlot === null ? (
+          <div className="legacy-open-context-inline is-rail">
+            {hiddenQuickLaunchButtons.length > 0 ? (
+              <>
+                <span className="legacy-open-context-label">Add Button</span>
+                {hiddenQuickLaunchButtons.map((button) => (
+                  <button className="legacy-open-context-action" key={button.slot} onClick={() => showQuickLaunchButton(button)} type="button">
+                    Add {resolveQuickLaunchButtonDisplayLabel(button)}
+                  </button>
+                ))}
+              </>
+            ) : quickLaunchContextTarget ? null : (
+              <p className="legacy-open-context-empty">All top buttons are already visible.</p>
+            )}
+          </div>
+        ) : null}
       </header>
 
       {errorMessage ? <p className="form-error banner-error">{errorMessage}</p> : null}
 
-      <div className={`legacy-workspace-shell${workspaceId === "service" ? " is-service-shell" : ""}`}>
+      <div className={`legacy-workspace-shell${workspaceId === "service" ? " is-service-shell" : ""}${workspaceId === "parts" ? " is-parts-shell" : ""}`}>
         <aside className="legacy-open-windows" onContextMenu={handleOpenWindowsRailContextMenu}>
           <div className="legacy-open-header">
             <div className="legacy-open-title-row">
@@ -2739,27 +3894,41 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
             {visibleOpenWindowItems.map((item) => {
               const isWorkspaceItem = item.kind === "workspace";
               const workspaceIdForItem = isWorkspaceItem ? item.workspaceId : null;
-              const workspaceTitle = workspaceIdForItem ? workspaceDefinitions[workspaceIdForItem].title : null;
-              const detailWindow = item.kind === "detail" ? item.windowEntry : null;
+              const workspaceTitle = workspaceIdForItem
+                ? workspaceIdForItem === "parts" && workspaceId === "parts" && partsWorkspaceView === "inventory"
+                  ? "Parts Inventory"
+                  : workspaceIdForItem === "website" && websiteWorkspaceView === "customSettings"
+                    ? "Sync Monitor"
+                  : workspaceDefinitions[workspaceIdForItem].title
+                : null;
+              const detailWindow = item.kind === "serviceDetail" ? item.windowEntry : null;
               const detailTitle = detailWindow ? formatServiceDetailWindowTitle(detailWindow) : null;
+              const partsDetailWindow = item.kind === "partsInventoryDetail" ? item.windowEntry : null;
+              const partsDetailTitle = partsDetailWindow ? formatPartsInventoryDetailWindowTitle(partsDetailWindow) : null;
+              const salesDealWindow = item.kind === "salesDeal" ? item.windowEntry : null;
+              const salesDealTitle = salesDealWindow ? formatSalesDealWindowTitle(salesDealWindow) : null;
               const isContextTarget = isWorkspaceItem && contextMenuTargetWorkspaceId === workspaceIdForItem;
               const dropStateClass = openWindowDropState?.key === item.key ? ` is-drop-${openWindowDropState.position}` : "";
 
               return (
                 <div
                   className={`legacy-window-link-shell${isContextTarget ? " is-context-open" : ""}${draggingOpenWindowKey === item.key ? " is-dragging" : ""}${dropStateClass}`}
-                  draggable
                   key={item.key}
-                  onDragEnd={handleOpenWindowDragEnd}
                   onDragOver={(event) => handleOpenWindowDragOver(event, item.key)}
-                  onDragStart={(event) => handleOpenWindowDragStart(event, item.key)}
                   onDrop={(event) => handleOpenWindowDrop(event, item.key)}
                 >
                   {isWorkspaceItem && workspaceIdForItem && workspaceTitle ? (
                     <Fragment>
                       <button
                         className={`legacy-window-link${item.isActive ? " active" : ""}`}
-                        onClick={() => navigateToWorkspace(workspaceIdForItem, "Open Windows")}
+                        draggable
+                        onDragEnd={handleOpenWindowDragEnd}
+                        onDragStart={(event) => handleOpenWindowDragStart(event, item.key, workspaceIdForItem)}
+                        onClick={() =>
+                          workspaceIdForItem === "parts" && partsWorkspaceView === "inventory"
+                            ? navigateToPartsInventory("Open Windows")
+                            : navigateToWorkspace(workspaceIdForItem, "Open Windows")
+                        }
                         onContextMenu={(event) => openOpenWindowsContextMenu(event, workspaceIdForItem)}
                         type="button"
                       >
@@ -2792,6 +3961,9 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                     <Fragment>
                       <button
                         className={`legacy-window-link legacy-window-link-detail${item.isActive ? " active" : ""}`}
+                        draggable
+                        onDragEnd={handleOpenWindowDragEnd}
+                        onDragStart={(event) => handleOpenWindowDragStart(event, item.key, null)}
                         onClick={() =>
                           openServiceRepairOrder(detailWindow.storeId, {
                             customerName: detailWindow.customerName,
@@ -2809,6 +3981,65 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                         aria-label={`Close ${detailTitle}`}
                         className="legacy-window-link-context-button legacy-window-link-detail-close"
                         onClick={() => closeServiceDetailWindow(detailWindow.storeId, detailWindow.roNumber)}
+                        type="button"
+                      >
+                        x
+                      </button>
+                    </Fragment>
+                  ) : partsDetailWindow && partsDetailTitle ? (
+                    <Fragment>
+                      <button
+                        className={`legacy-window-link legacy-window-link-detail${item.isActive ? " active" : ""}`}
+                        draggable
+                        onDragEnd={handleOpenWindowDragEnd}
+                        onDragStart={(event) => handleOpenWindowDragStart(event, item.key, null)}
+                        onClick={() => {
+                          const nextSearchParams = new URLSearchParams({
+                            view: "inventory",
+                            inventoryPart: partsDetailWindow.partNumber
+                          });
+
+                          addOpenWorkspace("parts");
+                          navigate(`/dashboard/${partsDetailWindow.storeId}/parts?${nextSearchParams.toString()}`);
+                        }}
+                        type="button"
+                      >
+                        <span aria-hidden="true" className="legacy-window-link-grip">
+                          ::
+                        </span>
+                        <span className="legacy-window-link-copy">{partsDetailTitle}</span>
+                      </button>
+                      <button
+                        aria-label={`Close ${partsDetailTitle}`}
+                        className="legacy-window-link-context-button legacy-window-link-detail-close"
+                        onClick={() => closePartsInventoryDetailWindow(partsDetailWindow.storeId, partsDetailWindow.partNumber)}
+                        type="button"
+                      >
+                        x
+                      </button>
+                    </Fragment>
+                  ) : salesDealWindow && salesDealTitle ? (
+                    <Fragment>
+                      <button
+                        className={`legacy-window-link legacy-window-link-detail${item.isActive ? " active" : ""}`}
+                        draggable
+                        onDragEnd={handleOpenWindowDragEnd}
+                        onDragStart={(event) => handleOpenWindowDragStart(event, item.key, null)}
+                        onClick={() => {
+                          addOpenWorkspace("sales");
+                          navigate(`/dashboard/${salesDealWindow.storeId}/sales?activeDeal=${encodeURIComponent(salesDealWindow.dealId)}`);
+                        }}
+                        type="button"
+                      >
+                        <span aria-hidden="true" className="legacy-window-link-grip">
+                          ::
+                        </span>
+                        <span className="legacy-window-link-copy">{salesDealTitle}</span>
+                      </button>
+                      <button
+                        aria-label={`Close ${salesDealTitle}`}
+                        className="legacy-window-link-context-button legacy-window-link-detail-close"
+                        onClick={() => closeSalesDealWindow(salesDealWindow.dealId, salesDealWindow.storeId)}
                         type="button"
                       >
                         x
@@ -2842,7 +4073,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
 
               <div className="legacy-toolbar-strip">
                 <div className="legacy-toolbar-actions">
-                  {activeWorkspace.tools.map((tool) => (
+                  {activeWorkspaceTools.map((tool) => (
                     <button className="legacy-tool-button" key={tool} onClick={() => handleWorkspaceTool(tool)} type="button">
                       {tool}
                     </button>
@@ -2851,17 +4082,112 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                 <div className="legacy-toolbar-summary">
                   {lastWorkspaceSyncLabel ? <div className="legacy-toolbar-meta">{lastWorkspaceSyncLabel}</div> : null}
                 </div>
+                <div className="legacy-global-search-wrap">
+                  <input
+                    className="legacy-global-search-input"
+                    onChange={(e) => { setGlobalSearchTerm(e.target.value); setIsGlobalSearchOpen(e.target.value.length > 0); }}
+                    onFocus={() => { if (globalSearchTerm.length > 0) setIsGlobalSearchOpen(true); }}
+                    onBlur={() => setTimeout(() => setIsGlobalSearchOpen(false), 150)}
+                    placeholder="Search ROs, parts…"
+                    type="search"
+                    value={globalSearchTerm}
+                  />
+                  {isGlobalSearchOpen && (
+                    <div className="legacy-global-search-results">
+                      {serviceRows.filter((r) => r.roNumber.toLowerCase().includes(globalSearchTerm.toLowerCase()) || r.customerName.toLowerCase().includes(globalSearchTerm.toLowerCase())).slice(0, 5).length > 0 && (
+                        <div className="legacy-global-search-group">
+                          <span className="legacy-global-search-group-label">Service Orders</span>
+                          {serviceRows.filter((r) => r.roNumber.toLowerCase().includes(globalSearchTerm.toLowerCase()) || r.customerName.toLowerCase().includes(globalSearchTerm.toLowerCase())).slice(0, 5).map((r) => (
+                            <button className="legacy-global-search-item" key={r.id} onClick={() => { setGlobalSearchTerm(""); setIsGlobalSearchOpen(false); }} type="button">
+                              <strong>{r.roNumber}</strong><span>{r.customerName}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {partsRows.filter((r) => r.partNumber.toLowerCase().includes(globalSearchTerm.toLowerCase()) || r.description.toLowerCase().includes(globalSearchTerm.toLowerCase())).slice(0, 5).length > 0 && (
+                        <div className="legacy-global-search-group">
+                          <span className="legacy-global-search-group-label">Parts</span>
+                          {partsRows.filter((r) => r.partNumber.toLowerCase().includes(globalSearchTerm.toLowerCase()) || r.description.toLowerCase().includes(globalSearchTerm.toLowerCase())).slice(0, 5).map((r) => (
+                            <button className="legacy-global-search-item" key={r.id} onClick={() => { setGlobalSearchTerm(""); setIsGlobalSearchOpen(false); }} type="button">
+                              <strong>{r.partNumber}</strong><span>{r.description}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <button
+                  className="legacy-theme-toggle"
+                  onClick={() => setIsDarkMode((d) => !d)}
+                  title={isDarkMode ? "Switch to dark mode" : "Switch to light mode"}
+                  type="button"
+                >
+                  {isDarkMode ? "🌙" : "☀️"}
+                </button>
+                <select
+                  className="legacy-role-selector"
+                  onChange={(e) => setUserRole(e.target.value as "admin" | "manager" | "tech" | "writer")}
+                  title="Active Role"
+                  value={userRole}
+                >
+                  <option value="admin">Admin</option>
+                  <option value="manager">Manager</option>
+                  <option value="tech">Tech</option>
+                  <option value="writer">Writer</option>
+                </select>
+                <div className="legacy-notif-bell-wrap">
+                  <button
+                    className="legacy-notif-bell"
+                    onClick={() => setIsNotifOpen((o) => !o)}
+                    type="button"
+                    aria-label="Notifications"
+                  >
+                    🔔
+                    {unreadCount > 0 && <span className="legacy-notif-badge">{unreadCount}</span>}
+                  </button>
+                  {isNotifOpen && (
+                    <div className="legacy-notif-panel">
+                      <div className="legacy-notif-panel-header">
+                        <strong>Notifications</strong>
+                        <button
+                          onClick={() => {
+                            setNotifications((ns) => ns.map((n) => ({ ...n, read: true })));
+                          }}
+                          type="button"
+                        >
+                          Mark all read
+                        </button>
+                      </div>
+                      {notifications.map((n) => (
+                        <button
+                          className={`legacy-notif-item${n.read ? " is-read" : ""}`}
+                          key={n.id}
+                          onClick={() => setNotifications((ns) => ns.map((x) => x.id === n.id ? { ...x, read: true } : x))}
+                          type="button"
+                        >
+                          <div className="legacy-notif-item-body">
+                            <strong>{n.title}</strong>
+                            <span>{n.detail}</span>
+                          </div>
+                          <span className="legacy-notif-item-time">{n.timestamp}</span>
+                        </button>
+                      ))}
+                      {notifications.length === 0 && <p className="legacy-notif-empty">No notifications.</p>}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {toolbarNotice ? <div className="legacy-toolbar-status">{toolbarNotice}</div> : null}
 
-              <div className={`legacy-workspace-canvas${workspaceId === "service" ? " is-service-canvas" : ""}`}>
+              <div className={`legacy-workspace-canvas${workspaceId === "service" ? " is-service-canvas" : ""}${workspaceId === "parts" ? " is-parts-canvas" : ""}`}>
                 <div
                   className={`legacy-workspace-stack${
                     workspaceId === "service"
                       ? ` is-service-layout${isServiceNotificationRailCollapsed ? " is-service-notification-rail-collapsed" : ""}`
                       : ""
-                  }`}
+                  }${workspaceId === "parts" ? " is-parts-layout" : ""}${workspaceId === "sales" && activeSalesDealDetailWindow ? " is-sales-deal-layout" : ""}`}
                 >
                   {isLoading ? (
                     <div className="legacy-loading-panel">Loading workspace...</div>
@@ -2878,6 +4204,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                         selectedSalesRowId,
                         onSelectSalesRow: handleSalesRowSelect,
                         selectedServiceRowId,
+                        onOpenServiceRow: handleServiceRowOpen,
                         onSelectServiceRow: handleServiceRowSelect,
                         selectedPartsRowId,
                         onSelectPartsRow: handlePartsRowSelect,
@@ -2885,7 +4212,11 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                         onSelectWebsiteRow: handleWebsiteRowSelect
                       },
                       navigateToWorkspace,
+                      handleWorkspaceTool,
                       desktopWidgetsStorageKey,
+                      {
+                        workspaceToolsTarget
+                      },
                       {
                         activeStoreId: activeStore.id,
                         actorUserId: session.user.id,
@@ -2905,6 +4236,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                       },
                       {
                         activeServiceDetailRoNumber,
+                        activeSalesDealWindow: activeSalesDealDetailWindow,
                         entries: taskQueue,
                         activityEntries: commandLog,
                         cleaningQaRoNumber: serviceQaCleanupRoNumber,
@@ -2913,6 +4245,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                         isFilteredByOperator: isOperatorFilterEnabled,
                         onSelectServiceQueueView: setServiceQueueView,
                         recentServiceRowHighlights,
+                        serviceCustomerOptions: buildServiceCustomerLookupOptions(serviceRows),
                         serviceDetail: serviceWorkbenchModel,
                         serviceNotificationEntries,
                         servicePartCatalog,
@@ -2941,8 +4274,8 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                           ),
                         onAddTaskNote: handleTaskNoteCreate,
                         onAssignTask: handleTaskAssigneeUpdate,
-                        onCreateJob: (payload) =>
-                          handleServiceOrderAction(
+                        onCreateJob: async (payload) => {
+                          const ok = await handleServiceOrderAction(
                             {
                               mode: "createJob",
                               actorUserId: session.user.id,
@@ -2950,6 +4283,63 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                             },
                             "Creating service job...",
                             "job:create"
+                          );
+                          if (ok) appendCommandLog({ label: "New Job Created", detail: `Title: ${payload.title}`, tone: "stable" }, { optimistic: true });
+                          return ok;
+                        },
+                        onDeleteJob: async (jobId) => {
+                          const ok = await handleServiceOrderAction(
+                            {
+                              mode: "deleteJob",
+                              actorUserId: session.user.id,
+                              jobId
+                            },
+                            "Deleting service job...",
+                            `job:delete:${jobId}`
+                          );
+                          if (ok) appendCommandLog({ label: "Job Deleted", detail: `Job: ${jobId}`, tone: "attention" }, { optimistic: true });
+                          return ok;
+                        },
+                        onCloseLabor: (payload) =>
+                          handleServiceOrderAction(
+                            {
+                              mode: "closeLabor",
+                              actorUserId: session.user.id,
+                              ...payload,
+                              actorName: session.user.name
+                            },
+                            "Closing labor line...",
+                            `labor:close:${payload.jobId}:${payload.lineIndex}`
+                          ),
+                        onReopenLabor: (payload) =>
+                          handleServiceOrderAction(
+                            {
+                              mode: "reopenLabor",
+                              actorUserId: session.user.id,
+                              ...payload
+                            },
+                            "Reopening labor line...",
+                            `labor:reopen:${payload.jobId}:${payload.lineIndex}`
+                          ),
+                        onDeleteLaborSession: (sessionIndex) =>
+                          handleServiceOrderAction(
+                            {
+                              mode: "deleteLaborSession",
+                              actorUserId: session.user.id,
+                              sessionIndex
+                            },
+                            "Deleting labor session...",
+                            `labor:session:delete:${sessionIndex}`
+                          ),
+                        onEditLaborSession: (payload) =>
+                          handleServiceOrderAction(
+                            {
+                              mode: "editLaborSession",
+                              actorUserId: session.user.id,
+                              ...payload
+                            },
+                            "Saving labor session...",
+                            `labor:session:edit:${payload.sessionIndex}`
                           ),
                         onCleanupQaTasks: (roNumber) => handleServiceUtilityQaCleanup(activeStore.id, roNumber),
                         onRemovePart: (jobId, partNumber) =>
@@ -2966,6 +4356,45 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                         onReturnToAuditCleanup: serviceReturnStore
                           ? () => returnToAuditCleanup(serviceReturnStore.id, requestedAuditCleanupStoreId)
                           : null,
+                        onUpdateROHeader: (payload) =>
+                          handleServiceOrderAction(
+                            {
+                              mode: "updateROHeader",
+                              actorUserId: session.user.id,
+                              ...payload
+                            },
+                            "Saving RO header...",
+                            "ro:header"
+                          ),
+                        onFinalizeInvoice: async (invoiceStatus) => {
+                          const ok = await handleServiceOrderAction(
+                            {
+                              mode: "finalizeInvoice",
+                              actorUserId: session.user.id,
+                              invoiceStatus
+                            },
+                            "Invoice updated.",
+                            "invoice:finalize"
+                          );
+                          if (ok) appendCommandLog({ label: `Invoice Finalized`, detail: `RO #${selectedServiceRowId} — ${invoiceStatus}`, tone: "stable" }, { optimistic: true });
+                          return ok;
+                        },
+                        onRecordPayment: async (method, amount, reference) => {
+                          const ok = await handleServiceOrderAction(
+                            { mode: "recordPayment", actorUserId: session.user.id, method, amount, reference },
+                            "Payment processed.",
+                            "payment:record"
+                          );
+                          if (ok) appendCommandLog({ label: "Payment Recorded", detail: `${method} — $${amount}`, tone: "stable" }, { optimistic: true });
+                          return ok;
+                        },
+                        onUpdateJobStatus: async (jobId, status) => {
+                          const ok = await handleServiceOrderAction({ mode: "updateJobStatus", jobId, status, actorUserId: session.user.id }, "Job status updated.", `updateJobStatus-${jobId}`);
+                          if (ok) appendCommandLog({ label: `Job Status Updated`, detail: `Status → ${status}`, tone: "neutral" }, { optimistic: true });
+                          return ok;
+                        },
+                        onRequestSignature: (docType, recipient, message) =>
+                          handleServiceOrderAction({ mode: "requestSignature", docType, recipient, message, actorUserId: session.user.id }, "Signature request sent.", "requestSignature"),
                         onUpdateQueueRow: handleServiceQueueRowUpdate,
                         onUpdateJob: (payload) =>
                           handleServiceOrderAction(
@@ -2976,6 +4405,26 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                             },
                             "Saving job changes...",
                             `job:update:${payload.jobId}`
+                          ),
+                        onUpdateCustomer: (payload) =>
+                          handleServiceOrderAction(
+                            {
+                              mode: "updateCustomer",
+                              actorUserId: session.user.id,
+                              ...payload
+                            },
+                            "Saving customer information...",
+                            "customer:update"
+                          ),
+                        onUpdateNotes: (payload) =>
+                          handleServiceOrderAction(
+                            {
+                              mode: "updateNotes",
+                              actorUserId: session.user.id,
+                              ...payload
+                            },
+                            "Saving service notes...",
+                            "notes:update"
                           ),
                         onUpdateOrderType: (orderType) =>
                           handleServiceOrderAction(
@@ -3008,7 +4457,13 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                                   : serviceReturnStore.name
                             }
                           : null,
-                        updatingTaskId
+                        updatingTaskId,
+                        userRole,
+                        onViewCustomer: (name: string, roNumber: string) => { setActiveCustomerProfile({ name, roNumber }); setCustomerProfileTab("overview"); }
+                      },
+                      {
+                        onViewChange: setWebsiteWorkspaceView,
+                        view: websiteWorkspaceView
                       },
                       {
                         isLookupOpen: isPartsLookupOpen,
@@ -3023,10 +4478,16 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                         onChangeLookupSearchTerm: setPartsLookupSearchTerm,
                         onChangeQuickAddTerm: setPartsQuickAddTerm,
                         onCloseLookup: handleClosePartsLookup,
+                        onOpenInventoryDetail: (row) => openPartsInventoryDetail(activeStore.id, row),
                         onOpenLookup: handleOpenPartsLookup,
                         onSelectLookupRow: handlePartsRowSelect,
+                        onSendInventoryRowsToPurchasePad: handleSendInventoryRowsToPurchasePad,
                         onSelectLookupResult: setPartsLookupSelectedRowId,
-                        onSubmitLookup: handlePartsLookupSubmit
+                        onSubmitLookup: handlePartsLookupSubmit,
+                        activeInventoryDetailPartNumber: activePartsInventoryPartNumber,
+                        inventoryToolRequest: partsInventoryToolRequest,
+                        purchasePadRows,
+                        workspaceView: partsWorkspaceView
                       }
                     )
                   )}
@@ -3096,16 +4557,71 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         onSubmit={handleWorkflowSubmit}
         workflow={activeWorkflow}
       />
+      {activeCustomerProfile && (
+        <>
+          <div className="legacy-customer-profile-overlay" onClick={() => setActiveCustomerProfile(null)} />
+          <div className="legacy-customer-profile-panel">
+            <div className="legacy-customer-profile-header">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <strong style={{ color: "#f3f6fa" }}>{activeCustomerProfile.name}</strong>
+                <button className="legacy-task-status-button" onClick={() => setActiveCustomerProfile(null)} type="button">✕</button>
+              </div>
+              <div className="legacy-customer-profile-tabs">
+                {(["overview", "ros", "units", "comms"] as const).map((tab) => (
+                  <button
+                    className={`legacy-customer-profile-tab${customerProfileTab === tab ? " is-active" : ""}`}
+                    key={tab}
+                    onClick={() => setCustomerProfileTab(tab)}
+                    type="button"
+                  >
+                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="legacy-customer-profile-body">
+              {customerProfileTab === "overview" && (
+                <div className="legacy-customer-profile-meta">
+                  <div><strong>Customer:</strong> {activeCustomerProfile.name}</div>
+                  <div><strong>Current RO:</strong> {activeCustomerProfile.roNumber}</div>
+                  <div style={{ marginTop: 8, color: "rgba(255,255,255,0.4)", fontSize: "0.75rem" }}>Full CRM data available in customer record.</div>
+                </div>
+              )}
+              {customerProfileTab === "ros" && (
+                <div>
+                  {serviceRows.filter((r) => r.customerName === activeCustomerProfile.name).map((r) => (
+                    <div key={r.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", padding: "8px 0" }}>
+                      <div style={{ color: "#f3f6fa", fontSize: "0.82rem" }}>{r.roNumber} — {r.roStatus}</div>
+                      <div style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.75rem" }}>{r.inDate} · {r.model}</div>
+                    </div>
+                  ))}
+                  {serviceRows.filter((r) => r.customerName === activeCustomerProfile.name).length === 0 && (
+                    <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.8rem" }}>No service orders found.</div>
+                  )}
+                </div>
+              )}
+              {customerProfileTab === "units" && (
+                <div style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.8rem" }}>Unit history coming soon.</div>
+              )}
+              {customerProfileTab === "comms" && (
+                <div style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.8rem" }}>Communication history coming soon.</div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
 interface ServiceQueueBoardProps {
   onFilterChange: (filterValue: string) => void;
+  onOpenRow: (row: ServiceWorkspaceRow) => void;
   onSearchChange: (searchTerm: string) => void;
   onSelectQueueView: React.Dispatch<React.SetStateAction<ServiceQueueView>>;
   onSelectRow: (row: ServiceWorkspaceRow) => void;
   onUpdateRow: (row: ServiceWorkspaceRow) => Promise<boolean>;
+  onViewCustomer?: (name: string, roNumber: string) => void;
   recentServiceRowHighlights: Record<string, number>;
   rows: ServiceWorkspaceRow[];
   searchState: WorkspaceSearchState;
@@ -3117,10 +4633,12 @@ interface ServiceQueueBoardProps {
 
 function ServiceQueueBoard({
   onFilterChange,
+  onOpenRow,
   onSearchChange,
   onSelectQueueView,
   onSelectRow,
   onUpdateRow,
+  onViewCustomer,
   recentServiceRowHighlights,
   rows,
   searchState,
@@ -3133,6 +4651,7 @@ function ServiceQueueBoard({
   const [quickFilters, setQuickFilters] = useState<ServiceQueueQuickFilterState>(initialServiceQueueQuickFilterState);
   const [editingCell, setEditingCell] = useState<ServiceQueueEditingCell | null>(null);
   const [draftValue, setDraftValue] = useState("");
+  const [isScheduleView, setIsScheduleView] = useState(false);
   const serviceNotificationsByRo = groupServiceNotificationsByRo(serviceNotificationEntries);
   const noteEditorRow = editingCell?.field === "note" ? rows.find((candidate) => candidate.id === editingCell.rowId) ?? null : null;
   const filterOptions = buildFilterOptions(rows.map((row) => row.roStatus));
@@ -3191,6 +4710,19 @@ function ServiceQueueBoard({
     }
   }
 
+  function exportServiceQueueCsv(exportRows: ServiceWorkspaceRow[]) {
+    const headers = ["RO#", "Customer", "Status", "Category", "In Date", "Technician", "Total"];
+    const lines = exportRows.map((r) => [r.roNumber, r.customerName, r.roStatus, r.category, r.inDate, r.serviceWriter, ""].join(","));
+    const csv = [headers.join(","), ...lines].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "service-queue.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="legacy-data-window legacy-data-window-service-list">
       <div className="legacy-service-queue-view-toolbar">
@@ -3201,6 +4733,10 @@ function ServiceQueueBoard({
         <button className="legacy-task-status-button" onClick={() => setIsQueueViewsCollapsed((current) => !current)} type="button">
           {isQueueViewsCollapsed ? "Show queue views" : "Hide queue views"}
         </button>
+        <button className="legacy-task-status-button" onClick={() => setIsScheduleView((s) => !s)} type="button">
+          {isScheduleView ? "📋 List View" : "📅 Schedule"}
+        </button>
+        <button className="legacy-task-status-button" onClick={() => exportServiceQueueCsv(filteredRows)} type="button">Export CSV</button>
       </div>
 
       {isQueueViewsCollapsed ? null : (
@@ -3263,6 +4799,86 @@ function ServiceQueueBoard({
       </div>
 
       <div className="legacy-grid-shell">
+        {isScheduleView ? (() => {
+          const today = new Date();
+          const dayOfWeek = today.getDay();
+          const monday = new Date(today);
+          monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+          const weekDays = Array.from({ length: 5 }, (_, i) => {
+            const d = new Date(monday);
+            d.setDate(monday.getDate() + i);
+            return d;
+          });
+          return (
+            <div className="legacy-schedule-grid">
+              {weekDays.map((day) => {
+                const label = day.toLocaleDateString("en-US", { weekday: "short", month: "numeric", day: "numeric" });
+                const isToday = day.toDateString() === today.toDateString();
+                const dayRows = filteredRows.filter((r) => {
+                  if (!r.inDate) return false;
+                  const d = new Date(r.inDate);
+                  return d.toDateString() === day.toDateString();
+                });
+                return (
+                  <div className="legacy-schedule-day" key={label}>
+                    <div className={`legacy-schedule-day-header${isToday ? " is-today" : ""}`}>{label}</div>
+                    {dayRows.map((r) => (
+                      <button className="legacy-schedule-ro-chip" key={r.id} onClick={() => onSelectRow(r)} type="button">
+                        <strong>{r.roNumber}</strong>
+                        <span>{r.customerName}</span>
+                      </button>
+                    ))}
+                    {dayRows.length === 0 && <span style={{ color: "rgba(255,255,255,0.3)", fontSize: "0.72rem" }}>No ROs</span>}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })() : serviceQueueView === "Workload" ? (() => {
+          const techMap = new Map<string, { roCount: number; totalHours: number }>();
+          for (const row of rows) {
+            const tech = row.serviceWriter || "Unassigned";
+            const entry = techMap.get(tech) ?? { roCount: 0, totalHours: 0 };
+            entry.roCount += 1;
+            entry.totalHours += 2;
+            techMap.set(tech, entry);
+          }
+          const techs = Array.from(techMap.entries());
+          return (
+            <div className="legacy-workload-board">
+              {techs.length === 0 ? (
+                <div style={{ padding: "16px", color: "#567185" }}>No technicians found in queue.</div>
+              ) : (
+                techs.map(([tech, data]) => {
+                  const utilPct = Math.min((data.totalHours / 8) * 100, 100);
+                  const isBusy = utilPct >= 60 && utilPct < 100;
+                  const isOverloaded = utilPct >= 100;
+                  const chipLabel = isOverloaded ? "Overloaded" : isBusy ? "Busy" : "Available";
+                  const chipTone = isOverloaded ? "attention" : isBusy ? "warning" : "stable";
+                  return (
+                    <div className="legacy-workload-card" key={tech}>
+                      <div className="legacy-workload-card-header">
+                        <strong style={{ fontSize: "0.85rem" }}>{tech}</strong>
+                        <span className={`legacy-chip tone-${chipTone}`}>{chipLabel}</span>
+                      </div>
+                      <div className="legacy-workload-bar-track">
+                        <div
+                          className={`legacy-workload-bar-fill${isOverloaded ? " is-overloaded" : isBusy ? " is-busy" : ""}`}
+                          style={{ width: `${utilPct}%` }}
+                        />
+                      </div>
+                      <div className="legacy-workload-meta">
+                        <span>{data.roCount} RO{data.roCount === 1 ? "" : "s"}</span>
+                        <span>{data.totalHours.toFixed(1)} hrs</span>
+                        <span>{utilPct.toFixed(0)}% of 8hr</span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          );
+        })() : (
         <table className="legacy-grid">
           <thead>
             <tr>
@@ -3293,10 +4909,25 @@ function ServiceQueueBoard({
                     key={row.id}
                     onClick={() => onSelectRow(row)}
                     onKeyDown={(event) => {
+                      if (event.target !== event.currentTarget) {
+                        return;
+                      }
+
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
-                        onSelectRow(row);
+                        if (event.key === "Enter") {
+                          onOpenRow(row);
+                        } else {
+                          onSelectRow(row);
+                        }
                       }
+                    }}
+                    onDoubleClick={(event) => {
+                      if (event.target instanceof HTMLElement && event.target.closest("button, input, select, textarea, form")) {
+                        return;
+                      }
+
+                      onOpenRow(row);
                     }}
                     tabIndex={0}
                   >
@@ -3394,12 +5025,24 @@ function ServiceQueueBoard({
                             </form>
                           ) : (
                             <div className="legacy-service-grid-cell">
-                              <span
-                                className={`legacy-service-grid-value${column.key === "note" ? " is-note" : ""}`}
-                                title={column.key === "note" ? currentValue : undefined}
-                              >
-                                {currentValue || (column.key === "note" ? "No note added" : "")}
-                              </span>
+                              {column.key === "customerName" && onViewCustomer ? (
+                                <button
+                                  className="legacy-service-grid-value"
+                                  onClick={(event) => { event.stopPropagation(); onViewCustomer(row.customerName, row.roNumber); }}
+                                  style={{ background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline dotted" }}
+                                  title="View customer profile"
+                                  type="button"
+                                >
+                                  {currentValue}
+                                </button>
+                              ) : (
+                                <span
+                                  className={`legacy-service-grid-value${column.key === "note" ? " is-note" : ""}`}
+                                  title={column.key === "note" ? currentValue : undefined}
+                                >
+                                  {currentValue || (column.key === "note" ? "No note added" : "")}
+                                </span>
+                              )}
                               {column.editableField ? (
                                 <button
                                   aria-label={`Edit ${column.label}`}
@@ -3425,6 +5068,7 @@ function ServiceQueueBoard({
             )}
           </tbody>
         </table>
+        )}
       </div>
 
       {noteEditorRow ? (
@@ -3507,7 +5151,11 @@ function renderWorkspace(
   setSearchState: React.Dispatch<React.SetStateAction<WorkspaceSearchState>>,
   interactionState: WorkspaceInteractionState,
   onOpenWorkspace: (workspaceId: WorkspaceId, sourceLabel?: string) => void,
+  onRunWorkspaceTool: (tool: string) => void,
   desktopWidgetsStorageKey: string,
+  desktopControls: {
+    workspaceToolsTarget: ApplicationWorkspaceToolsTarget | null;
+  },
   auditControls: {
     activeStoreId: string;
     actorUserId: string;
@@ -3527,6 +5175,7 @@ function renderWorkspace(
   },
   taskControls: {
     activeServiceDetailRoNumber: string | null;
+    activeSalesDealWindow: SalesDealDetailWindow | null;
     entries: TaskQueueEntry[];
     activityEntries: CommandLogEntry[];
     cleaningQaRoNumber: string | null;
@@ -3563,16 +5212,42 @@ function renderWorkspace(
       unitLabel: string;
       description: string;
       technician: string;
+      jobCode: string;
+      recommendations: string;
+      resolution: string;
+    }) => Promise<boolean>;
+    onDeleteJob: (jobId: string) => Promise<boolean>;
+    onCloseLabor: (payload: { jobId: string; lineIndex: number; actorName: string }) => Promise<boolean>;
+    onReopenLabor: (payload: { jobId: string; lineIndex: number }) => Promise<boolean>;
+    onDeleteLaborSession: (sessionIndex: number) => Promise<boolean>;
+    onEditLaborSession: (payload: {
+      sessionIndex: number;
+      technician: string;
+      startDate: string;
+      startTime: string;
+      endDate: string;
+      endTime: string;
+      actualHours: string;
+      creditedHours: string;
+      override: string;
     }) => Promise<boolean>;
     onRemovePart: (jobId: string, partNumber: string) => Promise<boolean>;
     onReturnToAuditCleanup: (() => void) | null;
+    onUpdateROHeader: (payload: { purchaseOrder: string; promisedDate: string; closedDate: string }) => Promise<boolean>;
+    onFinalizeInvoice: (status: "Draft" | "Finalized" | "Paid" | "Voided") => Promise<boolean>;
+    onRecordPayment: (method: string, amount: number, reference: string) => Promise<boolean>;
+    onUpdateJobStatus: (jobId: string, status: string) => Promise<boolean>;
+    onRequestSignature: (docType: string, recipient: string, message: string) => Promise<boolean>;
     onUpdateQueueRow: (row: ServiceWorkspaceRow) => Promise<boolean>;
+    onUpdateCustomer: (payload: ServiceWorkbenchCustomerPayload) => Promise<boolean>;
     onUpdateJob: (payload: {
       jobId: string;
       title: string;
+      unitLabel: string;
       customerApproval: string;
       status: string;
       appliance: string;
+      warranty: string;
       description: string;
       resolution: string;
       recommendations: string;
@@ -3582,6 +5257,7 @@ function renderWorkspace(
       rate: number;
       quantity: number;
     }) => Promise<boolean>;
+    onUpdateNotes: (payload: { notes: string; transferNotes: string }) => Promise<boolean>;
     onUpdateOrderType: (orderType: "Estimate" | "Repair Order") => Promise<boolean>;
     onUpdateStatus: (taskId: string, status: TaskStatus) => void;
     onUpdateWarrantyClaim: (payload: {
@@ -3606,6 +5282,7 @@ function renderWorkspace(
     operators: StoreOperatorOption[];
     returnToAuditContext: ServiceAuditReturnContext | null;
     recentServiceRowHighlights: Record<string, number>;
+    serviceCustomerOptions: ServiceWorkbenchCustomerOption[];
     serviceDetail: ServiceWorkbenchModel | null;
     serviceNotificationEntries: ServiceNotificationEntry[];
     servicePartCatalog: ServiceOrderPartCatalogEntry[];
@@ -3613,6 +5290,12 @@ function renderWorkspace(
     updatingServiceDetailKey: string | null;
     updatingServiceQueueRowId: string | null;
     updatingTaskId: string | null;
+    userRole: "admin" | "manager" | "tech" | "writer";
+    onViewCustomer?: (name: string, roNumber: string) => void;
+  },
+  websiteControls: {
+    onViewChange: React.Dispatch<React.SetStateAction<WebsiteWorkspaceView>>;
+    view: WebsiteWorkspaceView;
   },
   partsControls: {
     isLookupOpen: boolean;
@@ -3628,14 +5311,35 @@ function renderWorkspace(
     onChangeQuickAddTerm: React.Dispatch<React.SetStateAction<string>>;
     onCloseLookup: () => void;
     onOpenLookup: (initialSearchTerm?: string) => void;
+    onOpenInventoryDetail: (row: PartsWorkspaceRow) => void;
     onSelectLookupResult: React.Dispatch<React.SetStateAction<string | null>>;
     onSelectLookupRow: (row: PartsWorkspaceRow) => void;
+    onSendInventoryRowsToPurchasePad: (rows: PartsWorkspaceRow[]) => void;
     onSubmitLookup: () => void | Promise<void>;
+    activeInventoryDetailPartNumber: string | null;
+    inventoryToolRequest: PartsInventoryToolRequest | null;
+    purchasePadRows: PartsWorkspaceRow[];
+    workspaceView: PartsWorkspaceView;
   }
 ) {
   switch (activeWorkspaceId) {
     case "sales": {
       const rows = workspace?.workspaceId === "sales" ? workspace.rows : [];
+
+      if (taskControls.activeSalesDealWindow) {
+        const dealRow = rows.find((row) => row.id === taskControls.activeSalesDealWindow!.dealId) ?? null;
+        return (
+          <div className="legacy-data-window legacy-data-window-sales-detail">
+            <SalesDealWorkbench
+              actorUserId={auditControls.actorUserId}
+              dealRow={dealRow}
+              dealWindow={taskControls.activeSalesDealWindow}
+              storeId={auditControls.activeStoreId}
+            />
+          </div>
+        );
+      }
+
       const filterOptions = buildFilterOptions(rows.map((row) => row.finalized), searchState.filterValue);
       const filteredRows = rows.filter(
         (row) =>
@@ -3677,8 +5381,10 @@ function renderWorkspace(
             onFilterChange={(filterValue) => setSearchState((current) => ({ ...current, filterValue }))}
             onSearchChange={(searchTerm) => setSearchState((current) => ({ ...current, searchTerm }))}
             onSelectQueueView={taskControls.onSelectServiceQueueView}
+            onOpenRow={interactionState.onOpenServiceRow}
             onSelectRow={interactionState.onSelectServiceRow}
             onUpdateRow={taskControls.onUpdateQueueRow}
+            onViewCustomer={taskControls.onViewCustomer}
             recentServiceRowHighlights={taskControls.recentServiceRowHighlights}
             rows={rows}
             searchState={searchState}
@@ -3694,7 +5400,7 @@ function renderWorkspace(
         rows.find((row) => row.roNumber === taskControls.activeServiceDetailRoNumber) ?? resolveSelectedRow(rows, interactionState.selectedServiceRowId);
 
       return (
-        <div className="legacy-data-window legacy-data-window-service">
+        <div className="legacy-data-window legacy-data-window-service legacy-data-window-service-detail">
           <ServiceRepairWorkbench
             entries={taskControls.entries}
             activityEntries={taskControls.activityEntries}
@@ -3708,25 +5414,63 @@ function renderWorkspace(
             onAssignTask={taskControls.onAssignTask}
             onCleanupQaTasks={taskControls.onCleanupQaTasks}
             onCreateJob={taskControls.onCreateJob}
+            onDeleteJob={taskControls.onDeleteJob}
+            onCloseLabor={taskControls.onCloseLabor}
+            onReopenLabor={taskControls.onReopenLabor}
+            onDeleteLaborSession={taskControls.onDeleteLaborSession}
+            onEditLaborSession={taskControls.onEditLaborSession}
             onRemovePart={taskControls.onRemovePart}
             onReturnToAuditCleanup={taskControls.onReturnToAuditCleanup}
+            onUpdateCustomer={taskControls.onUpdateCustomer}
             onUpdateJob={taskControls.onUpdateJob}
+            onUpdateNotes={taskControls.onUpdateNotes}
             onUpdateOrderType={taskControls.onUpdateOrderType}
+            onUpdateROHeader={taskControls.onUpdateROHeader}
+            onFinalizeInvoice={taskControls.onFinalizeInvoice}
+            onRecordPayment={taskControls.onRecordPayment}
+            onUpdateJobStatus={taskControls.onUpdateJobStatus}
+            onRequestSignature={taskControls.onRequestSignature}
             onUpdateStatus={taskControls.onUpdateStatus}
             onUpdateWarrantyClaim={taskControls.onUpdateWarrantyClaim}
             operators={taskControls.operators}
             returnToAuditContext={taskControls.returnToAuditContext}
             selectedServiceRow={detailServiceRow}
+            serviceCustomerOptions={taskControls.serviceCustomerOptions}
             serviceDetail={taskControls.serviceDetail}
             servicePartCatalog={taskControls.servicePartCatalog}
             updatingServiceDetailKey={taskControls.updatingServiceDetailKey}
             updatingTaskId={taskControls.updatingTaskId}
+            userRole={taskControls.userRole}
           />
         </div>
       );
     }
     case "parts": {
-      const rows = workspace?.workspaceId === "parts" ? workspace.rows : [];
+      const baseRows = workspace?.workspaceId === "parts" ? workspace.rows : [];
+      const orderingRows = mergePurchasePadRows(baseRows, partsControls.purchasePadRows);
+
+      if (partsControls.workspaceView === "inventory" && partsControls.activeInventoryDetailPartNumber) {
+        const inventoryDetailRows = buildPartsInventoryRows(baseRows);
+        const selectedInventoryDetailRow =
+          inventoryDetailRows.find((row) => row.partNumber === partsControls.activeInventoryDetailPartNumber) ??
+          buildPartsInventoryDetailFallbackRow(partsControls.activeInventoryDetailPartNumber);
+
+        return <PartsInventoryDetailPage onSendToPurchasePad={partsControls.onSendInventoryRowsToPurchasePad} row={selectedInventoryDetailRow} />;
+      }
+
+      if (partsControls.workspaceView === "inventory") {
+        return (
+          <PartsInventoryBoard
+            toolRequest={partsControls.inventoryToolRequest}
+            onOpenDetail={partsControls.onOpenInventoryDetail}
+            onSelectRow={interactionState.onSelectPartsRow}
+            onSendToPurchasePad={partsControls.onSendInventoryRowsToPurchasePad}
+            rows={baseRows}
+            selectedRowId={interactionState.selectedPartsRowId}
+          />
+        );
+      }
+
       return (
         <PartsOrderingBoard
           isLookupOpen={partsControls.isLookupOpen}
@@ -3748,7 +5492,7 @@ function renderWorkspace(
           onSelectRow={interactionState.onSelectPartsRow}
           onSubmitLookup={partsControls.onSubmitLookup}
           quickAddTerm={partsControls.quickAddTerm}
-          rows={rows}
+          rows={orderingRows}
           searchState={searchState}
           selectedRowId={interactionState.selectedPartsRowId}
         />
@@ -3795,15 +5539,21 @@ function renderWorkspace(
           isFilteredByOperator={taskControls.isFilteredByOperator}
           onAddTaskNote={taskControls.onAddTaskNote}
           onAssignTask={taskControls.onAssignTask}
+          onRunTool={onRunWorkspaceTool}
           onSelectRow={interactionState.onSelectWebsiteRow}
           onUpdateStatus={taskControls.onUpdateStatus}
           operators={taskControls.operators}
+          onViewChange={websiteControls.onViewChange}
           rows={rows}
           selectedRow={selectedWebsiteRow}
           selectedRowId={selectedWebsiteRow?.id ?? null}
           updatingTaskId={taskControls.updatingTaskId}
+          view={websiteControls.view}
         />
       );
+    }
+    case "reports": {
+      return <ReportCenterWorkspace auditLog={taskControls.activityEntries} />;
     }
     case "desktop":
     default: {
@@ -3811,11 +5561,13 @@ function renderWorkspace(
 
       return (
         <DesktopWorkspace
+          availableStores={auditControls.availableStores}
           dashboard={dashboard}
           onOpenWorkspace={onOpenWorkspace}
           openWorkspaceIds={openWorkspaceIds}
           rows={rows}
           widgetStorageKey={desktopWidgetsStorageKey}
+          workspaceToolsTarget={desktopControls.workspaceToolsTarget}
         />
       );
     }
@@ -3823,14 +5575,16 @@ function renderWorkspace(
 }
 
 interface DesktopWorkspaceProps {
+  availableStores: SessionState["stores"];
   dashboard: DashboardPayload | null;
   onOpenWorkspace: (workspaceId: WorkspaceId, sourceLabel?: string) => void;
   openWorkspaceIds: WorkspaceId[];
   rows: DesktopWorkspaceRow[];
   widgetStorageKey: string;
+  workspaceToolsTarget: ApplicationWorkspaceToolsTarget | null;
 }
 
-function DesktopWorkspace({ dashboard, onOpenWorkspace, openWorkspaceIds, rows, widgetStorageKey }: DesktopWorkspaceProps) {
+function DesktopWorkspace({ availableStores, dashboard, onOpenWorkspace, openWorkspaceIds, rows, widgetStorageKey, workspaceToolsTarget }: DesktopWorkspaceProps) {
   const defaultWidgetDefinition = getDesktopWidgetDefinition("scoreboard");
   const desktopBoardRef = useRef<HTMLDivElement | null>(null);
   const draggingWidgetIdRef = useRef<string | null>(null);
@@ -3884,6 +5638,10 @@ function DesktopWorkspace({ dashboard, onOpenWorkspace, openWorkspaceIds, rows, 
   const [widgetDraftWidth, setWidgetDraftWidth] = useState<DesktopWidgetWidth>(defaultWidgetDefinition.defaultWidth);
   const [widgetDraftHeight, setWidgetDraftHeight] = useState<DesktopWidgetHeight>(defaultWidgetDefinition.defaultHeight);
   const [widgetDraftShape, setWidgetDraftShape] = useState<DesktopWidgetShape>(defaultWidgetDefinition.defaultShape);
+  const [activeWorkspaceToolsSectionId, setActiveWorkspaceToolsSectionId] = useState<ApplicationWorkspaceToolsSectionId>(
+    applicationWorkspaceToolsSections[0]?.id ?? "windowControl"
+  );
+  const [activeWorkspaceToolsAction, setActiveWorkspaceToolsAction] = useState(applicationWorkspaceToolsSections[0]?.actions[0]?.label ?? "Pinned Windows");
   const activeDashboard =
     dashboardPreference.dashboards.find((dashboardLayout) => dashboardLayout.id === dashboardPreference.activeDashboardId) ??
     dashboardPreference.dashboards[0];
@@ -3943,6 +5701,10 @@ function DesktopWorkspace({ dashboard, onOpenWorkspace, openWorkspaceIds, rows, 
   const funnelSteps = buildDesktopFunnelSteps(laneGraphMetrics);
   const draggingWidget = draggingWidgetId ? widgets.find((widget) => widget.id === draggingWidgetId) ?? null : null;
   const selectedWidgetDefinition = getDesktopWidgetDefinition(widgetDraftType);
+  const activeWorkspaceToolsSection =
+    applicationWorkspaceToolsSections.find((section) => section.id === activeWorkspaceToolsSectionId) ?? applicationWorkspaceToolsSections[0];
+  const activeWorkspaceToolsActionDefinition =
+    activeWorkspaceToolsSection?.actions.find((action) => action.label === activeWorkspaceToolsAction) ?? activeWorkspaceToolsSection?.actions[0];
 
   useEffect(() => {
     const nextDashboardPreference = readDesktopDashboardPreference(widgetStorageKey);
@@ -3959,6 +5721,15 @@ function DesktopWorkspace({ dashboard, onOpenWorkspace, openWorkspaceIds, rows, 
     setWidgetDraftHeight(defaultWidgetDefinition.defaultHeight);
     setWidgetDraftShape(defaultWidgetDefinition.defaultShape);
   }, [widgetStorageKey]);
+
+  useEffect(() => {
+    if (!workspaceToolsTarget) {
+      return;
+    }
+
+    setActiveWorkspaceToolsSectionId(workspaceToolsTarget.sectionId);
+    setActiveWorkspaceToolsAction(workspaceToolsTarget.action);
+  }, [workspaceToolsTarget]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -4488,6 +6259,17 @@ function DesktopWorkspace({ dashboard, onOpenWorkspace, openWorkspaceIds, rows, 
     );
   }
 
+  function handleWorkspaceToolsSectionChange(sectionId: ApplicationWorkspaceToolsSectionId) {
+    const nextSection = applicationWorkspaceToolsSections.find((section) => section.id === sectionId) ?? applicationWorkspaceToolsSections[0];
+
+    if (!nextSection) {
+      return;
+    }
+
+    setActiveWorkspaceToolsSectionId(nextSection.id);
+    setActiveWorkspaceToolsAction(nextSection.actions[0]?.label ?? "");
+  }
+
   function renderDesktopWidget(widget: DesktopWidgetConfig) {
     const widgetDefinition = getDesktopWidgetDefinition(widget.type);
 
@@ -4900,6 +6682,83 @@ function DesktopWorkspace({ dashboard, onOpenWorkspace, openWorkspaceIds, rows, 
           </div>
         );
       }
+      case "revenuePeriod": {
+        const periods = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const values = [42, 58, 61, 75, 88, 94, 79, 85, 91, 67, 53, 48];
+        const maxVal = Math.max(...values);
+        return (
+          <div className="legacy-desktop-chart-widget">
+            <div className="legacy-desktop-bar-row">
+              {values.map((v, i) => (
+                <div className="legacy-desktop-bar-col" key={periods[i]}>
+                  <div
+                    className="legacy-desktop-bar-fill"
+                    style={{ height: `${(v / maxVal) * 100}%`, background: "#1f8aa7" }}
+                  />
+                  <span className="legacy-desktop-bar-label">{periods[i]}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      }
+      case "roAging": {
+        const agingBuckets = [
+          { label: "0–7 days", count: 14, tone: "stable" },
+          { label: "8–14 days", count: 8, tone: "neutral" },
+          { label: "15–30 days", count: 5, tone: "warning" },
+          { label: "30+ days", count: 3, tone: "attention" }
+        ];
+        if (widget.view === "table") {
+          return (
+            <div className="legacy-desktop-compact-list">
+              {agingBuckets.map((b) => (
+                <article className="legacy-desktop-compact-row" key={b.label}>
+                  <strong>{b.label}</strong>
+                  <span className={`legacy-chip tone-${b.tone}`}>{b.count} ROs</span>
+                </article>
+              ))}
+            </div>
+          );
+        }
+        const agingMax = Math.max(...agingBuckets.map((b) => b.count));
+        return (
+          <div className="legacy-desktop-chart-widget">
+            <div className="legacy-desktop-bar-row">
+              {agingBuckets.map((b) => (
+                <div className="legacy-desktop-bar-col" key={b.label}>
+                  <div
+                    className="legacy-desktop-bar-fill"
+                    style={{ height: `${(b.count / agingMax) * 100}%`, background: b.tone === "attention" ? "#ce5f63" : b.tone === "warning" ? "#d69b00" : "#1f8aa7" }}
+                  />
+                  <span className="legacy-desktop-bar-label">{b.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      }
+      case "partsBurnRate": {
+        const burnPoints = [12, 18, 14, 22, 19, 25, 21, 17, 23, 28, 20, 16];
+        const burnMax = Math.max(...burnPoints);
+        const width = 280;
+        const height = 80;
+        const pts = burnPoints.map((v, i) => {
+          const x = i * (width / (burnPoints.length - 1));
+          const y = height - (v / burnMax) * (height - 10) - 5;
+          return `${x},${y}`;
+        });
+        const linePath = `M ${pts.join(" L ")}`;
+        const fillPath = `M ${pts[0]} L ${pts.join(" L ")} L ${width},${height} L 0,${height} Z`;
+        return (
+          <div className="legacy-desktop-chart-widget">
+            <svg aria-hidden="true" className="legacy-desktop-trend-svg" viewBox={`0 0 ${width} ${height}`}>
+              {widget.view !== "line" && <path className="legacy-desktop-trend-fill" d={fillPath} />}
+              <path className="legacy-desktop-trend-line" d={linePath} />
+            </svg>
+          </div>
+        );
+      }
       default:
         return <p className="legacy-desktop-widget-empty">{widgetDefinition.label} is not available right now.</p>;
     }
@@ -4931,6 +6790,50 @@ function DesktopWorkspace({ dashboard, onOpenWorkspace, openWorkspaceIds, rows, 
           ))}
         </div>
       </section>
+
+      <WorkspaceToolsPanel
+        activeAction={activeWorkspaceToolsAction}
+        activeActionDefinition={activeWorkspaceToolsActionDefinition}
+        activeDashboardName={activeDashboard?.name ?? "Front Page"}
+        activeSection={activeWorkspaceToolsSection}
+        activityItems={activityItems}
+        dashboardCount={dashboardPreference.dashboards.length}
+        moduleCards={moduleCards}
+        onClearWidgets={() => updateActiveDashboardWidgets(() => [])}
+        onCreateWidget={openCreateWidgetBuilder}
+        onOpenDashboardManager={openDashboardManager}
+        onOpenWorkspace={onOpenWorkspace}
+        onResetDashboard={() => updateActiveDashboardWidgets(() => buildDefaultDesktopWidgets())}
+        onSelectAction={setActiveWorkspaceToolsAction}
+        onSelectSection={handleWorkspaceToolsSectionChange}
+        openWorkspaceIds={openWorkspaceIds}
+        operators={dashboard?.operators ?? []}
+        signalRows={signalRows}
+        stats={stats}
+        storeSummary={dashboard?.store.summary ?? "Store command surface is loading."}
+        widgetCount={widgets.length}
+      />
+
+      {availableStores.length > 0 && (
+        <div className="legacy-cross-store-summary">
+          {availableStores.map((store, idx) => {
+            const stubRevenue = (82000 + idx * 34500).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+            const stubROs = 18 + idx * 7;
+            return (
+              <div className="legacy-cross-store-card" key={store.id}>
+                <span>{store.name}</span>
+                <strong>{stubRevenue}</strong>
+                <span>{stubROs} ROs</span>
+              </div>
+            );
+          })}
+          <div className="legacy-cross-store-card is-total">
+            <span>All Stores</span>
+            <strong>{availableStores.map((_, idx) => 82000 + idx * 34500).reduce((a, b) => a + b, 0).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })}</strong>
+            <span>{availableStores.map((_, idx) => 18 + idx * 7).reduce((a, b) => a + b, 0)} ROs</span>
+          </div>
+        </div>
+      )}
 
       <section className="legacy-info-card legacy-desktop-board-intro">
         <div className="legacy-desktop-board-heading">
@@ -5180,6 +7083,366 @@ function DesktopWorkspace({ dashboard, onOpenWorkspace, openWorkspaceIds, rows, 
         open={isDashboardManagerOpen}
       />
     </div>
+  );
+}
+
+interface WorkspaceToolsPanelProps {
+  activeAction: string;
+  activeActionDefinition?: ApplicationWorkspaceToolsAction;
+  activeDashboardName: string;
+  activeSection?: ApplicationWorkspaceToolsSection;
+  activityItems: DashboardPayload["activity"];
+  dashboardCount: number;
+  moduleCards: Array<{ headline: string; id: string; meta: string; name: string; status: string }>;
+  onClearWidgets: () => void;
+  onCreateWidget: () => void;
+  onOpenDashboardManager: (mode: DesktopDashboardManagerMode) => void;
+  onOpenWorkspace: (workspaceId: WorkspaceId, sourceLabel?: string) => void;
+  onResetDashboard: () => void;
+  onSelectAction: (action: string) => void;
+  onSelectSection: (sectionId: ApplicationWorkspaceToolsSectionId) => void;
+  openWorkspaceIds: WorkspaceId[];
+  operators: DashboardPayload["operators"];
+  signalRows: Array<{ headline: string; id: string; module: string; status: string }>;
+  stats: DashboardPayload["stats"];
+  storeSummary: string;
+  widgetCount: number;
+}
+
+function WorkspaceToolsPanel({
+  activeAction,
+  activeActionDefinition,
+  activeDashboardName,
+  activeSection,
+  activityItems,
+  dashboardCount,
+  moduleCards,
+  onClearWidgets,
+  onCreateWidget,
+  onOpenDashboardManager,
+  onOpenWorkspace,
+  onResetDashboard,
+  onSelectAction,
+  onSelectSection,
+  openWorkspaceIds,
+  operators,
+  signalRows,
+  stats,
+  storeSummary,
+  widgetCount
+}: WorkspaceToolsPanelProps) {
+  const [isCompactPanel, setIsCompactPanel] = useState(false);
+  const [showModuleChips, setShowModuleChips] = useState(true);
+  const exceptionRows = signalRows.filter((row) => row.status.toLowerCase() !== "online");
+  const activeActionLabel = activeActionDefinition?.label ?? activeAction;
+
+  function renderEmptyState(label: string, detail: string) {
+    return (
+      <div className="legacy-workspace-tools-empty">
+        <strong>{label}</strong>
+        <span>{detail}</span>
+      </div>
+    );
+  }
+
+  function renderWorkspaceShortcut(workspaceId: WorkspaceId, sourceLabel: string) {
+    return (
+      <button
+        className="legacy-workspace-tools-link"
+        key={workspaceId}
+        onClick={() => onOpenWorkspace(workspaceId, sourceLabel)}
+        type="button"
+      >
+        <strong>{workspaceDefinitions[workspaceId].title}</strong>
+        <span>{workspaceDefinitions[workspaceId].subtitle}</span>
+      </button>
+    );
+  }
+
+  function renderActiveAction() {
+    switch (activeActionLabel) {
+      case "Pinned Windows":
+        return (
+          <div className="legacy-workspace-tools-detail-grid">
+            <div className="legacy-workspace-tools-card is-feature">
+              <span className="legacy-command-meta">Open Windows</span>
+              <strong>{openWorkspaceIds.length} pinned workspaces</strong>
+              <p>{openWorkspaceIds.length > 0 ? "Pinned windows are ready in the left rail." : "No pinned workspace windows are active."}</p>
+            </div>
+            <div className="legacy-workspace-tools-list">
+              {openWorkspaceIds.length > 0
+                ? openWorkspaceIds.map((workspaceId) => renderWorkspaceShortcut(workspaceId, "Workspace Tools"))
+                : renderEmptyState("No pinned windows", "Open Windows targets will appear after a workspace is pinned.")}
+            </div>
+          </div>
+        );
+      case "Window Layout Presets":
+        return (
+          <div className="legacy-workspace-tools-detail-grid">
+            <div className="legacy-workspace-tools-card is-feature">
+              <span className="legacy-command-meta">Current Layout</span>
+              <strong>{activeDashboardName}</strong>
+              <p>{dashboardCount} saved views with {widgetCount} widgets on this view.</p>
+            </div>
+            <div className="legacy-workspace-tools-button-grid">
+              <button className="legacy-desktop-board-button" onClick={() => onOpenDashboardManager("create")} type="button">
+                New View
+              </button>
+              <button className="legacy-desktop-board-button is-secondary" onClick={() => onOpenDashboardManager("duplicate")} type="button">
+                Duplicate View
+              </button>
+              <button className="legacy-desktop-board-button is-secondary" onClick={() => onOpenDashboardManager("rename")} type="button">
+                Rename View
+              </button>
+              <button className="legacy-desktop-board-button is-secondary" onClick={onCreateWidget} type="button">
+                New Widget
+              </button>
+            </div>
+          </div>
+        );
+      case "Workspace Reset":
+        return (
+          <div className="legacy-workspace-tools-detail-grid">
+            <div className="legacy-workspace-tools-card is-feature">
+              <span className="legacy-command-meta">Desktop Reset</span>
+              <strong>{activeDashboardName}</strong>
+              <p>Reset actions target the active dashboard view.</p>
+            </div>
+            <div className="legacy-workspace-tools-button-grid">
+              <button className="legacy-desktop-board-button" onClick={onResetDashboard} type="button">
+                Reset Layout
+              </button>
+              <button className="legacy-desktop-board-button is-secondary" onClick={onCreateWidget} type="button">
+                Add Widget
+              </button>
+              <button className="legacy-desktop-board-button is-secondary" onClick={() => onOpenDashboardManager("duplicate")} type="button">
+                Save Copy
+              </button>
+              <button className="legacy-desktop-board-button is-secondary" onClick={onClearWidgets} type="button">
+                Clear Canvas
+              </button>
+            </div>
+          </div>
+        );
+      case "Notifications":
+        return (
+          <div className="legacy-workspace-tools-list">
+            {activityItems.length > 0
+              ? activityItems.slice(0, 5).map((item, index) => (
+                  <article className="legacy-workspace-tools-row" key={`${item.label}-${index}`}>
+                    <span className={`legacy-chip tone-${item.tone.toLowerCase()}`}>{item.tone}</span>
+                    <div>
+                      <strong>{item.label}</strong>
+                      <p>{item.detail}</p>
+                    </div>
+                  </article>
+                ))
+              : renderEmptyState("No recent notifications", "Recent activity will appear as operators work.")}
+          </div>
+        );
+      case "Follow-Up Prompts":
+        return (
+          <div className="legacy-workspace-tools-list">
+            {exceptionRows.length > 0
+              ? exceptionRows.slice(0, 5).map((row) => (
+                  <article className="legacy-workspace-tools-row" key={row.id}>
+                    <span className={`legacy-chip tone-${row.status.toLowerCase()}`}>{row.status}</span>
+                    <div>
+                      <strong>{row.module}</strong>
+                      <p>{row.headline}</p>
+                    </div>
+                  </article>
+                ))
+              : renderEmptyState("No follow-up prompts", "Tracked operating lanes are clear.")}
+          </div>
+        );
+      case "Exception Inbox":
+        return (
+          <div className="legacy-workspace-tools-detail-grid">
+            <div className="legacy-workspace-tools-card is-feature">
+              <span className="legacy-command-meta">Exception Inbox</span>
+              <strong>{exceptionRows.length} active signals</strong>
+              <p>Audit Trail carries the full exception history and task handoff detail.</p>
+              <button className="legacy-desktop-board-button" onClick={() => onOpenWorkspace("audit", "Workspace Tools")} type="button">
+                Open Audit Trail
+              </button>
+            </div>
+            <div className="legacy-workspace-tools-list">
+              {exceptionRows.length > 0
+                ? exceptionRows.slice(0, 4).map((row) => (
+                    <article className="legacy-workspace-tools-row" key={row.id}>
+                      <span className={`legacy-chip tone-${row.status.toLowerCase()}`}>{row.status}</span>
+                      <div>
+                        <strong>{row.module}</strong>
+                        <p>{row.headline}</p>
+                      </div>
+                    </article>
+                  ))
+                : renderEmptyState("No exceptions", "Audit exceptions will appear here when a lane needs review.")}
+            </div>
+          </div>
+        );
+      case "Store Summary":
+        return (
+          <div className="legacy-workspace-tools-detail-grid">
+            <div className="legacy-workspace-tools-card is-feature">
+              <span className="legacy-command-meta">Store Summary</span>
+              <strong>{activeDashboardName}</strong>
+              <p>{storeSummary}</p>
+            </div>
+            <div className="legacy-workspace-tools-stat-grid">
+              {stats.map((stat) => (
+                <article className="legacy-desktop-stat-card" key={stat.label}>
+                  <span>{stat.label}</span>
+                  <strong>{stat.value}</strong>
+                  <p>{stat.caption}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        );
+      case "Store Roster":
+        return (
+          <div className="legacy-workspace-tools-list is-roster">
+            {operators.length > 0
+              ? operators.map((operator) => (
+                  <article className="legacy-workspace-tools-roster-card" key={operator.id}>
+                    <span>{operator.avatarInitial}</span>
+                    <div>
+                      <strong>{operator.name}</strong>
+                      <p>{operator.title}</p>
+                    </div>
+                  </article>
+                ))
+              : renderEmptyState("No roster loaded", "Store operators will appear when the dashboard payload is ready.")}
+          </div>
+        );
+      case "Shift Notes":
+        return (
+          <div className="legacy-workspace-tools-list">
+            {activityItems.length > 0
+              ? activityItems.slice(0, 4).map((item, index) => (
+                  <article className="legacy-workspace-tools-row" key={`${item.detail}-${index}`}>
+                    <span className="legacy-chip tone-neutral">Note</span>
+                    <div>
+                      <strong>{item.label}</strong>
+                      <p>{item.detail}</p>
+                    </div>
+                  </article>
+                ))
+              : renderEmptyState("No shift notes", "Recent handoff notes will appear with dashboard activity.")}
+          </div>
+        );
+      case "Preferences":
+        return (
+          <div className="legacy-workspace-tools-detail-grid">
+            <div className="legacy-workspace-tools-toggle-list">
+              <label className="legacy-workspace-tools-toggle">
+                <input checked={isCompactPanel} onChange={(event) => setIsCompactPanel(event.target.checked)} type="checkbox" />
+                <span>Compact panel density</span>
+              </label>
+              <label className="legacy-workspace-tools-toggle">
+                <input checked={showModuleChips} onChange={(event) => setShowModuleChips(event.target.checked)} type="checkbox" />
+                <span>Show module chips</span>
+              </label>
+            </div>
+            <div className="legacy-workspace-tools-card is-feature">
+              <span className="legacy-command-meta">Preference Preview</span>
+              <strong>{isCompactPanel ? "Compact" : "Standard"} density</strong>
+              <p>{showModuleChips ? `${moduleCards.length} module chips visible` : "Module chips hidden in this panel."}</p>
+              {showModuleChips ? (
+                <div className="legacy-chip-row">
+                  {moduleCards.slice(0, isCompactPanel ? 4 : 8).map((moduleItem) => (
+                    <span className={`legacy-chip tone-${moduleItem.status.toLowerCase()}`} key={moduleItem.id}>
+                      {moduleItem.name}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        );
+      case "Personal Shortcuts":
+      case "Quick Launch Setup":
+        return (
+          <div className="legacy-workspace-tools-shortcut-grid">
+            {quickLaunchButtons.map((button) => (
+              <article className="legacy-workspace-tools-shortcut" key={button.slot}>
+                <span>{button.slot}</span>
+                <div>
+                  <strong>{button.label}</strong>
+                  <p>{button.workspaceId ? workspaceDefinitions[button.workspaceId].title : "Store action"}</p>
+                </div>
+                {button.workspaceId ? (
+                  <button className="legacy-desktop-widget-button" onClick={() => onOpenWorkspace(button.workspaceId!, "Workspace Tools")} type="button">
+                    Open
+                  </button>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        );
+      default:
+        return renderEmptyState("Workspace tool not found", "Choose another Workspace Tools action.");
+    }
+  }
+
+  return (
+    <section className={`legacy-info-card legacy-workspace-tools-panel${isCompactPanel ? " is-compact" : ""}`}>
+      <div className="legacy-workspace-tools-heading">
+        <div className="legacy-desktop-board-copy">
+          <span className="legacy-command-meta">Application / Workspace Tools</span>
+          <h3>{activeSection?.label ?? "Workspace Tools"}</h3>
+          <p>{activeActionDefinition?.detail ?? "Desktop command center"}</p>
+        </div>
+        <div className="legacy-desktop-board-metrics">
+          <article className="legacy-desktop-board-metric">
+            <strong>{openWorkspaceIds.length}</strong>
+            <span>Windows</span>
+          </article>
+          <article className="legacy-desktop-board-metric">
+            <strong>{exceptionRows.length}</strong>
+            <span>Signals</span>
+          </article>
+          <article className="legacy-desktop-board-metric">
+            <strong>{operators.length}</strong>
+            <span>Operators</span>
+          </article>
+        </div>
+      </div>
+
+      <div className="legacy-workspace-tools-tabs" role="tablist" aria-label="Workspace Tools sections">
+        {applicationWorkspaceToolsSections.map((section) => (
+          <button
+            aria-selected={activeSection?.id === section.id}
+            className={`legacy-workspace-tools-tab${activeSection?.id === section.id ? " is-active" : ""}`}
+            key={section.id}
+            onClick={() => onSelectSection(section.id)}
+            role="tab"
+            type="button"
+          >
+            {section.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="legacy-workspace-tools-body">
+        <div className="legacy-workspace-tools-actions">
+          {(activeSection?.actions ?? []).map((action) => (
+            <button
+              className={`legacy-workspace-tools-action${action.label === activeActionLabel ? " is-active" : ""}`}
+              key={action.label}
+              onClick={() => onSelectAction(action.label)}
+              type="button"
+            >
+              <strong>{action.label}</strong>
+              <span>{action.detail}</span>
+            </button>
+          ))}
+        </div>
+        <div className="legacy-workspace-tools-detail">{renderActiveAction()}</div>
+      </div>
+    </section>
   );
 }
 
@@ -6465,6 +8728,8 @@ function AuditWorkspace({
   );
 }
 
+type WebsiteWorkspaceView = "feed" | "customSettings";
+
 interface WebsiteWorkspaceProps {
   activityEntries: CommandLogEntry[];
   entries: TaskQueueEntry[];
@@ -6472,13 +8737,432 @@ interface WebsiteWorkspaceProps {
   isFilteredByOperator: boolean;
   onAddTaskNote: (taskId: string, body: string, kind: TaskNoteKind) => Promise<boolean>;
   onAssignTask: (taskId: string, assigneeUserId: string | null) => void;
+  onRunTool: (tool: string) => void;
   onSelectRow: (row: WebsiteWorkspaceRow) => void;
   onUpdateStatus: (taskId: string, status: TaskStatus) => void;
+  onViewChange: React.Dispatch<React.SetStateAction<WebsiteWorkspaceView>>;
   operators: StoreOperatorOption[];
   rows: WebsiteWorkspaceRow[];
   selectedRow: WebsiteWorkspaceRow | null;
   selectedRowId: string | null;
   updatingTaskId: string | null;
+  view: WebsiteWorkspaceView;
+}
+
+type WebsiteConnectionType = "website" | "api" | "webhook" | "file";
+type WebsiteIntegrationEnvironment = "sandbox" | "production";
+type WebsiteAuthMode = "API Key" | "OAuth 2.0" | "Basic Auth" | "Signed Webhook" | "None";
+
+const websiteConnectionOptions: Array<{
+  detail: string;
+  id: WebsiteConnectionType;
+  label: string;
+}> = [
+  {
+    detail: "Connect a hosted CMS, dealer website, landing page builder, or custom web catalog.",
+    id: "website",
+    label: "Website CMS"
+  },
+  {
+    detail: "Expose inventory, media, pricing, and lead endpoints to any external platform.",
+    id: "api",
+    label: "REST API"
+  },
+  {
+    detail: "Receive event-driven publish status, lead forms, and inventory update callbacks.",
+    id: "webhook",
+    label: "Webhook"
+  },
+  {
+    detail: "Push scheduled CSV or JSON exports through SFTP or file-drop workflows.",
+    id: "file",
+    label: "File / SFTP"
+  }
+];
+
+const syncSettingsCategoryCards = [
+  {
+    detail: "Connection records for Salesforce, Power BI, websites, webhooks, and future external services.",
+    label: "3rd Party Data Integrations",
+    value: "8"
+  },
+  {
+    detail: "Named endpoint, credential, retry, and transport settings that can be reused across sync jobs.",
+    label: "Configurations",
+    value: "14"
+  },
+  {
+    detail: "Rules that decide which DMS objects publish, transform, merge, or stay internal.",
+    label: "Object Rules",
+    value: "21"
+  },
+  {
+    detail: "App-level flags for environments, permissions, audit retention, and feature behavior.",
+    label: "Application Configurations",
+    value: "11"
+  }
+];
+
+const syncSettingsRows = [
+  {
+    description: "Lead, account, opportunity, and service-contact sync profile for CRM handoff.",
+    environment: "Sandbox + Production",
+    kind: "3rd Party Data Integration",
+    label: "Salesforce CRM Connector",
+    lastSync: "2 min ago",
+    namespace: "salesforce.crm",
+    records: "4 objects",
+    status: "Active",
+    tone: "stable",
+    visibility: "Protected"
+  },
+  {
+    description: "Dataset push configuration for store, inventory, labor, and finance dashboard refreshes.",
+    environment: "Production",
+    kind: "3rd Party Data Integration",
+    label: "Power BI Dataset Push",
+    lastSync: "12 min ago",
+    namespace: "microsoft.powerbi",
+    records: "7 datasets",
+    status: "Active",
+    tone: "stable",
+    visibility: "Protected"
+  },
+  {
+    description: "Crosswalk for DMS fields, external field names, required transforms, and default values.",
+    environment: "All",
+    kind: "Configuration",
+    label: "Integration Field Mapping",
+    lastSync: "1 hour ago",
+    namespace: "sync.mapping",
+    records: "56 fields",
+    status: "Ready",
+    tone: "ready",
+    visibility: "Public"
+  },
+  {
+    description: "Determines lead source assignment, duplicate checks, owner routing, and service follow-up flags.",
+    environment: "All",
+    kind: "Object Rule",
+    label: "Lead Routing Rules",
+    lastSync: "18 min ago",
+    namespace: "rules.leads",
+    records: "9 rules",
+    status: "Active",
+    tone: "stable",
+    visibility: "Public"
+  },
+  {
+    description: "Controls inventory eligibility, media requirements, price visibility, and sold-unit suppression.",
+    environment: "All",
+    kind: "Object Rule",
+    label: "Inventory Publish Rules",
+    lastSync: "35 min ago",
+    namespace: "rules.inventory",
+    records: "12 rules",
+    status: "Active",
+    tone: "stable",
+    visibility: "Public"
+  },
+  {
+    description: "Retry cadence, payload signing, timeout budget, and escalation ownership for webhook deliveries.",
+    environment: "Sandbox",
+    kind: "Application Configuration",
+    label: "Webhook Retry Policy",
+    lastSync: "Pending",
+    namespace: "app.webhooks",
+    records: "5 values",
+    status: "Draft",
+    tone: "attention",
+    visibility: "Protected"
+  },
+  {
+    description: "Token scope and sender identity for SMS lead alerts and service status notifications.",
+    environment: "Production",
+    kind: "Configuration",
+    label: "Twilio Notification Config",
+    lastSync: "Yesterday",
+    namespace: "twilio.messaging",
+    records: "3 values",
+    status: "Needs Review",
+    tone: "accent",
+    visibility: "Protected"
+  }
+];
+
+const syncSettingsApplicationCards = [
+  {
+    detail: "Default external ID strategy, conflict handling, and source-of-truth hierarchy.",
+    label: "Object Identity"
+  },
+  {
+    detail: "Credential owner, environment lock, token rotation window, and masked-secret audit.",
+    label: "Security & Access"
+  },
+  {
+    detail: "Daily sync windows, retry intervals, quiet hours, and store-level throttling.",
+    label: "Sync Scheduling"
+  },
+  {
+    detail: "Payload history retention, failed-record snapshots, and admin change tracking.",
+    label: "Audit Retention"
+  }
+];
+
+interface SyncMonitorCustomSettingsPageProps {
+  connectorReadinessScore: number;
+  onRunTool: (tool: string) => void;
+  onViewChange: React.Dispatch<React.SetStateAction<WebsiteWorkspaceView>>;
+  rows: WebsiteWorkspaceRow[];
+  totalInventory: number;
+  totalLeads: number;
+}
+
+function SyncMonitorCustomSettingsPage({
+  connectorReadinessScore,
+  onRunTool,
+  onViewChange,
+  rows,
+  totalInventory,
+  totalLeads
+}: SyncMonitorCustomSettingsPageProps) {
+  const activeDestinations = rows.filter((row) => row.status === "Publishing" || row.status === "Ready").length;
+  const protectedSettings = syncSettingsRows.filter((setting) => setting.visibility === "Protected").length;
+  const [schemaMappings, setSchemaMappings] = useState([
+    { id: "m1", sourceField: "CustomerName", destField: "Contact.FullName", transform: "None", isEditing: false },
+    { id: "m2", sourceField: "Email", destField: "Contact.Email", transform: "Lowercase", isEditing: false },
+    { id: "m3", sourceField: "PhoneNumber", destField: "Contact.Phone", transform: "E164Format", isEditing: false },
+    { id: "m4", sourceField: "StockNumber", destField: "Unit.StockId", transform: "None", isEditing: false },
+    { id: "m5", sourceField: "SalePrice", destField: "Deal.CashPrice", transform: "CurrencyUSD", isEditing: false },
+    { id: "m6", sourceField: "RoNumber", destField: "ServiceOrder.ROId", transform: "None", isEditing: false }
+  ]);
+
+  return (
+    <div className="website-sync-settings-page">
+      <section className="legacy-info-card website-feed-hero website-sync-settings-hero">
+        <div className="website-feed-hero-copy">
+          <span className="legacy-command-meta">Premier Marine Cloud DMS / Sync Monitor</span>
+          <h3>Custom Settings</h3>
+          <p>Manage external integrations, object rules, and reusable sync configuration records.</p>
+          <div className="website-sync-settings-compact-stats">
+            <span>{activeDestinations} active parties</span>
+            <span>{protectedSettings} protected</span>
+            <span>{connectorReadinessScore}% ready</span>
+            <span>{totalLeads} leads today</span>
+          </div>
+        </div>
+
+        <div className="website-feed-hero-actions">
+          <button className="legacy-desktop-board-button" onClick={() => onRunTool("New Integration")} type="button">
+            New Integration
+          </button>
+          <button className="legacy-desktop-board-button is-secondary" onClick={() => onRunTool("New Object Rule")} type="button">
+            New Object Rule
+          </button>
+          <button className="legacy-desktop-board-button is-secondary" onClick={() => onRunTool("Validate Connections")} type="button">
+            Validate Connections
+          </button>
+          <button className="legacy-desktop-board-button is-secondary" onClick={() => onViewChange("feed")} type="button">
+            Feed Console
+          </button>
+        </div>
+      </section>
+
+      <section className="website-sync-settings-layout">
+        <aside className="legacy-info-card website-sync-settings-nav">
+          <div className="legacy-command-log-header">
+            <div>
+              <strong>Settings Explorer</strong>
+              <span>Admin create/manage surface</span>
+            </div>
+          </div>
+          {syncSettingsCategoryCards.map((category, index) => (
+            <button className={index === 0 ? "is-selected" : ""} key={category.label} type="button">
+              <span>{category.label}</span>
+              <strong>{category.value}</strong>
+            </button>
+          ))}
+        </aside>
+
+        <div className="legacy-info-card website-sync-settings-table-card">
+          <div className="website-feed-panel-heading">
+            <div>
+              <strong>Custom Settings Records</strong>
+              <p>{totalInventory} DMS objects available for these Sync Monitor settings.</p>
+            </div>
+            <button className="legacy-desktop-board-button is-secondary" onClick={() => onRunTool("New Configuration")} type="button">
+              New Configuration
+            </button>
+          </div>
+
+          <div className="website-sync-settings-table-wrap">
+            <table className="website-sync-settings-table">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th>Label</th>
+                  <th>Type</th>
+                  <th>Visibility</th>
+                  <th>Namespace / Source</th>
+                  <th>Environment</th>
+                  <th>Records</th>
+                  <th>Status</th>
+                  <th>Last Sync</th>
+                </tr>
+              </thead>
+              <tbody>
+                {syncSettingsRows.map((setting) => (
+                  <tr key={setting.label}>
+                    <td>
+                      <button className="website-sync-settings-link-button" onClick={() => onRunTool(`Manage ${setting.label}`)} type="button">
+                        Manage
+                      </button>
+                    </td>
+                    <td>
+                      <strong>{setting.label}</strong>
+                      <span>{setting.description}</span>
+                    </td>
+                    <td>{setting.kind}</td>
+                    <td>{setting.visibility}</td>
+                    <td><code>{setting.namespace}</code></td>
+                    <td>{setting.environment}</td>
+                    <td>{setting.records}</td>
+                    <td><span className={`legacy-chip tone-${setting.tone}`}>{setting.status}</span></td>
+                    <td>{setting.lastSync}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <aside className="website-sync-settings-side-stack">
+          <section className="legacy-info-card website-sync-settings-panel">
+            <div className="website-feed-panel-heading">
+              <strong>Connected Parties</strong>
+              <span>{rows.length} available</span>
+            </div>
+            <div className="website-sync-settings-party-list">
+              {rows.slice(0, 6).map((row) => (
+                <article className="website-sync-settings-party" key={row.id}>
+                  <div>
+                    <strong>{row.brand}</strong>
+                    <span>{row.domain}</span>
+                  </div>
+                  <span className={`legacy-chip tone-${row.status.toLowerCase()}`}>{row.status}</span>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="legacy-info-card website-sync-settings-panel">
+            <div className="website-feed-panel-heading">
+              <strong>Application Configurations</strong>
+              <span>Reusable controls</span>
+            </div>
+            <div className="website-sync-settings-app-grid">
+              {syncSettingsApplicationCards.map((card) => (
+                <article className="website-sync-settings-app-card" key={card.label}>
+                  <strong>{card.label}</strong>
+                  <p>{card.detail}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+        </aside>
+      </section>
+
+      <section className="legacy-info-card legacy-schema-mapping-section">
+        <div className="legacy-schema-mapping-header">
+          <div>
+            <strong>Schema Mapping</strong>
+            <p>Map DMS source fields to destination object fields for outbound sync.</p>
+          </div>
+          <button
+            className="legacy-desktop-board-button is-secondary"
+            onClick={() => setSchemaMappings((prev) => [
+              ...prev,
+              { id: `m${Date.now()}`, sourceField: "", destField: "", transform: "None", isEditing: true }
+            ])}
+            type="button"
+          >
+            Add Mapping
+          </button>
+        </div>
+        <table className="legacy-schema-mapping-table">
+          <thead>
+            <tr>
+              <th>Source Field</th>
+              <th>Destination Field</th>
+              <th>Transform</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {schemaMappings.map((mapping) => (
+              <tr key={mapping.id}>
+                <td>
+                  {mapping.isEditing ? (
+                    <input
+                      className="legacy-schema-mapping-input"
+                      onChange={(e) => setSchemaMappings((prev) => prev.map((m) => m.id === mapping.id ? { ...m, sourceField: e.target.value } : m))}
+                      placeholder="Source field"
+                      value={mapping.sourceField}
+                    />
+                  ) : (
+                    <code>{mapping.sourceField}</code>
+                  )}
+                </td>
+                <td>
+                  {mapping.isEditing ? (
+                    <input
+                      className="legacy-schema-mapping-input"
+                      onChange={(e) => setSchemaMappings((prev) => prev.map((m) => m.id === mapping.id ? { ...m, destField: e.target.value } : m))}
+                      placeholder="Dest field"
+                      value={mapping.destField}
+                    />
+                  ) : (
+                    <code>{mapping.destField}</code>
+                  )}
+                </td>
+                <td>
+                  {mapping.isEditing ? (
+                    <select
+                      className="legacy-schema-mapping-select"
+                      onChange={(e) => setSchemaMappings((prev) => prev.map((m) => m.id === mapping.id ? { ...m, transform: e.target.value } : m))}
+                      value={mapping.transform}
+                    >
+                      {["None", "Lowercase", "Uppercase", "E164Format", "CurrencyUSD", "DateISO"].map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="legacy-chip tone-neutral">{mapping.transform}</span>
+                  )}
+                </td>
+                <td>
+                  <button
+                    className="legacy-schema-mapping-action"
+                    onClick={() => setSchemaMappings((prev) => prev.map((m) => m.id === mapping.id ? { ...m, isEditing: !m.isEditing } : m))}
+                    type="button"
+                  >
+                    {mapping.isEditing ? "Save" : "Edit"}
+                  </button>
+                  <button
+                    className="legacy-schema-mapping-action is-danger"
+                    onClick={() => setSchemaMappings((prev) => prev.filter((m) => m.id !== mapping.id))}
+                    type="button"
+                  >
+                    Remove
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+    </div>
+  );
 }
 
 function WebsiteWorkspace({
@@ -6488,24 +9172,40 @@ function WebsiteWorkspace({
   isFilteredByOperator,
   onAddTaskNote,
   onAssignTask,
+  onRunTool,
   onSelectRow,
   onUpdateStatus,
+  onViewChange,
   operators,
   rows,
   selectedRow,
   selectedRowId,
-  updatingTaskId
+  updatingTaskId,
+  view
 }: WebsiteWorkspaceProps) {
   const [queueActionFilter, setQueueActionFilter] = useState("All");
   const [queueStatusFilter, setQueueStatusFilter] = useState("All");
   const [historyFilter, setHistoryFilter] = useState("All");
   const [handoffSelections, setHandoffSelections] = useState<Record<string, string>>({});
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  const [connectionType, setConnectionType] = useState<WebsiteConnectionType>("website");
+  const [environment, setEnvironment] = useState<WebsiteIntegrationEnvironment>("sandbox");
+  const [authMode, setAuthMode] = useState<WebsiteAuthMode>("API Key");
+  const [connectorUrl, setConnectorUrl] = useState("");
+  const [validationNotice, setValidationNotice] = useState("Connection settings are ready for validation.");
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [testConnectionResult, setTestConnectionResult] = useState<{ ok: boolean; latencyMs: number; message: string } | null>(null);
+  const suggestedConnectorUrl = selectedRow ? buildWebsiteConnectorUrl(selectedRow) : "";
+  const previousSuggestedConnectorUrlRef = useRef("");
   const totalInventory = rows.reduce((sum, feed) => sum + feed.inventoryCount, 0);
   const totalLeads = rows.reduce((sum, feed) => sum + feed.leadsToday, 0);
   const publishingCount = rows.filter((feed) => feed.status === "Publishing").length;
   const readyCount = rows.filter((feed) => feed.status === "Ready").length;
+  const reviewCount = Math.max(0, rows.length - publishingCount - readyCount);
   const selectedLeadShare = selectedRow && totalLeads > 0 ? Math.round((selectedRow.leadsToday / totalLeads) * 100) : 0;
+  const selectedInventoryShare = selectedRow && totalInventory > 0 ? Math.round((selectedRow.inventoryCount / totalInventory) * 100) : 0;
+  const connectorReadinessScore = rows.length > 0 ? Math.round(((publishingCount + readyCount) / rows.length) * 100) : 0;
+  const endpointLabel = rows.length === 1 ? "endpoint" : "endpoints";
   const queueActionOptions = buildFilterOptions(entries.map((entry) => entry.action));
   const queueStatusOptions = buildFilterOptions(entries.map((entry) => entry.status));
   const historyEntries = activityEntries.filter(isWebsiteHistoryEntry);
@@ -6515,10 +9215,374 @@ function WebsiteWorkspace({
   );
   const filteredHistoryEntries = historyEntries.filter((entry) => matchesWorkspaceFilter(entry.label, historyFilter));
   const overdueQueueCount = filteredQueueEntries.filter((entry) => entry.isOverdue && entry.status !== "Done").length;
+  const normalizedConnectorUrl = normalizeWebsiteBaseUrl(connectorUrl || suggestedConnectorUrl);
+  const selectedConnectionOption = websiteConnectionOptions.find((option) => option.id === connectionType) ?? websiteConnectionOptions[0];
+  const authModeOptions = getWebsiteAuthModes(connectionType);
+  const integrationEndpoints = buildWebsiteIntegrationEndpoints(normalizedConnectorUrl, connectionType, environment);
+  const contractRows = buildWebsiteContractRows(connectionType);
+
+  async function handleTestConnection() {
+    setIsTestingConnection(true);
+    setTestConnectionResult(null);
+    setValidationNotice(`Testing ${selectedConnectionOption.label} ${environment} connection…`);
+
+    const targetUrl = normalizedConnectorUrl || getWebsiteDefaultBaseUrl(connectionType);
+    const latencyMs = 600 + Math.floor(Math.random() * 900);
+
+    await new Promise<void>((resolve) => setTimeout(resolve, latencyMs));
+
+    const hasUrl = targetUrl.trim().length > 0;
+    const ok = hasUrl && environment === "sandbox" ? Math.random() > 0.15 : hasUrl && Math.random() > 0.25;
+    const message = ok
+      ? `${selectedConnectionOption.label} ${environment} endpoint reachable at ${targetUrl}. Auth: ${authMode}.`
+      : `Could not reach ${targetUrl}. Check the Base URL and credentials, then retry.`;
+
+    setTestConnectionResult({ ok, latencyMs, message });
+    setValidationNotice(message);
+    setIsTestingConnection(false);
+  }
+
+  useEffect(() => {
+    setConnectorUrl((current) => {
+      const shouldReplace = current.trim().length === 0 || current === previousSuggestedConnectorUrlRef.current;
+      previousSuggestedConnectorUrlRef.current = suggestedConnectorUrl;
+
+      return shouldReplace ? suggestedConnectorUrl : current;
+    });
+  }, [suggestedConnectorUrl]);
+
+  useEffect(() => {
+    const supportedAuthModes = getWebsiteAuthModes(connectionType);
+
+    if (!supportedAuthModes.includes(authMode)) {
+      setAuthMode(supportedAuthModes[0]);
+    }
+  }, [authMode, connectionType]);
+
+  if (view === "customSettings") {
+    return (
+      <SyncMonitorCustomSettingsPage
+        connectorReadinessScore={connectorReadinessScore}
+        onRunTool={onRunTool}
+        onViewChange={onViewChange}
+        rows={rows}
+        totalInventory={totalInventory}
+        totalLeads={totalLeads}
+      />
+    );
+  }
 
   return (
-    <div className="legacy-feed-layout">
-      <section className="legacy-info-card">
+    <div className="website-feed-page">
+      <section className="legacy-info-card website-feed-hero">
+        <div className="website-feed-hero-copy">
+          <span className="legacy-command-meta">Premier Marine Cloud DMS / Integration Layer</span>
+          <h3>Website Feed Integration Console</h3>
+          <p>Connect your website, API, webhook receiver, or file transport to publish DMS inventory and route leads back into Premier Marine Cloud.</p>
+          <div className="legacy-chip-row">
+            <span className="legacy-chip tone-stable">Website CMS</span>
+            <span className="legacy-chip tone-stable">REST API</span>
+            <span className="legacy-chip tone-neutral">Webhook</span>
+            <span className="legacy-chip tone-neutral">File / SFTP</span>
+          </div>
+        </div>
+
+        <div className="website-feed-hero-actions">
+          <button className="legacy-desktop-board-button" onClick={() => onRunTool("Publish Feed")} type="button">
+            Publish Feed
+          </button>
+          <button className="legacy-desktop-board-button is-secondary" onClick={() => onRunTool("Lead Sync")} type="button">
+            Lead Sync
+          </button>
+          <button className="legacy-desktop-board-button is-secondary" onClick={() => onRunTool("Open Queue")} type="button">
+            Open Queue
+          </button>
+        </div>
+
+        <div className="website-feed-health-grid">
+          <article className="website-feed-health-card">
+            <span>Configured Destinations</span>
+            <strong>{rows.length}</strong>
+            <p>{publishingCount} publishing, {readyCount} ready, {reviewCount} waiting on setup.</p>
+          </article>
+          <article className="website-feed-health-card">
+            <span>DMS Objects</span>
+            <strong>{totalInventory}</strong>
+            <p>Inventory, pricing, media, and availability records staged for external systems.</p>
+          </article>
+          <article className="website-feed-health-card">
+            <span>Lead Return Path</span>
+            <strong>{totalLeads}</strong>
+            <p>Submitted leads accepted back into the operator workflow today.</p>
+          </article>
+          <article className="website-feed-health-card">
+            <span>Transport Readiness</span>
+            <strong>{connectorReadinessScore}%</strong>
+            <p>{rows.length} {endpointLabel} have a ready or active integration state.</p>
+          </article>
+        </div>
+      </section>
+
+      <section className="legacy-info-card website-feed-pipeline">
+        {buildWebsiteConnectorStages(rows, totalInventory, totalLeads).map((stage, index) => (
+          <article className={`website-feed-stage tone-${stage.tone}`} key={stage.label}>
+            <span className="website-feed-stage-index">{index + 1}</span>
+            <div>
+              <strong>{stage.label}</strong>
+              <p>{stage.detail}</p>
+            </div>
+            <span className={`legacy-chip tone-${stage.tone}`}>{stage.status}</span>
+          </article>
+        ))}
+      </section>
+
+      <section className="legacy-info-card website-feed-setup">
+        <div className="legacy-command-log-header">
+          <div>
+            <h3>Connection Setup</h3>
+            <span>
+              {selectedConnectionOption.label} / {environment}
+            </span>
+          </div>
+          <span className="legacy-chip tone-stable">{authMode}</span>
+        </div>
+
+        <div className="website-feed-setup-grid">
+          <div className="website-feed-control-panel">
+            <span className="website-feed-control-label">Connector Type</span>
+            <div className="website-feed-segmented" role="group" aria-label="Website feed connector type">
+              {websiteConnectionOptions.map((option) => (
+                <button
+                  className={option.id === connectionType ? "is-selected" : ""}
+                  key={option.id}
+                  onClick={() => {
+                    setConnectionType(option.id);
+                    setTestConnectionResult(null);
+                    setValidationNotice(`${option.label} connector selected. Validate the endpoint when settings are ready.`);
+                  }}
+                  type="button"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <article className="website-feed-selected-connector">
+              <strong>{selectedConnectionOption.label}</strong>
+              <p>{selectedConnectionOption.detail}</p>
+            </article>
+
+            <span className="website-feed-control-label">Environment</span>
+            <div className="website-feed-segmented is-compact" role="group" aria-label="Website feed environment">
+              {(["sandbox", "production"] as WebsiteIntegrationEnvironment[]).map((option) => (
+                <button
+                  className={option === environment ? "is-selected" : ""}
+                  key={option}
+                  onClick={() => {
+                    setEnvironment(option);
+                    setTestConnectionResult(null);
+                    setValidationNotice(`${option === "production" ? "Production" : "Sandbox"} environment selected for validation.`);
+                  }}
+                  type="button"
+                >
+                  {option === "production" ? "Production" : "Sandbox"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="website-feed-control-panel">
+            <label className="website-feed-field">
+              <span>Base URL / Host</span>
+              <input
+                onChange={(event) => { setConnectorUrl(event.target.value); setTestConnectionResult(null); }}
+                placeholder="https://www.yourwebsite.com"
+                value={connectorUrl}
+              />
+            </label>
+            <label className="website-feed-field">
+              <span>Authentication</span>
+              <select onChange={(event) => setAuthMode(event.target.value as WebsiteAuthMode)} value={authMode}>
+                {authModeOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="website-feed-notice">
+              <strong>{environment === "production" ? "Production" : "Sandbox"} connector</strong>
+              {testConnectionResult ? (
+                <div className={`website-feed-test-result tone-${testConnectionResult.ok ? "stable" : "alert"}`}>
+                  <span className={`legacy-chip tone-${testConnectionResult.ok ? "stable" : "alert"}`}>
+                    {testConnectionResult.ok ? "Connected" : "Failed"}
+                  </span>
+                  <p>{testConnectionResult.message}</p>
+                  <span className="website-feed-test-latency">{testConnectionResult.latencyMs}ms</span>
+                </div>
+              ) : (
+                <p>{validationNotice}</p>
+              )}
+            </div>
+            <div className="website-feed-action-row">
+              <button
+                className={`legacy-task-status-button${isTestingConnection ? " is-loading" : ""}`}
+                disabled={isTestingConnection}
+                onClick={() => void handleTestConnection()}
+                type="button"
+              >
+                {isTestingConnection ? "Testing…" : "Validate Connection"}
+              </button>
+              <button
+                className="legacy-task-status-button"
+                onClick={() => {
+                  const credentialMode = authModeOptions.includes("API Key") ? "API Key" : authModeOptions[0];
+                  setAuthMode(credentialMode);
+                  setValidationNotice(`${credentialMode} credential staged for ${selectedConnectionOption.label}.`);
+                }}
+                type="button"
+              >
+                Create Credential
+              </button>
+              <button className="legacy-task-status-button" onClick={() => onRunTool("Open Queue")} type="button">
+                Queue Setup
+              </button>
+            </div>
+          </div>
+
+          <div className="website-feed-control-panel">
+            <div className="website-feed-panel-heading">
+              <span className="website-feed-control-label">Generated Endpoints</span>
+              <span>{integrationEndpoints.length} routes</span>
+            </div>
+            <div className="website-feed-generated-list">
+              {integrationEndpoints.map((endpoint) => (
+                <article className="website-feed-generated-endpoint" key={`${endpoint.method}-${endpoint.label}`}>
+                  <span>{endpoint.method}</span>
+                  <strong>{endpoint.label}</strong>
+                  <code>{endpoint.url}</code>
+                  <p>{endpoint.detail}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="website-feed-contract-list">
+          {contractRows.map((contractRow) => (
+            <article className="website-feed-contract-card" key={contractRow.route}>
+              <span>{contractRow.method}</span>
+              <strong>{contractRow.route}</strong>
+              <p>{contractRow.detail}</p>
+              <code>{contractRow.schema}</code>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <div className="website-feed-grid">
+        <section className="legacy-info-card website-feed-endpoints">
+          <div className="legacy-command-log-header">
+            <div>
+              <h3>Configured Destinations</h3>
+              <span>{rows.length} {endpointLabel}</span>
+            </div>
+            <span>{publishingCount} live push</span>
+          </div>
+
+          {rows.length === 0 ? (
+            <p>No website endpoints are configured for this store.</p>
+          ) : (
+            <div className="website-feed-endpoint-list">
+              {rows.map((feed) => {
+                const inventoryShare = totalInventory > 0 ? Math.round((feed.inventoryCount / totalInventory) * 100) : 0;
+                const leadShare = totalLeads > 0 ? Math.round((feed.leadsToday / totalLeads) * 100) : 0;
+
+                return (
+                  <button
+                    className={`website-feed-endpoint${feed.id === selectedRowId ? " is-selected" : ""}`}
+                    key={feed.id}
+                    onClick={() => onSelectRow(feed)}
+                    type="button"
+                  >
+                    <div className="website-feed-endpoint-header">
+                      <div>
+                        <strong>{feed.brand}</strong>
+                        <span>{feed.domain}</span>
+                      </div>
+                      <span className={`legacy-chip tone-${feed.status.toLowerCase()}`}>{feed.status}</span>
+                    </div>
+                    <div className="website-feed-endpoint-meter">
+                      <span style={{ width: `${Math.max(8, inventoryShare)}%` }} />
+                    </div>
+                    <div className="website-feed-endpoint-meta">
+                      <span>{feed.inventoryCount} units</span>
+                      <span>{feed.leadsToday} leads</span>
+                      <span>{leadShare}% lead share</span>
+                    </div>
+                    <p>{buildWebsiteSyncGuidance(feed)}</p>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <div className="website-feed-detail-stack">
+          <section className="legacy-info-card website-feed-focus">
+            <div className="legacy-command-log-header">
+              <div>
+                <h3>Destination Profile</h3>
+                <span>{selectedRow?.brand ?? "No endpoint selected"}</span>
+              </div>
+              {selectedRow ? <span className={`legacy-chip tone-${selectedRow.status.toLowerCase()}`}>{selectedRow.status}</span> : null}
+            </div>
+
+            {!selectedRow ? (
+              <p>Select a website endpoint to inspect connector posture.</p>
+            ) : (
+              <>
+                <div className="website-feed-profile-grid">
+                  <LabelValue label="Website" value={selectedRow.domain} />
+                  <LabelValue label="DMS Source" value="Premier Marine Cloud" />
+                  <LabelValue label="Inventory Share" value={`${selectedInventoryShare}%`} />
+                  <LabelValue label="Lead Share" value={`${selectedLeadShare}%`} />
+                  <LabelValue label="Last Sync" value={selectedRow.lastSyncLabel} />
+                  <LabelValue label="Endpoint" value={formatWebsiteFeedEndpoint(selectedRow)} />
+                </div>
+                <div className="legacy-chip-row">
+                  <span className={`legacy-chip tone-${buildWebsiteLeadTone(selectedRow.leadsToday)}`}>{buildWebsiteLeadLabel(selectedRow.leadsToday)}</span>
+                  <span className={`legacy-chip tone-${buildWebsiteConnectionTone(selectedRow)}`}>{buildWebsiteConnectionLabel(selectedRow)}</span>
+                  <span className="legacy-chip tone-neutral">
+                    {selectedRow.inventoryCount >= 100 ? "Full catalog" : "Featured catalog"}
+                  </span>
+                </div>
+                <p>{buildWebsitePublishGuidance(selectedRow)}</p>
+              </>
+            )}
+          </section>
+
+          <section className="legacy-info-card website-feed-mapping">
+            <div className="legacy-command-log-header">
+              <div>
+                <h3>Field Mapping</h3>
+                <span>Inventory, pricing, media, leads</span>
+              </div>
+            </div>
+
+            <div className="website-feed-map-grid">
+              {buildWebsiteMappingRows(selectedRow).map((mappingRow) => (
+                <article className="website-feed-map-card" key={mappingRow.label}>
+                  <span className={`legacy-chip tone-${mappingRow.tone}`}>{mappingRow.status}</span>
+                  <strong>{mappingRow.label}</strong>
+                  <p>{mappingRow.detail}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <section className="legacy-info-card website-feed-retired-panel">
         <div className="legacy-command-log-header">
           <div>
             <h3>Publishing Queue</h3>
@@ -6556,8 +9620,8 @@ function WebsiteWorkspace({
         )}
       </section>
 
-      <div className="legacy-feed-detail-stack">
-        <section className="legacy-info-card">
+      <div className="website-feed-ops-grid">
+        <section className="legacy-info-card website-feed-retired-panel">
           <div className="legacy-command-log-header">
             <div>
               <h3>Feed Focus</h3>
@@ -6588,7 +9652,7 @@ function WebsiteWorkspace({
           )}
         </section>
 
-        <section className="legacy-info-card">
+        <section className="legacy-info-card website-feed-retired-panel">
           <h3>Lead Sync Monitor</h3>
           <p>{fallbackStatusLine}</p>
           <div className="legacy-activity-stack">
@@ -6607,7 +9671,7 @@ function WebsiteWorkspace({
           </div>
         </section>
 
-        <section className="legacy-info-card">
+        <section className="legacy-info-card website-feed-retired-panel">
           <h3>Feed Totals</h3>
           <div className="legacy-feed-health-strip">
             <article className="legacy-feed-health-card">
@@ -6898,6 +9962,297 @@ function buildWebsitePublishGuidance(feed: WebsiteWorkspaceRow) {
   }
 
   return `${feed.brand} is ready for a smaller merch pass. Use the publish rail for featured inventory, pricing updates, or a landing-page refresh.`;
+}
+
+function buildWebsiteConnectionTone(feed: WebsiteWorkspaceRow) {
+  if (feed.status === "Publishing") {
+    return "accent";
+  }
+
+  if (feed.status === "Ready") {
+    return "stable";
+  }
+
+  return "attention";
+}
+
+function buildWebsiteConnectionLabel(feed: WebsiteWorkspaceRow) {
+  if (feed.status === "Publishing") {
+    return "Push active";
+  }
+
+  if (feed.status === "Ready") {
+    return "Connected";
+  }
+
+  return "Review needed";
+}
+
+function formatWebsiteFeedEndpoint(feed: WebsiteWorkspaceRow) {
+  const normalizedDomain = feed.domain.replace(/^https?:\/\//i, "").replace(/\/$/, "");
+
+  return `${normalizedDomain}/inventory-feed`;
+}
+
+function normalizeWebsiteBaseUrl(value: string) {
+  const trimmed = value.trim().replace(/\/+$/, "");
+
+  if (trimmed.length === 0) {
+    return "";
+  }
+
+  return /^(https?|sftp):\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+function buildWebsiteConnectorUrl(feed: WebsiteWorkspaceRow) {
+  return normalizeWebsiteBaseUrl(feed.domain);
+}
+
+function getWebsiteDefaultBaseUrl(connectionType: WebsiteConnectionType) {
+  if (connectionType === "api") {
+    return "https://api.yourwebsite.com";
+  }
+
+  if (connectionType === "file") {
+    return "sftp://feeds.yourwebsite.com";
+  }
+
+  return "https://www.yourwebsite.com";
+}
+
+function getWebsiteAuthModes(connectionType: WebsiteConnectionType): WebsiteAuthMode[] {
+  if (connectionType === "webhook") {
+    return ["Signed Webhook", "API Key", "OAuth 2.0"];
+  }
+
+  if (connectionType === "file") {
+    return ["Basic Auth", "API Key", "None"];
+  }
+
+  if (connectionType === "api") {
+    return ["API Key", "OAuth 2.0", "Basic Auth"];
+  }
+
+  return ["API Key", "OAuth 2.0", "None"];
+}
+
+function buildWebsiteEndpointUrl(
+  baseUrl: string,
+  connectionType: WebsiteConnectionType,
+  environment: WebsiteIntegrationEnvironment,
+  path: string
+) {
+  if (connectionType === "file") {
+    const fileBase = (baseUrl || getWebsiteDefaultBaseUrl(connectionType)).replace(/^https?:\/\//i, "sftp://").replace(/\/+$/, "");
+    const folder = environment === "production" ? "/production" : "/sandbox";
+
+    return `${fileBase}${folder}${path}`;
+  }
+
+  const cleanBaseUrl = normalizeWebsiteBaseUrl(baseUrl || getWebsiteDefaultBaseUrl(connectionType));
+  const environmentPrefix = environment === "production" ? "" : "/sandbox";
+
+  return `${cleanBaseUrl}${environmentPrefix}${path}`;
+}
+
+function buildWebsiteIntegrationEndpoints(
+  baseUrl: string,
+  connectionType: WebsiteConnectionType,
+  environment: WebsiteIntegrationEnvironment
+) {
+  if (connectionType === "file") {
+    return [
+      {
+        detail: "Scheduled catalog export for inventory, availability, and pricing rows.",
+        label: "Inventory Export",
+        method: "PUT",
+        url: buildWebsiteEndpointUrl(baseUrl, connectionType, environment, "/inventory.csv")
+      },
+      {
+        detail: "Image manifest keyed to stock numbers and unit media assets.",
+        label: "Media Manifest",
+        method: "PUT",
+        url: buildWebsiteEndpointUrl(baseUrl, connectionType, environment, "/media.json")
+      },
+      {
+        detail: "Lead import file watched by the DMS return-path worker.",
+        label: "Lead Intake",
+        method: "GET",
+        url: buildWebsiteEndpointUrl(baseUrl, connectionType, environment, "/leads.csv")
+      }
+    ];
+  }
+
+  if (connectionType === "webhook") {
+    return [
+      {
+        detail: "Receives a publish notification when inventory changes are ready.",
+        label: "Publish Event",
+        method: "POST",
+        url: buildWebsiteEndpointUrl(baseUrl, connectionType, environment, "/webhooks/marine-cloud/publish")
+      },
+      {
+        detail: "Accepts website forms, source tags, consent, and unit interest.",
+        label: "Lead Intake",
+        method: "POST",
+        url: buildWebsiteEndpointUrl(baseUrl, connectionType, environment, "/webhooks/marine-cloud/leads")
+      },
+      {
+        detail: "Confirms external processing status back to Premier Marine Cloud.",
+        label: "Status Callback",
+        method: "POST",
+        url: buildWebsiteEndpointUrl(baseUrl, connectionType, environment, "/webhooks/marine-cloud/status")
+      }
+    ];
+  }
+
+  if (connectionType === "api") {
+    return [
+      {
+        detail: "Read current inventory objects with pricing, availability, and merchandising fields.",
+        label: "Inventory API",
+        method: "GET",
+        url: buildWebsiteEndpointUrl(baseUrl, connectionType, environment, "/api/marine-cloud/inventory")
+      },
+      {
+        detail: "Read media URLs, gallery order, video links, and alt text for published units.",
+        label: "Media API",
+        method: "GET",
+        url: buildWebsiteEndpointUrl(baseUrl, connectionType, environment, "/api/marine-cloud/media")
+      },
+      {
+        detail: "Submit website leads back into DMS workflows with source attribution.",
+        label: "Lead API",
+        method: "POST",
+        url: buildWebsiteEndpointUrl(baseUrl, connectionType, environment, "/api/marine-cloud/leads")
+      },
+      {
+        detail: "Send external publish, import, or transform status back to the DMS.",
+        label: "Status API",
+        method: "POST",
+        url: buildWebsiteEndpointUrl(baseUrl, connectionType, environment, "/api/marine-cloud/status")
+      }
+    ];
+  }
+
+  return [
+    {
+      detail: "Public catalog payload for website inventory cards, detail pages, and search pages.",
+      label: "Inventory Feed",
+      method: "GET",
+      url: buildWebsiteEndpointUrl(baseUrl, connectionType, environment, "/marine-cloud/feed/inventory.json")
+    },
+    {
+      detail: "Media payload with ordered photos, videos, listing copy, and merchandising flags.",
+      label: "Media Feed",
+      method: "GET",
+      url: buildWebsiteEndpointUrl(baseUrl, connectionType, environment, "/marine-cloud/feed/media.json")
+    },
+    {
+      detail: "Lead form receiver for website, landing-page, and campaign submissions.",
+      label: "Lead Receiver",
+      method: "POST",
+      url: buildWebsiteEndpointUrl(baseUrl, connectionType, environment, "/marine-cloud/leads")
+    },
+    {
+      detail: "Website-side callback for publish success, transform warnings, and retry signals.",
+      label: "Status Callback",
+      method: "POST",
+      url: buildWebsiteEndpointUrl(baseUrl, connectionType, environment, "/marine-cloud/status")
+    }
+  ];
+}
+
+function buildWebsiteContractRows(connectionType: WebsiteConnectionType) {
+  const payloadType = connectionType === "file" ? "CSV" : "JSON";
+
+  return [
+    {
+      detail: "One DMS unit with stock, VIN/HIN, make, model, class, status, and availability.",
+      method: payloadType,
+      route: "inventory.item",
+      schema: "stockNumber, vin, make, model, year, status, availability"
+    },
+    {
+      detail: "Retail price, sale price, incentives, rebates, and publish-window rules.",
+      method: payloadType,
+      route: "pricing",
+      schema: "msrp, salePrice, incentiveName, incentiveExpiresAt"
+    },
+    {
+      detail: "Primary photo, gallery order, video URLs, alt text, and listing copy.",
+      method: payloadType,
+      route: "media.assets",
+      schema: "primaryPhotoUrl, galleryUrls, videoUrl, altText"
+    },
+    {
+      detail: "Lead form source, campaign, unit interest, consent flags, and response owner.",
+      method: payloadType,
+      route: "lead.source",
+      schema: "sourceUrl, campaign, stockNumber, consent, assignedTeam"
+    }
+  ];
+}
+
+function buildWebsiteConnectorStages(rows: WebsiteWorkspaceRow[], totalInventory: number, totalLeads: number) {
+  const publishingCount = rows.filter((feed) => feed.status === "Publishing").length;
+  const readyCount = rows.filter((feed) => feed.status === "Ready").length;
+
+  return [
+    {
+      label: "DMS Inventory Source",
+      detail: `${totalInventory} units staged from stock, pricing, availability, and merchandising fields.`,
+      status: totalInventory > 0 ? "Streaming" : "Empty",
+      tone: totalInventory > 0 ? "stable" : "neutral"
+    },
+    {
+      label: "Website Destination Map",
+      detail: `${rows.length} connected website endpoint${rows.length === 1 ? "" : "s"} with brand and domain routing.`,
+      status: rows.length > 0 ? "Mapped" : "Not Started",
+      tone: rows.length > 0 ? "stable" : "attention"
+    },
+    {
+      label: "Publish Transport",
+      detail: `${publishingCount} active publish window${publishingCount === 1 ? "" : "s"} and ${readyCount} ready endpoint${readyCount === 1 ? "" : "s"}.`,
+      status: publishingCount > 0 ? "Publishing" : readyCount > 0 ? "Ready" : "Queued",
+      tone: publishingCount > 0 ? "accent" : readyCount > 0 ? "stable" : "neutral"
+    },
+    {
+      label: "Lead Return Path",
+      detail: `${totalLeads} website lead${totalLeads === 1 ? "" : "s"} captured today for operator follow-up.`,
+      status: totalLeads > 0 ? "Receiving" : "Quiet",
+      tone: totalLeads > 0 ? "stable" : "neutral"
+    }
+  ];
+}
+
+function buildWebsiteMappingRows(feed: WebsiteWorkspaceRow | null) {
+  return [
+    {
+      label: "Inventory & Availability",
+      detail: feed ? `${feed.inventoryCount} units from DMS stock are in this endpoint scope.` : "Awaiting endpoint selection.",
+      status: feed ? "Mapped" : "Pending",
+      tone: feed ? "stable" : "neutral"
+    },
+    {
+      label: "Pricing & Promotions",
+      detail: feed ? `${feed.brand} pricing payload follows the active publish window.` : "Pricing rules attach after a website endpoint is selected.",
+      status: feed?.status === "Publishing" ? "Publishing" : feed ? "Ready" : "Pending",
+      tone: feed?.status === "Publishing" ? "accent" : feed ? "stable" : "neutral"
+    },
+    {
+      label: "Media & Merchandising",
+      detail: feed && feed.inventoryCount >= 100 ? "Full catalog media and listing copy are in scope." : "Featured inventory media and listing copy are in scope.",
+      status: feed ? "Mapped" : "Pending",
+      tone: feed ? "stable" : "neutral"
+    },
+    {
+      label: "Lead Forms & Source Tags",
+      detail: feed ? `${feed.leadsToday} lead${feed.leadsToday === 1 ? "" : "s"} received today from this endpoint.` : "Lead return path opens with the selected endpoint.",
+      status: feed && feed.leadsToday > 0 ? "Receiving" : feed ? "Ready" : "Pending",
+      tone: feed && feed.leadsToday > 0 ? "stable" : "neutral"
+    }
+  ];
 }
 
 interface CommandLogRailProps {
@@ -7262,6 +10617,7 @@ type ServiceWorkbenchTab =
   | "work"
   | "communications"
   | "laborCloseout"
+  | "invoice"
   | "deposits"
   | "attachments"
   | "history"
@@ -7283,6 +10639,9 @@ interface ServiceWorkbenchUnit {
   hoursOut: string;
   notes: string;
   onLot: boolean;
+  hin?: string;
+  titleStatus?: string;
+  regExpiry?: string;
 }
 
 interface ServiceWorkbenchPart {
@@ -7431,6 +10790,21 @@ interface ServiceWorkbenchSignatureDoc {
   dealer4: string;
 }
 
+interface ServiceWorkbenchCustomerPayload {
+  customerName: string;
+  addressLine1: string;
+  location: string;
+  homePhone: string;
+  cellPhone: string;
+  workPhone: string;
+  email: string;
+  customerNo: string;
+}
+
+interface ServiceWorkbenchCustomerOption extends ServiceWorkbenchCustomerPayload {
+  sourceLabel: string;
+}
+
 interface ServiceWorkbenchModel {
   roNumber: string;
   customerAddress: string[];
@@ -7468,6 +10842,7 @@ interface ServiceWorkbenchModel {
   attachments: ServiceWorkbenchAttachment[];
   history: ServiceWorkbenchHistoryLine[];
   signatureDocs: ServiceWorkbenchSignatureDoc[];
+  invoiceStatus?: string;
 }
 
 const serviceWorkbenchTabs: Array<{ id: ServiceWorkbenchTab; label: string }> = [
@@ -7476,6 +10851,7 @@ const serviceWorkbenchTabs: Array<{ id: ServiceWorkbenchTab; label: string }> = 
   { id: "work", label: "Work" },
   { id: "communications", label: "Communications" },
   { id: "laborCloseout", label: "Labor Closeout" },
+  { id: "invoice", label: "Invoice" },
   { id: "deposits", label: "Deposits" },
   { id: "attachments", label: "Attachments" },
   { id: "history", label: "History" },
@@ -7529,14 +10905,40 @@ interface ServiceRepairWorkbenchProps extends ServiceUtilityInlinePanelProps {
     unitLabel: string;
     description: string;
     technician: string;
+    jobCode: string;
+    recommendations: string;
+    resolution: string;
   }) => Promise<boolean>;
+  onDeleteJob: (jobId: string) => Promise<boolean>;
   onRemovePart: (jobId: string, partNumber: string) => Promise<boolean>;
+  onUpdateROHeader: (payload: { purchaseOrder: string; promisedDate: string; closedDate: string }) => Promise<boolean>;
+  onFinalizeInvoice: (status: "Draft" | "Finalized" | "Paid" | "Voided") => Promise<boolean>;
+  onRecordPayment: (method: string, amount: number, reference: string) => Promise<boolean>;
+  onUpdateJobStatus: (jobId: string, status: string) => Promise<boolean>;
+  onRequestSignature: (docType: string, recipient: string, message: string) => Promise<boolean>;
+  onCloseLabor: (payload: { jobId: string; lineIndex: number; actorName: string }) => Promise<boolean>;
+  onReopenLabor: (payload: { jobId: string; lineIndex: number }) => Promise<boolean>;
+  onDeleteLaborSession: (sessionIndex: number) => Promise<boolean>;
+  onEditLaborSession: (payload: {
+    sessionIndex: number;
+    technician: string;
+    startDate: string;
+    startTime: string;
+    endDate: string;
+    endTime: string;
+    actualHours: string;
+    creditedHours: string;
+    override: string;
+  }) => Promise<boolean>;
+  onUpdateCustomer: (payload: ServiceWorkbenchCustomerPayload) => Promise<boolean>;
   onUpdateJob: (payload: {
     jobId: string;
     title: string;
+    unitLabel: string;
     customerApproval: string;
     status: string;
     appliance: string;
+    warranty: string;
     description: string;
     resolution: string;
     recommendations: string;
@@ -7546,6 +10948,7 @@ interface ServiceRepairWorkbenchProps extends ServiceUtilityInlinePanelProps {
     rate: number;
     quantity: number;
   }) => Promise<boolean>;
+  onUpdateNotes: (payload: { notes: string; transferNotes: string }) => Promise<boolean>;
   onUpdateOrderType: (orderType: "Estimate" | "Repair Order") => Promise<boolean>;
   onUpdateWarrantyClaim: (payload: {
     jobId: string;
@@ -7566,9 +10969,11 @@ interface ServiceRepairWorkbenchProps extends ServiceUtilityInlinePanelProps {
     invoiceNumber: string;
     dateFiledWithCarrier: string;
   }) => Promise<boolean>;
+  serviceCustomerOptions: ServiceWorkbenchCustomerOption[];
   serviceDetail: ServiceWorkbenchModel | null;
   servicePartCatalog: ServiceOrderPartCatalogEntry[];
   updatingServiceDetailKey: string | null;
+  userRole: "admin" | "manager" | "tech" | "writer";
 }
 
 function readWorkbenchFormText(formData: FormData, key: string) {
@@ -7586,18 +10991,137 @@ function readWorkbenchFormInteger(formData: FormData, key: string) {
   return Number.isFinite(value) ? value : 0;
 }
 
+function buildServiceWorkbenchCustomerPayload(row: ServiceWorkspaceRow, model: ServiceWorkbenchModel): ServiceWorkbenchCustomerPayload {
+  return {
+    customerName: row.customerName,
+    addressLine1: model.customerAddress[0] ?? "",
+    location: model.customerAddress[1] ?? "",
+    homePhone: model.homePhone,
+    cellPhone: model.cellPhone,
+    workPhone: model.workPhone,
+    email: model.email,
+    customerNo: model.customerNo
+  };
+}
+
+function buildServiceCustomerLookupOptions(rows: ServiceWorkspaceRow[]): ServiceWorkbenchCustomerOption[] {
+  const options = new Map<string, ServiceWorkbenchCustomerOption>();
+
+  for (const row of rows) {
+    const seed = resolveServiceSeed(row.roNumber);
+    const customerKey = row.customerName.trim().toLowerCase();
+
+    if (!customerKey || options.has(customerKey)) {
+      continue;
+    }
+
+    const address = buildServiceCustomerAddress(seed);
+    options.set(customerKey, {
+      customerName: row.customerName,
+      addressLine1: address[0] ?? "",
+      location: address[1] ?? "",
+      homePhone: buildServicePhone(seed),
+      cellPhone: buildServicePhone(seed + 21),
+      workPhone: buildServicePhone(seed + 11),
+      email: buildServiceEmail(row.customerName),
+      customerNo: `${seed}${(seed % 97).toString().padStart(2, "0")}`,
+      sourceLabel: `RO ${row.roNumber} / ${row.model}`
+    });
+  }
+
+  return Array.from(options.values()).sort((left, right) => left.customerName.localeCompare(right.customerName));
+}
+
+
+const STANDARD_JOB_TEMPLATES = [
+  { code: "100HR", title: "100-Hour Service", description: "Perform full 100-hour preventive maintenance service per manufacturer spec.", recommendation: "Change engine oil, gear lube, fuel filters, spark plugs, and inspect impeller.", resolution: "" },
+  { code: "ANNL", title: "Annual Service", description: "Comprehensive annual service including all fluid changes and safety inspection.", recommendation: "Full fluid service, belt inspection, battery test, bilge pump test, fire extinguisher check.", resolution: "" },
+  { code: "INSP", title: "Winterization", description: "Winterize engine, raw water system, and install antifreeze.", recommendation: "Fog cylinders, change lower unit oil, fill raw water with antifreeze, shrink-wrap if requested.", resolution: "" },
+  { code: "DEWIN", title: "Dewinterization", description: "Remove winterization, inspect and commission vessel for spring season.", recommendation: "Flush antifreeze, inspect impeller, check zincs, test all electronics and bilge.", resolution: "" },
+  { code: "IMPEL", title: "Impeller Replacement", description: "Remove and replace water pump impeller.", recommendation: "Inspect pump housing, replace O-rings and seals as needed.", resolution: "" },
+  { code: "TRIML", title: "Trim/Tilt Service", description: "Service power trim and tilt system, check fluid level and seals.", recommendation: "Change ATF fluid, inspect cylinders for corrosion.", resolution: "" },
+  { code: "BATT", title: "Battery Service", description: "Test and service battery bank, inspect connections and cables.", recommendation: "Load-test all batteries, clean terminals, check charging system output.", resolution: "" },
+  { code: "PROP", title: "Propeller Inspection/Repair", description: "Remove, inspect, and reinstall or replace propeller.", recommendation: "Check hub, straighten or replace blades as needed, re-torque nut.", resolution: "" },
+  { code: "TRLR", title: "Trailer Inspection", description: "Full trailer safety and bearing inspection.", recommendation: "Repack wheel bearings, inspect lights, check tire pressure and brake operation.", resolution: "" },
+  { code: "DIAG", title: "Diagnostic / Check Engine", description: "Connect diagnostic computer and retrieve fault codes, perform root cause analysis.", recommendation: "Document all fault codes, perform guided diagnostics per OEM service manual.", resolution: "" },
+] as const;
+
 function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
   const { activityEntries, entries, selectedServiceRow, serviceDetail, servicePartCatalog, updatingServiceDetailKey } = props;
   const [activeTab, setActiveTab] = useState<ServiceWorkbenchTab>("general");
   const [activeWorkSubTab, setActiveWorkSubTab] = useState<ServiceWorkSubTab>("jobGeneral");
   const model = selectedServiceRow ? serviceDetail ?? buildServiceRepairWorkbenchModel(selectedServiceRow, entries, activityEntries) : null;
   const [selectedJobId, setSelectedJobId] = useState<string | null>(model?.jobs[0]?.id ?? null);
+  const selectedJobForDraft = model?.jobs.find((job) => job.id === selectedJobId) ?? model?.jobs[0];
+  const [serviceCalendarYear, setServiceCalendarYear] = useState(() => buildPartsInventoryCurrentSalesCalendarYear());
+  const [serviceNotesDraft, setServiceNotesDraft] = useState(model?.notes ?? "");
+  const [serviceTransferNotesDraft, setServiceTransferNotesDraft] = useState(model?.transferNotes ?? "");
+  const [isJobGeneralDirty, setIsJobGeneralDirty] = useState(false);
+  const [isUnitSearchOpen, setIsUnitSearchOpen] = useState(false);
+  const [unitSearchTerm, setUnitSearchTerm] = useState("");
+  const [jobUnitDraft, setJobUnitDraft] = useState(selectedJobForDraft?.unitLabel ?? "");
+  const [customerToolMode, setCustomerToolMode] = useState<"edit" | "search" | null>(null);
+  const [customerSearchTerm, setCustomerSearchTerm] = useState("");
+  const [customerDraft, setCustomerDraft] = useState<ServiceWorkbenchCustomerPayload>(
+    model && selectedServiceRow
+      ? buildServiceWorkbenchCustomerPayload(selectedServiceRow, model)
+      : {
+          customerName: "",
+          addressLine1: "",
+          location: "",
+          homePhone: "",
+          cellPhone: "",
+          workPhone: "",
+          email: "",
+          customerNo: ""
+        }
+  );
   const isEstimate = selectedServiceRow?.orderType === "Estimate";
+  const [selectedCloseoutKey, setSelectedCloseoutKey] = useState<{ jobId: string; lineIndex: number } | null>(null);
+  const [selectedSessionIndex, setSelectedSessionIndex] = useState<number | null>(null);
+  const [isEditSessionOpen, setIsEditSessionOpen] = useState(false);
+  const [isAddCloseoutSessionOpen, setIsAddCloseoutSessionOpen] = useState(false);
+  const [isTimeClockOpen, setIsTimeClockOpen] = useState(false);
+  const [isStandardJobsOpen, setIsStandardJobsOpen] = useState(false);
+  const [addPartResetKey, setAddPartResetKey] = useState(0);
+  const [isEditingROHeader, setIsEditingROHeader] = useState(false);
+  const [roHeaderDraft, setROHeaderDraft] = useState({ purchaseOrder: "", promisedDate: "", closedDate: "" });
+  const [invoiceStatus, setInvoiceStatus] = useState<"Draft" | "Finalized" | "Paid" | "Voided">(
+    (model?.invoiceStatus as "Draft" | "Finalized" | "Paid" | "Voided" | undefined) ?? "Draft"
+  );
+  const [isSignatureRequestOpen, setIsSignatureRequestOpen] = useState(false);
+  const [sigRequestType, setSigRequestType] = useState("Customer Authorization");
+  const [sigRequestEmail, setSigRequestEmail] = useState("");
+  const [sigRequestMessage, setSigRequestMessage] = useState("");
+  const [authStatus, setAuthStatus] = useState("Pending");
+  const [isCommsPanelOpen, setIsCommsPanelOpen] = useState(false);
+  const [commsType, setCommsType] = useState<"Email" | "SMS">("Email");
+  const [commsTemplate, setCommsTemplate] = useState("Appt Reminder");
+  const [commsMessage, setCommsMessage] = useState("");
+  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"Cash" | "Card" | "Check" | "Finance">("Card");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentRef, setPaymentRef] = useState("");
+  const [isCloseoutOpen, setIsCloseoutOpen] = useState(false);
+  const [closeoutStep, setCloseoutStep] = useState(0);
+  const [workbenchNotice, setWorkbenchNotice] = useState<string | null>(null);
+  const [isPortalPreviewOpen, setIsPortalPreviewOpen] = useState(false);
 
   useEffect(() => {
     setActiveTab("general");
     setActiveWorkSubTab("jobGeneral");
     setSelectedJobId(model?.jobs[0]?.id ?? null);
+    setIsUnitSearchOpen(false);
+    setUnitSearchTerm("");
+    setCustomerToolMode(null);
+    setCustomerSearchTerm("");
+    setSelectedCloseoutKey(null);
+    setSelectedSessionIndex(null);
+    setIsEditSessionOpen(false);
+    setIsAddCloseoutSessionOpen(false);
+    setIsTimeClockOpen(false);
+    setIsStandardJobsOpen(false);
+    setIsEditingROHeader(false);
   }, [selectedServiceRow?.id]);
 
   useEffect(() => {
@@ -7605,6 +11129,35 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
       setActiveTab("general");
     }
   }, [activeTab, isEstimate]);
+
+  useEffect(() => {
+    setIsJobGeneralDirty(false);
+    setIsUnitSearchOpen(false);
+    setUnitSearchTerm("");
+    setJobUnitDraft(selectedJobForDraft?.unitLabel ?? "");
+  }, [selectedServiceRow?.id, selectedJobForDraft?.id, selectedJobForDraft?.unitLabel]);
+
+  useEffect(() => {
+    setServiceNotesDraft(model?.notes ?? "");
+    setServiceTransferNotesDraft(model?.transferNotes ?? "");
+  }, [model?.roNumber, model?.notes, model?.transferNotes]);
+
+  useEffect(() => {
+    if (!model || !selectedServiceRow) {
+      return;
+    }
+
+    setCustomerDraft(buildServiceWorkbenchCustomerPayload(selectedServiceRow, model));
+  }, [
+    model?.cellPhone,
+    model?.customerAddress,
+    model?.customerNo,
+    model?.email,
+    model?.homePhone,
+    model?.roNumber,
+    model?.workPhone,
+    selectedServiceRow?.customerName
+  ]);
 
   if (!selectedServiceRow) {
     return (
@@ -7639,6 +11192,102 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
   const totalSummaryLabel = isEstimate ? "Estimated Total" : "Total Due";
   const totalSummaryValue = isEstimate ? model.totals.total : model.totals.totalDue;
   const visibleWorkbenchTabs = getVisibleServiceWorkbenchTabs(selectedServiceRow.orderType);
+  const selectedJobPartsTotal = roundWorkbenchCurrency(selectedJob.parts.reduce((total, part) => total + part.price * part.quantity, 0));
+  const selectedJobLaborTotal = roundWorkbenchCurrency(selectedJob.laborLines.reduce((total, line) => total + line.total, 0));
+  const selectedJobSubletTotal = roundWorkbenchCurrency(selectedJob.subletLines.reduce((total, line) => total + line.price, 0));
+  const selectedJobMiscTotal = roundWorkbenchCurrency(model.miscCharges.reduce((total, charge) => total + charge.amount, 0));
+  const isSelectedJobBlank = isBlankServiceWorkbenchJob(selectedJob);
+  const selectedJobUnit = model.units.find((unit) => unit.label === jobUnitDraft) ?? model.units.find((unit) => unit.label === selectedJob.unitLabel);
+  const selectedJobUnitLocation = jobUnitDraft
+    ? selectedJobUnit?.location ?? ""
+    : isSelectedJobBlank
+      ? ""
+      : selectedJobUnit?.location ?? model.units[0]?.location ?? selectedServiceRow.stockNumber;
+  const isSavingServiceNotes = updatingServiceDetailKey === "notes:update";
+  const isSavingCustomerInfo = updatingServiceDetailKey === "customer:update";
+  const normalizedCustomerSearchTerm = customerSearchTerm.trim().toLowerCase();
+  const customerSearchResults = props.serviceCustomerOptions
+    .filter((option) => {
+      if (!normalizedCustomerSearchTerm) {
+        return true;
+      }
+
+      return [option.customerName, option.addressLine1, option.location, option.homePhone, option.cellPhone, option.workPhone, option.email, option.customerNo]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedCustomerSearchTerm);
+    })
+    .slice(0, 4);
+  const normalizedUnitSearchTerm = unitSearchTerm.trim().toLowerCase();
+  const unitSearchResults = model.units
+    .filter((unit) => {
+      if (!normalizedUnitSearchTerm) {
+        return true;
+      }
+
+      return [unit.label, unit.stockNumber, unit.make, unit.model, unit.year, unit.serialNumber, unit.unitType, unit.location]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedUnitSearchTerm);
+    })
+    .slice(0, 8);
+
+  function saveServiceNotes() {
+    if (!model) {
+      return;
+    }
+
+    if (isMutatingServiceDetail) {
+      return;
+    }
+
+    const notes = serviceNotesDraft.trim();
+    const transferNotes = serviceTransferNotesDraft.trim();
+
+    if (notes === model.notes && transferNotes === model.transferNotes) {
+      return;
+    }
+
+    void props.onUpdateNotes({ notes, transferNotes });
+  }
+
+  function updateCustomerDraft(field: keyof ServiceWorkbenchCustomerPayload, value: string) {
+    setCustomerDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function saveCustomerInfo(nextCustomer: ServiceWorkbenchCustomerPayload) {
+    if (isMutatingServiceDetail) {
+      return;
+    }
+
+    void props.onUpdateCustomer({
+      customerName: nextCustomer.customerName.trim(),
+      addressLine1: nextCustomer.addressLine1.trim(),
+      location: nextCustomer.location.trim(),
+      homePhone: nextCustomer.homePhone.trim(),
+      cellPhone: nextCustomer.cellPhone.trim(),
+      workPhone: nextCustomer.workPhone.trim(),
+      email: nextCustomer.email.trim(),
+      customerNo: nextCustomer.customerNo.trim()
+    });
+  }
+
+  function clearCustomerInfo() {
+    const emptyCustomer = {
+      customerName: "",
+      addressLine1: "",
+      location: "",
+      homePhone: "",
+      cellPhone: "",
+      workPhone: "",
+      email: "",
+      customerNo: ""
+    };
+
+    setCustomerDraft(emptyCustomer);
+    setCustomerToolMode(null);
+    saveCustomerInfo(emptyCustomer);
+  }
 
   let workSubTabContent: ReactNode;
 
@@ -7708,28 +11357,25 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
             </div>
             <form
               className="workflow-form"
-              key={`${selectedJob.id}-add-part`}
-              onSubmit={(event) => {
+              key={`${selectedJob.id}-add-part-${addPartResetKey}`}
+              onSubmit={async (event) => {
                 event.preventDefault();
-                const form = event.currentTarget;
-                const formData = new FormData(form);
+                const formData = new FormData(event.currentTarget);
 
-                void props
-                  .onAddPart({
-                    jobId: selectedJob.id,
-                    partNumber: readWorkbenchFormText(formData, "partNumber"),
-                    description: readWorkbenchFormText(formData, "description"),
-                    supplier: readWorkbenchFormText(formData, "supplier"),
-                    available: readWorkbenchFormInteger(formData, "available"),
-                    price: readWorkbenchFormNumber(formData, "price"),
-                    quantity: Math.max(1, readWorkbenchFormInteger(formData, "quantity")),
-                    category: readWorkbenchFormText(formData, "category")
-                  })
-                  .then((saved) => {
-                    if (saved) {
-                      form.reset();
-                    }
-                  });
+                const saved = await props.onAddPart({
+                  jobId: selectedJob.id,
+                  partNumber: readWorkbenchFormText(formData, "partNumber"),
+                  description: readWorkbenchFormText(formData, "description"),
+                  supplier: readWorkbenchFormText(formData, "supplier"),
+                  available: readWorkbenchFormInteger(formData, "available"),
+                  price: readWorkbenchFormNumber(formData, "price"),
+                  quantity: Math.max(1, readWorkbenchFormInteger(formData, "quantity")),
+                  category: readWorkbenchFormText(formData, "category")
+                });
+
+                if (saved) {
+                  setAddPartResetKey((prev) => prev + 1);
+                }
               }}
             >
               <div className="workflow-grid">
@@ -7984,8 +11630,24 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
       break;
     }
     case "warranty1": {
+      const warrantySteps = ["Draft", "Submitted", "Under Review", "Authorized", "Closed"];
+      const currentWarrantyStep = selectedJob.warrantyClaim.status || "Draft";
+      const currentWarrantyIdx = warrantySteps.findIndex((s) => s === currentWarrantyStep);
       workSubTabContent = (
         <div className="legacy-service-pane-grid is-split">
+          <div style={{ gridColumn: "1 / -1" }}>
+            <div className="legacy-warranty-stepper">
+              {warrantySteps.map((step, idx) => (
+                <div
+                  className={`legacy-warranty-step${idx < currentWarrantyIdx ? " is-complete" : idx === currentWarrantyIdx ? " is-active" : ""}`}
+                  key={step}
+                >
+                  <div className="legacy-warranty-step-dot" />
+                  {step}
+                </div>
+              ))}
+            </div>
+          </div>
           <section className="legacy-service-pane-section">
             <div className="legacy-service-key-grid">
               <LabelValue label="Warranty Claim #" value={selectedJob.warrantyClaim.warrantyClaimNumber} />
@@ -8148,68 +11810,143 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
     case "jobGeneral":
     default: {
       workSubTabContent = (
-        <div className="legacy-service-pane-grid is-split">
-          <section className="legacy-service-pane-section">
-            <div className="legacy-service-key-grid">
-              <LabelValue label="Unit" value={selectedJob.unitLabel} />
-              <LabelValue label="Appliance" value={selectedJob.appliance} />
-              <LabelValue label="Warranty" value={selectedJob.warranty} />
-              <LabelValue label="Job Code" value={selectedJob.jobCode} />
-              <LabelValue label="Technician" value={selectedJob.technician} />
-              <LabelValue label="Job Total" value={formatWorkbenchCurrency(selectedJob.total)} />
-            </div>
-            <form
-              className="workflow-form"
-              key={`${selectedJob.id}-job-edit`}
-              onSubmit={(event) => {
-                event.preventDefault();
-                const formData = new FormData(event.currentTarget);
+        <form
+          className="workflow-form legacy-service-job-general-form"
+          key={`${selectedJob.id}-job-edit`}
+          onChange={() => setIsJobGeneralDirty(true)}
+          onSubmit={(event) => {
+            event.preventDefault();
+            const formData = new FormData(event.currentTarget);
 
-                void props.onUpdateJob({
-                  jobId: selectedJob.id,
-                  title: readWorkbenchFormText(formData, "title"),
-                  customerApproval: readWorkbenchFormText(formData, "customerApproval"),
-                  status: readWorkbenchFormText(formData, "status"),
-                  appliance: readWorkbenchFormText(formData, "appliance"),
-                  description: readWorkbenchFormText(formData, "description"),
-                  resolution: readWorkbenchFormText(formData, "resolution"),
-                  recommendations: readWorkbenchFormText(formData, "recommendations"),
-                  technician: readWorkbenchFormText(formData, "technician"),
-                  laborRate: readWorkbenchFormText(formData, "laborRate"),
-                  chargeBy: readWorkbenchFormText(formData, "chargeBy"),
-                  rate: readWorkbenchFormNumber(formData, "rate"),
-                  quantity: readWorkbenchFormNumber(formData, "quantity")
-                });
-              }}
-            >
-              <div className="workflow-grid">
-                <label className="workflow-field">
-                  <span>Title</span>
-                  <input defaultValue={selectedJob.title} name="title" required />
+            void props
+              .onUpdateJob({
+                jobId: selectedJob.id,
+                title: readWorkbenchFormText(formData, "title"),
+                unitLabel: readWorkbenchFormText(formData, "unitLabel"),
+                customerApproval: readWorkbenchFormText(formData, "customerApproval"),
+                status: readWorkbenchFormText(formData, "status"),
+                appliance: readWorkbenchFormText(formData, "appliance"),
+                warranty: readWorkbenchFormText(formData, "warranty"),
+                description: readWorkbenchFormText(formData, "description"),
+                resolution: readWorkbenchFormText(formData, "resolution"),
+                recommendations: readWorkbenchFormText(formData, "recommendations"),
+                technician: readWorkbenchFormText(formData, "technician"),
+                laborRate: readWorkbenchFormText(formData, "laborRate"),
+                chargeBy: readWorkbenchFormText(formData, "chargeBy"),
+                rate: readWorkbenchFormNumber(formData, "rate"),
+                quantity: readWorkbenchFormNumber(formData, "quantity")
+              })
+              .then((saved) => {
+                if (saved) {
+                  setIsJobGeneralDirty(false);
+                }
+              });
+          }}
+        >
+          <div className="legacy-service-job-general-grid">
+            <section className="legacy-service-pane-section legacy-service-job-left-panel">
+              <div className="legacy-service-pane-header">
+                <h4>Unit Information</h4>
+              </div>
+              <div className="legacy-service-work-field-grid">
+                <label className="workflow-field is-wide legacy-service-unit-field">
+                  <span>Unit</span>
+                  <div className="legacy-service-unit-control">
+                    <input name="unitLabel" readOnly value={jobUnitDraft} />
+                    <button
+                      aria-label="Search customer units"
+                      className={isUnitSearchOpen ? "is-active" : ""}
+                      disabled={isMutatingServiceDetail}
+                      onClick={() => setIsUnitSearchOpen((current) => !current)}
+                      type="button"
+                    >
+                      🔎
+                    </button>
+                  </div>
                 </label>
                 <label className="workflow-field">
-                  <span>Customer Approval</span>
-                  <input defaultValue={selectedJob.customerApproval} name="customerApproval" required />
-                </label>
-                <label className="workflow-field">
-                  <span>Status</span>
-                  <input defaultValue={selectedJob.status} name="status" required />
+                  <span>Location</span>
+                  <input readOnly value={selectedJobUnitLocation} />
                 </label>
                 <label className="workflow-field">
                   <span>Appliance</span>
-                  <input defaultValue={selectedJob.appliance} name="appliance" required />
+                  <input defaultValue={selectedJob.appliance} name="appliance" />
+                </label>
+              </div>
+              {isUnitSearchOpen ? (
+                <div className="legacy-service-unit-search">
+                  <div className="legacy-service-unit-search-toolbar">
+                    <label>
+                      <span>Customer Unit Search</span>
+                      <input
+                        autoFocus
+                        disabled={isMutatingServiceDetail}
+                        onChange={(event) => {
+                          event.stopPropagation();
+                          setUnitSearchTerm(event.target.value);
+                        }}
+                        placeholder="Search stock, make, model, year, serial, or location"
+                        value={unitSearchTerm}
+                      />
+                    </label>
+                    <span>Found: {unitSearchResults.length}</span>
+                  </div>
+                  <div className="legacy-service-unit-search-results">
+                    {unitSearchResults.length > 0 ? (
+                      unitSearchResults.map((unit) => (
+                        <button
+                          disabled={isMutatingServiceDetail}
+                          key={`${selectedJob.id}-${unit.id}`}
+                          onClick={() => {
+                            setJobUnitDraft(unit.label);
+                            setIsUnitSearchOpen(false);
+                            setUnitSearchTerm("");
+                            setIsJobGeneralDirty(true);
+                          }}
+                          type="button"
+                        >
+                          <strong>{unit.label}</strong>
+                          <span>{unit.year} {unit.make} {unit.model}</span>
+                          <span>{unit.serialNumber} · {unit.location}</span>
+                        </button>
+                      ))
+                    ) : (
+                      <p>No matching customer units found.</p>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+              <div className="legacy-service-pane-header">
+                <h4>Job Information</h4>
+              </div>
+              <div className="legacy-service-work-field-grid">
+                <label className="workflow-field is-wide">
+                  <span>Title</span>
+                  <input defaultValue={selectedJob.title} name="title" />
+                </label>
+                <label className="workflow-field">
+                  <span>OEM Job Category</span>
+                  <input readOnly value={isSelectedJobBlank ? "" : selectedServiceRow.category} />
+                </label>
+                <label className="workflow-field">
+                  <span>Customer Approval</span>
+                  <input defaultValue={selectedJob.customerApproval} name="customerApproval" />
+                </label>
+                <label className="workflow-field">
+                  <span>Status</span>
+                  <input defaultValue={selectedJob.status} name="status" />
                 </label>
                 <label className="workflow-field">
                   <span>Technician</span>
-                  <input defaultValue={selectedJob.technician} name="technician" required />
-                </label>
-                <label className="workflow-field">
-                  <span>Labor Rate</span>
-                  <input defaultValue={selectedJob.laborRate} name="laborRate" required />
+                  <input defaultValue={selectedJob.technician} name="technician" />
                 </label>
                 <label className="workflow-field">
                   <span>Charge By</span>
-                  <input defaultValue={selectedJob.chargeBy} name="chargeBy" required />
+                  <input defaultValue={selectedJob.chargeBy} name="chargeBy" />
+                </label>
+                <label className="workflow-field">
+                  <span>Labor Rate</span>
+                  <input defaultValue={selectedJob.laborRate} name="laborRate" />
                 </label>
                 <label className="workflow-field">
                   <span>Rate</span>
@@ -8219,27 +11956,81 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
                   <span>Quantity</span>
                   <input defaultValue={selectedJob.quantity} min="0" name="quantity" step="0.1" type="number" />
                 </label>
-                <label className="workflow-field is-wide">
-                  <span>Description</span>
-                  <textarea defaultValue={selectedJob.description} name="description" rows={4} />
-                </label>
-                <label className="workflow-field is-wide">
-                  <span>Resolution</span>
-                  <textarea defaultValue={selectedJob.resolution} name="resolution" rows={4} />
-                </label>
-                <label className="workflow-field is-wide">
-                  <span>Recommendations</span>
-                  <textarea defaultValue={selectedJob.recommendations} name="recommendations" rows={4} />
-                </label>
+                <div className="legacy-service-work-checks">
+                  <label><input defaultChecked={selectedJob.warranty.trim().length > 0 && selectedJob.warranty !== "None" && selectedJob.warranty !== "-"} name="warranty" type="checkbox" value="Yes" /> Warranty</label>
+                  <label><input type="checkbox" /> Parts Only</label>
+                </div>
               </div>
+            </section>
+            <section className="legacy-service-pane-section legacy-service-job-middle-panel">
+              <div className="legacy-service-pane-header">
+                <h4>Sale Type</h4>
+              </div>
+              <label className="workflow-field is-wide">
+                <span>Sale Type</span>
+                <input readOnly value={isSelectedJobBlank ? "" : model.totals.saleType} />
+              </label>
+              <div className="legacy-service-pane-header">
+                <h4>Miscellaneous Charges</h4>
+              </div>
+              <div className="legacy-service-misc-charge-grid">
+                {isSelectedJobBlank
+                  ? null
+                  : model.miscCharges.map((charge) => (
+                      <div className="legacy-service-misc-charge-row" key={`${selectedJob.id}-${charge.label}`}>
+                        <span>{charge.label}</span>
+                        <strong>{formatWorkbenchCurrency(charge.amount)}</strong>
+                        <label><input checked={charge.auto} readOnly type="checkbox" /> Auto</label>
+                      </div>
+                    ))}
+              </div>
+              <div className="legacy-service-pane-header">
+                <h4>Job Summary</h4>
+              </div>
+              <div className="legacy-service-charge-list legacy-service-job-summary">
+                <div className="legacy-service-charge-row">
+                  <span>Parts Total</span>
+                  <strong>{isSelectedJobBlank ? "" : formatWorkbenchCurrency(selectedJobPartsTotal)}</strong>
+                </div>
+                <div className="legacy-service-charge-row">
+                  <span>Labor Total</span>
+                  <strong>{isSelectedJobBlank ? "" : formatWorkbenchCurrency(selectedJobLaborTotal)}</strong>
+                </div>
+                <div className="legacy-service-charge-row">
+                  <span>Sublet Total</span>
+                  <strong>{isSelectedJobBlank ? "" : formatWorkbenchCurrency(selectedJobSubletTotal)}</strong>
+                </div>
+                <div className="legacy-service-charge-row">
+                  <span>Misc Total</span>
+                  <strong>{isSelectedJobBlank ? "" : formatWorkbenchCurrency(selectedJobMiscTotal)}</strong>
+                </div>
+                <div className="legacy-service-charge-row is-total">
+                  <span>Job Total</span>
+                  <strong>{isSelectedJobBlank ? "" : formatWorkbenchCurrency(selectedJob.total)}</strong>
+                </div>
+              </div>
+            </section>
+            <section className="legacy-service-pane-section legacy-service-job-right-panel">
+              <label className="workflow-field is-wide">
+                <span>Description</span>
+                <textarea defaultValue={selectedJob.description} name="description" />
+              </label>
+              <label className="workflow-field is-wide">
+                <span>Recommendations</span>
+                <textarea defaultValue={selectedJob.recommendations} name="recommendations" />
+              </label>
+              <label className="workflow-field is-wide">
+                <span>Resolution</span>
+                <textarea defaultValue={selectedJob.resolution} name="resolution" />
+              </label>
               <div className="workflow-actions">
-                <button className="workflow-primary" disabled={isMutatingServiceDetail} type="submit">
+                <button className={`workflow-primary${isJobGeneralDirty ? " is-unsaved" : ""}`} disabled={isMutatingServiceDetail} type="submit">
                   Save Job
                 </button>
               </div>
-            </form>
-          </section>
-        </div>
+            </section>
+          </div>
+        </form>
       );
       break;
     }
@@ -8250,8 +12041,8 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
   switch (activeTab) {
     case "units": {
       paneContent = (
-        <>
-          <section className="legacy-service-pane-section">
+        <div className="legacy-service-tab-screen is-units">
+          <section className="legacy-service-pane-section legacy-service-fill-section">
             <div className="legacy-service-pane-header">
               <h4>Units On Repair Order</h4>
               <span>{model.units.length} linked unit{model.units.length === 1 ? "" : "s"}</span>
@@ -8283,248 +12074,372 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
               </table>
             </div>
           </section>
-          <div className="legacy-service-unit-card-grid">
-            {model.units.map((unit) => (
-              <section className="legacy-service-pane-section" key={`${unit.id}-card`}>
-                <div className="legacy-service-pane-header">
-                  <h4>{unit.label}</h4>
-                  <span>{unit.unitType}</span>
-                </div>
-                <div className="legacy-service-key-grid">
-                  <LabelValue label="Location" value={unit.location} />
-                  <LabelValue label="Hours In" value={unit.hoursIn} />
-                  <LabelValue label="Hours Out" value={unit.hoursOut} />
-                  <LabelValue label="Year" value={unit.year} />
-                </div>
-                <div className="legacy-service-note-panel">
-                  <p>{unit.notes}</p>
-                </div>
-              </section>
-            ))}
+          <div className="legacy-service-button-strip">
+            <button className="legacy-task-status-button" type="button">Add Customer Unit</button>
+            <button className="legacy-task-status-button" type="button">Add Dealer Unit</button>
+            <button className="legacy-task-status-button" type="button">Edit Unit</button>
+            <button className="legacy-task-status-button" type="button">Remove Unit</button>
+            <button className="legacy-task-status-button" type="button">Service History</button>
           </div>
-        </>
+          <div className="legacy-service-unit-detail-panel">
+            <div className="legacy-service-subtabs" aria-label="Unit detail tabs">
+              {["General", "Unit Info", "Identity", "Purch/Ins", "Misc.", "Jobs"].map((tab) => (
+                <span className={tab === "General" ? "is-active" : ""} key={tab}>{tab}</span>
+              ))}
+            </div>
+            <div className="legacy-service-unit-detail-grid">
+              {model.units.map((unit) => (
+                <section className="legacy-service-pane-section" key={`${unit.id}-card`}>
+                  <div className="legacy-service-key-grid">
+                    <LabelValue label="Year" value={unit.year} />
+                    <LabelValue label="Make" value={unit.make} />
+                    <LabelValue label="Model" value={unit.model} />
+                    <LabelValue label="Unit Type" value={unit.unitType} />
+                    <LabelValue label="Serial No." value={unit.serialNumber} />
+                    <LabelValue label="Location" value={unit.location} />
+                    <LabelValue label="Hours In" value={unit.hoursIn} />
+                    <LabelValue label="Hours Out" value={unit.hoursOut} />
+                    <LabelValue label="Key Board #" value={unit.stockNumber} />
+                  </div>
+                  <div className="legacy-info-card" style={{ marginTop: 10, padding: "10px 12px", background: "rgba(255,255,255,0.04)", borderRadius: 8, border: "1px solid rgba(200,216,225,0.15)" }}>
+                    <div style={{ fontSize: "0.74rem", fontWeight: 700, letterSpacing: "0.05em", color: "rgba(255,255,255,0.55)", marginBottom: 6 }}>REGISTRATION &amp; TITLE</div>
+                    <div className="legacy-service-key-grid">
+                      <LabelValue label="HIN" value={unit.hin || "—"} />
+                      <LabelValue label="Title Status" value={unit.titleStatus || "Pending"} />
+                      <LabelValue label="Reg Expiry" value={unit.regExpiry || "—"} />
+                    </div>
+                  </div>
+                </section>
+              ))}
+            </div>
+            <section className="legacy-service-pane-section legacy-service-grow-section">
+              <div className="legacy-service-pane-header">
+                <h4>Unit Notes</h4>
+                <span>{selectedServiceRow.stockNumber}</span>
+              </div>
+              <div className="legacy-service-note-panel legacy-service-fill-note">
+                {model.units.map((unit) => (
+                  <p key={`${unit.id}-notes`}>{unit.notes}</p>
+                ))}
+              </div>
+            </section>
+            {model.units.length > 0 && (
+              <div className="legacy-unit-history">
+                <div className="legacy-unit-history-header">
+                  <span>Unit Service History</span>
+                  <span>{selectedServiceRow.stockNumber}</span>
+                </div>
+                <table className="legacy-unit-history-table">
+                  <thead>
+                    <tr>
+                      <th>RO#</th>
+                      <th>Date</th>
+                      <th>Description</th>
+                      <th>Status</th>
+                      <th>Technician</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      { ro: "10041", date: "03/12/2024", desc: "100-Hour Service", status: "Closed", tech: "M. Torres" },
+                      { ro: "09887", date: "11/05/2023", desc: "Winterization", status: "Closed", tech: "J. Rivera" },
+                      { ro: "09612", date: "07/22/2023", desc: "Impeller Replacement", status: "Closed", tech: "M. Torres" },
+                      { ro: "09203", date: "04/08/2023", desc: "Dewinterization", status: "Closed", tech: "K. Smith" },
+                      { ro: "08944", date: "10/14/2022", desc: "Annual Service", status: "Closed", tech: "J. Rivera" },
+                      { ro: "08611", date: "05/30/2022", desc: "Trim/Tilt Service", status: "Closed", tech: "M. Torres" },
+                    ].map((hist) => (
+                      <tr key={hist.ro}>
+                        <td>{hist.ro}</td>
+                        <td>{hist.date}</td>
+                        <td>{hist.desc}</td>
+                        <td>{hist.status}</td>
+                        <td>{hist.tech}</td>
+                        <td>
+                          <button
+                            className="is-view-btn"
+                            onClick={() => alert(`Viewing RO #${hist.ro}`)}
+                            type="button"
+                          >
+                            View RO
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
       );
       break;
     }
     case "work": {
       paneContent = (
-        <>
-          <div className="legacy-service-work-layout">
-            <div className="legacy-service-work-column">
-              <section className="legacy-service-pane-section legacy-service-pane-section.is-table-heavy">
-                <div className="legacy-service-pane-header">
-                  <h4>{jobCollectionLabel}</h4>
-                  <span>{model.jobs.length} jobs</span>
-                </div>
-                <div className="legacy-service-table-wrap">
-                  <table className="legacy-service-table">
-                    <thead>
-                      <tr>
-                        <th>Job #</th>
-                        <th>Customer Approval</th>
-                        <th>Status</th>
-                        <th>Title</th>
-                        <th>Unit</th>
-                        <th>Warranty</th>
-                        <th>Job Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {model.jobs.map((job, jobIndex) => (
-                        <tr className={job.id === selectedJob.id ? "is-selected" : undefined} key={job.id}>
-                          <td>{jobIndex + 1}</td>
-                          <td>{job.customerApproval}</td>
-                          <td>{job.status}</td>
-                          <td>
-                            <button className="legacy-service-table-button" onClick={() => setSelectedJobId(job.id)} type="button">
-                              {job.title}
-                            </button>
-                          </td>
-                          <td>{job.unitLabel}</td>
-                          <td>{job.warranty}</td>
-                          <td>{formatWorkbenchCurrency(job.total)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-              <section className="legacy-service-pane-section legacy-service-pane-section.is-compact">
-                <div className="legacy-service-pane-header">
-                  <h4>Create Job</h4>
-                  <span>Add a new service line to this {selectedServiceRow.orderType.toLowerCase()}</span>
-                </div>
-                <form
-                  className="workflow-form"
-                  key={`${selectedServiceRow.id}-create-job`}
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    const form = event.currentTarget;
-                    const formData = new FormData(form);
-
-                    void props
-                      .onCreateJob({
-                        title: readWorkbenchFormText(formData, "title"),
-                        unitLabel: readWorkbenchFormText(formData, "unitLabel"),
-                        description: readWorkbenchFormText(formData, "description"),
-                        technician: readWorkbenchFormText(formData, "technician")
-                      })
-                      .then((saved) => {
-                        if (saved) {
-                          form.reset();
-                        }
-                      });
-                  }}
-                >
-                  <div className="workflow-grid">
-                    <label className="workflow-field">
-                      <span>Title</span>
-                      <input name="title" placeholder="Job title" required />
-                    </label>
-                    <label className="workflow-field">
-                      <span>Unit</span>
-                      <input defaultValue={model.units[0]?.label ?? selectedServiceRow.model} name="unitLabel" placeholder="Unit label" required />
-                    </label>
-                    <label className="workflow-field">
-                      <span>Technician</span>
-                      <input defaultValue={selectedJob.technician} name="technician" placeholder="Assigned tech" required />
-                    </label>
-                    <label className="workflow-field is-wide">
-                      <span>Description</span>
-                      <textarea name="description" placeholder="Complaint or requested work" rows={3} />
-                    </label>
-                  </div>
-                  <div className="workflow-actions">
-                    <button className="workflow-primary" disabled={isMutatingServiceDetail} type="submit">
-                      Create Job
-                    </button>
-                  </div>
-                </form>
-              </section>
+        <div className="legacy-service-tab-screen is-work">
+          <section className="legacy-service-pane-section is-table-heavy legacy-service-grow-section legacy-service-work-jobs-section">
+            <div className="legacy-service-pane-header">
+              <h4>{jobCollectionLabel}</h4>
+              <span>{model.jobs.length} jobs</span>
             </div>
-            <div className="legacy-service-work-column is-detail">
-              <div className="legacy-service-work-subtabs" role="tablist" aria-label={`${recordLabel} job tabs`}>
-                {serviceWorkSubTabs.map((tab) => (
+            <div className="legacy-service-table-wrap">
+              <table className="legacy-service-table">
+                <thead>
+                  <tr>
+                    <th>Job #</th>
+                    <th>Customer Approval</th>
+                    <th>Status</th>
+                    <th>Title</th>
+                    <th>Unit</th>
+                    <th>Warranty</th>
+                    <th>Appliance</th>
+                    <th>Job Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {model.jobs.map((job, jobIndex) => (
+                    <tr
+                      className={job.id === selectedJob.id ? "is-selected" : undefined}
+                      key={job.id}
+                      onClick={() => setSelectedJobId(job.id)}
+                    >
+                      <td>{jobIndex + 1}</td>
+                      <td>{job.customerApproval}</td>
+                      <td>{job.status}</td>
+                      <td>
+                        <button className="legacy-service-table-button" onClick={() => setSelectedJobId(job.id)} type="button">
+                          {job.title}
+                        </button>
+                      </td>
+                      <td>{job.unitLabel}</td>
+                      <td>{job.warranty}</td>
+                      <td>{job.appliance}</td>
+                      <td>{formatWorkbenchCurrency(job.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <div className="legacy-service-button-strip">
+            <button
+              className="legacy-task-status-button"
+              disabled={isMutatingServiceDetail}
+              onClick={async () => {
+                const nextJobId = `${selectedServiceRow.id}-job-${model.jobs.length + 1}`;
+                setActiveTab("work");
+                setActiveWorkSubTab("jobGeneral");
+
+                const created = await props.onCreateJob({
+                  title: "",
+                  unitLabel: "",
+                  description: "",
+                  technician: "",
+                  jobCode: "",
+                  recommendations: "",
+                  resolution: ""
+                });
+
+                if (created) {
+                  setActiveTab("work");
+                  setSelectedJobId(nextJobId);
+                  setActiveWorkSubTab("jobGeneral");
+                }
+              }}
+              type="button"
+            >
+              Create New Job
+            </button>
+            <button
+              className="legacy-task-status-button"
+              disabled={isMutatingServiceDetail || !selectedJobId || model.jobs.length <= 1}
+              onClick={async () => {
+                if (!selectedJobId) return;
+                const deleted = await props.onDeleteJob(selectedJobId);
+                if (deleted) {
+                  const remaining = model.jobs.filter((j) => j.id !== selectedJobId);
+                  setSelectedJobId(remaining.length > 0 ? remaining[0].id : null);
+                  setActiveWorkSubTab("jobGeneral");
+                }
+              }}
+              type="button"
+            >
+              Delete Job
+            </button>
+            <button
+              className={`legacy-task-status-button${isStandardJobsOpen ? " is-active" : ""}`}
+              onClick={() => setIsStandardJobsOpen((prev) => !prev)}
+              type="button"
+            >
+              Standard Jobs
+            </button>
+            <button className="legacy-task-status-button" type="button">Labor Requests</button>
+            <button className="legacy-task-status-button" type="button">Send Job for Approval</button>
+            <button className="legacy-task-status-button" type="button">Create Std Job</button>
+          </div>
+          {isStandardJobsOpen && (
+            <div className="legacy-standard-jobs-picker">
+              <div className="legacy-service-pane-header">
+                <h4>Standard Jobs Library</h4>
+                <span>Select a template to create a new pre-filled job</span>
+              </div>
+              <div className="legacy-standard-jobs-grid">
+                {STANDARD_JOB_TEMPLATES.map((template) => (
                   <button
-                    className={`legacy-service-work-subtab${activeWorkSubTab === tab.id ? " is-active" : ""}`}
-                    key={tab.id}
-                    onClick={() => setActiveWorkSubTab(tab.id)}
-                    role="tab"
+                    className="legacy-standard-job-card"
+                    disabled={isMutatingServiceDetail}
+                    key={template.code}
+                    onClick={async () => {
+                      const created = await props.onCreateJob({
+                        title: template.title,
+                        unitLabel: "",
+                        jobCode: template.code,
+                        description: template.description,
+                        recommendations: template.recommendation,
+                        resolution: template.resolution,
+                        technician: ""
+                      });
+                      if (created) {
+                        setIsStandardJobsOpen(false);
+                        setActiveWorkSubTab("jobGeneral");
+                      }
+                    }}
                     type="button"
                   >
-                    {tab.label}
+                    <span className="legacy-std-job-code">{template.code}</span>
+                    <span className="legacy-std-job-title">{template.title}</span>
+                    <span className="legacy-std-job-desc">{template.description}</span>
                   </button>
                 ))}
               </div>
-              <div className="legacy-service-work-detail-stack">{workSubTabContent}</div>
             </div>
+          )}
+          <div className="legacy-service-work-detail-shell">
+            <div className="legacy-service-work-subtabs" role="tablist" aria-label={`${recordLabel} job tabs`}>
+              {serviceWorkSubTabs.map((tab) => (
+                <button
+                  className={`legacy-service-work-subtab${activeWorkSubTab === tab.id ? " is-active" : ""}`}
+                  key={tab.id}
+                  onClick={() => setActiveWorkSubTab(tab.id)}
+                  role="tab"
+                  type="button"
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <div className="legacy-service-work-detail-stack">{workSubTabContent}</div>
           </div>
-          <ServiceUtilityInlinePanel {...props} />
-        </>
+        </div>
       );
       break;
     }
     case "communications": {
+      const stubComms = [
+        { id: "c1", direction: "Out", type: "Email", sender: "Service Desk", timestamp: "2 days ago", body: "Your RO has been opened. Estimated completion: Friday." },
+        { id: "c2", direction: "In", type: "SMS", sender: "Customer", timestamp: "2 days ago", body: "Thanks! Can you check the trailer lights too?" },
+        { id: "c3", direction: "Out", type: "SMS", sender: "Service Desk", timestamp: "1 day ago", body: "Absolutely, we'll add that to the job." },
+        { id: "c4", direction: "Out", type: "Email", sender: "Service Desk", timestamp: "4h ago", body: "Estimate ready for approval. Please review and sign." },
+        { id: "c5", direction: "In", type: "Email", sender: "Customer", timestamp: "2h ago", body: "Approved! Please proceed." },
+      ];
+
       paneContent = (
-        <>
-          <section className="legacy-service-pane-section">
-            <div className="legacy-service-pane-header">
-              <h4>Open Follow Ups</h4>
-              <span>{model.openFollowUps.length}</span>
+        <div className="legacy-service-tab-screen">
+          <div className="legacy-comms-layout" style={{ padding: "14px", overflowY: "auto" }}>
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+              <strong>Customer Communications</strong>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button className="legacy-task-status-button" onClick={() => { setCommsType("Email"); setIsCommsPanelOpen(true); }} type="button">Send Email</button>
+                <button className="legacy-task-status-button" onClick={() => { setCommsType("SMS"); setIsCommsPanelOpen(true); }} type="button">Send SMS</button>
+              </div>
             </div>
-            <div className="legacy-service-table-wrap">
-              <table className="legacy-service-table">
-                <thead>
-                  <tr>
-                    <th>Subject</th>
-                    <th>Owner</th>
-                    <th>Date</th>
-                    <th>Time</th>
-                    <th>Duration</th>
-                    <th>Type</th>
-                    <th>Confirmed</th>
-                    <th>Showed</th>
-                    <th>Automated</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {model.openFollowUps.length > 0 ? (
-                    model.openFollowUps.map((followUp, followUpIndex) => (
-                      <tr key={`${selectedServiceRow.id}-open-follow-up-${followUpIndex}`}>
-                        <td>{followUp.subject}</td>
-                        <td>{followUp.owner}</td>
-                        <td>{followUp.date}</td>
-                        <td>{followUp.time}</td>
-                        <td>{followUp.duration}</td>
-                        <td>{followUp.type}</td>
-                        <td>{followUp.confirmed}</td>
-                        <td>{followUp.showed}</td>
-                        <td>{followUp.automated}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={9}>No open follow ups on this repair order.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+
+            {/* Compose panel */}
+            {isCommsPanelOpen && (
+              <div className="legacy-comms-compose">
+                <strong>Quick Send</strong>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <label>
+                    <input checked={commsType === "Email"} onChange={() => setCommsType("Email")} type="radio" /> Email
+                  </label>
+                  <label>
+                    <input checked={commsType === "SMS"} onChange={() => setCommsType("SMS")} type="radio" /> SMS
+                  </label>
+                </div>
+                <label>
+                  To
+                  <input readOnly type="text" value={model.email || selectedServiceRow.customerName} />
+                </label>
+                <label>
+                  Template
+                  <select onChange={(e) => setCommsTemplate(e.target.value)} value={commsTemplate}>
+                    <option>Appt Reminder</option>
+                    <option>Invoice Ready</option>
+                    <option>Estimate Approval</option>
+                    <option>Parts Arrived</option>
+                    <option>Custom</option>
+                  </select>
+                </label>
+                <label>
+                  Message
+                  <textarea onChange={(e) => setCommsMessage(e.target.value)} placeholder="Type your message..." value={commsMessage} />
+                </label>
+                <div className="legacy-comms-compose-actions">
+                  <button className="legacy-task-status-button" onClick={() => { setIsCommsPanelOpen(false); setCommsMessage(""); }} type="button">Send</button>
+                  <button className="legacy-task-status-button" onClick={() => setIsCommsPanelOpen(false)} type="button">Cancel</button>
+                </div>
+              </div>
+            )}
+
+            {/* Message thread */}
+            <div className="legacy-comms-thread">
+              {stubComms.map((msg) => (
+                <div className={`legacy-comms-message${msg.direction === "Out" ? " is-out" : " is-in"}`} key={msg.id}>
+                  <div className="legacy-comms-message-meta">
+                    <span className={`legacy-chip tone-${msg.type === "Email" ? "accent" : "neutral"}`}>{msg.type}</span>
+                    <span>{msg.direction === "Out" ? "↗" : "↙"} {msg.sender}</span>
+                    <span>{msg.timestamp}</span>
+                  </div>
+                  <div className="legacy-comms-message-body">{msg.body}</div>
+                </div>
+              ))}
             </div>
-          </section>
-          <section className="legacy-service-pane-section">
-            <div className="legacy-service-pane-header">
-              <h4>Closed Follow Ups</h4>
-              <span>{model.closedFollowUps.length}</span>
-            </div>
-            <div className="legacy-service-table-wrap">
-              <table className="legacy-service-table">
-                <thead>
-                  <tr>
-                    <th>Subject</th>
-                    <th>Owner</th>
-                    <th>Date</th>
-                    <th>Time</th>
-                    <th>Type</th>
-                    <th>Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {model.closedFollowUps.length > 0 ? (
-                    model.closedFollowUps.map((followUp, followUpIndex) => (
-                      <tr key={`${selectedServiceRow.id}-closed-follow-up-${followUpIndex}`}>
-                        <td>{followUp.subject}</td>
-                        <td>{followUp.owner}</td>
-                        <td>{followUp.date}</td>
-                        <td>{followUp.time}</td>
-                        <td>{followUp.type}</td>
-                        <td>{followUp.notes}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={6}>No closed follow ups recorded yet.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </>
+          </div>
+        </div>
       );
       break;
     }
     case "laborCloseout": {
+      function parseSessionHours(start: string, end: string, fallback: string): number {
+        const toMins = (t: string) => { const [h, m] = t.split(":").map(Number); return (h || 0) * 60 + (m || 0); };
+        if (start && end) {
+          const diff = toMins(end) - toMins(start);
+          if (diff > 0) return parseFloat((diff / 60).toFixed(2));
+        }
+        return parseFloat(fallback) || 0;
+      }
+      const closeoutRows = model.jobs.flatMap((job, jobIndex) =>
+        job.laborLines.map((line, lineIndex) => ({ ...line, jobId: job.id, lineIndex, jobNumber: jobIndex + 1 }))
+      );
+      const selectedCloseoutRow = selectedCloseoutKey
+        ? closeoutRows.find((r) => r.jobId === selectedCloseoutKey.jobId && r.lineIndex === selectedCloseoutKey.lineIndex) ?? null
+        : null;
+      const selectedSession = selectedSessionIndex !== null ? model.laborSessions[selectedSessionIndex] ?? null : null;
+
       paneContent = (
-        <>
-          <section className="legacy-service-pane-section">
+        <div className="legacy-service-tab-screen is-labor-closeout">
+          <section className="legacy-service-pane-section legacy-service-grow-section">
             <div className="legacy-service-pane-header">
               <h4>Labor Closeout</h4>
-              <span>{model.laborCloseout.length} closeout row{model.laborCloseout.length === 1 ? "" : "s"}</span>
+              <span>{closeoutRows.length} closeout row{closeoutRows.length === 1 ? "" : "s"}</span>
             </div>
             <div className="legacy-service-table-wrap">
               <table className="legacy-service-table">
                 <thead>
                   <tr>
+                    <th>Job #</th>
                     <th>Technician</th>
                     <th>Job Code</th>
                     <th>Description</th>
@@ -8536,26 +12451,121 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {model.laborCloseout.map((line) => (
-                    <tr key={`${line.jobCode}-${line.technician}`}>
-                      <td>{line.technician}</td>
-                      <td>{line.jobCode}</td>
-                      <td>{line.description}</td>
-                      <td>{line.quantity}</td>
-                      <td>{line.laborRate}</td>
-                      <td>{line.chargeBy}</td>
-                      <td>{line.closedDate || "-"}</td>
-                      <td>{line.completedBy || "-"}</td>
+                  {closeoutRows.length > 0 ? (
+                    closeoutRows.map((line) => {
+                      const isSelected = selectedCloseoutKey?.jobId === line.jobId && selectedCloseoutKey?.lineIndex === line.lineIndex;
+                      return (
+                        <tr
+                          className={isSelected ? "is-selected" : undefined}
+                          key={`${line.jobId}-${line.lineIndex}`}
+                          onClick={() => setSelectedCloseoutKey({ jobId: line.jobId, lineIndex: line.lineIndex })}
+                        >
+                          <td>{line.jobNumber}</td>
+                          <td>{line.technician}</td>
+                          <td>{line.jobCode}</td>
+                          <td>{line.description}</td>
+                          <td>{line.quantity}</td>
+                          <td>{line.laborRate}</td>
+                          <td>{line.chargeBy}</td>
+                          <td>{line.closedDate || "—"}</td>
+                          <td>{line.completedBy || "—"}</td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={9}>No labor lines posted yet. Add a labor session on a job to see closeout rows.</td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
           </section>
-          <section className="legacy-service-pane-section">
+          <div className="legacy-service-button-strip">
+            <button
+              className="legacy-task-status-button"
+              disabled={isMutatingServiceDetail || !selectedCloseoutRow || !!selectedCloseoutRow.closedDate}
+              onClick={async () => {
+                if (!selectedCloseoutKey) return;
+                await props.onCloseLabor({
+                  jobId: selectedCloseoutKey.jobId,
+                  lineIndex: selectedCloseoutKey.lineIndex,
+                  actorName: ""
+                });
+              }}
+              type="button"
+            >
+              Close Labor
+            </button>
+            <button
+              className="legacy-task-status-button"
+              disabled={isMutatingServiceDetail || !selectedCloseoutRow || !selectedCloseoutRow.closedDate}
+              onClick={async () => {
+                if (!selectedCloseoutKey) return;
+                await props.onReopenLabor({ jobId: selectedCloseoutKey.jobId, lineIndex: selectedCloseoutKey.lineIndex });
+              }}
+              type="button"
+            >
+              Reopen Labor
+            </button>
+            <button
+              className={`legacy-task-status-button${isTimeClockOpen ? " is-active" : ""}`}
+              onClick={() => setIsTimeClockOpen((prev) => !prev)}
+              type="button"
+            >
+              Show Time Clock
+            </button>
+            <button
+              className={`legacy-task-status-button${isEditSessionOpen && selectedSession ? " is-active" : ""}`}
+              disabled={selectedSessionIndex === null}
+              onClick={() => setIsEditSessionOpen((prev) => selectedSession ? !prev : false)}
+              type="button"
+            >
+              Override Credited Hours
+            </button>
+          </div>
+          {isTimeClockOpen && (
+            <section className="legacy-service-pane-section is-compact">
+              <div className="legacy-service-pane-header">
+                <h4>Time Clock View</h4>
+                <span>All sessions for this RO</span>
+              </div>
+              <div className="legacy-service-table-wrap">
+                <table className="legacy-service-table">
+                  <thead>
+                    <tr>
+                      <th>Technician</th>
+                      <th>Start</th>
+                      <th>End</th>
+                      <th>Actual Hrs</th>
+                      <th>Credited Hrs</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {model.laborSessions.length > 0 ? (
+                      model.laborSessions.map((session, idx) => (
+                        <tr key={`timeclock-${idx}`}>
+                          <td>{session.technician}</td>
+                          <td>{session.startDate} {session.startTime}</td>
+                          <td>{session.endDate ? `${session.endDate} ${session.endTime}` : "—"}</td>
+                          <td>{session.actualHours}</td>
+                          <td>{session.creditedHours}</td>
+                          <td>{session.endDate ? "Clocked Out" : "Clocked In"}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr><td colSpan={6}>No sessions recorded.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+          <section className="legacy-service-pane-section legacy-service-grow-section">
             <div className="legacy-service-pane-header">
               <h4>Labor Sessions</h4>
-              <span>{model.laborSessions.length} active sessions</span>
+              <span>{model.laborSessions.length} session{model.laborSessions.length === 1 ? "" : "s"}</span>
             </div>
             <div className="legacy-service-table-wrap">
               <table className="legacy-service-table">
@@ -8567,35 +12577,565 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
                     <th>End Date</th>
                     <th>End Time</th>
                     <th>Actual Hrs</th>
+                    <th>Computed Hrs</th>
                     <th>Credited Hrs</th>
+                    <th>OT</th>
                     <th>Override</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {model.laborSessions.map((session, sessionIndex) => (
-                    <tr key={`${selectedServiceRow.id}-labor-session-${sessionIndex}`}>
-                      <td>{session.technician}</td>
-                      <td>{session.startDate}</td>
-                      <td>{session.startTime}</td>
-                      <td>{session.endDate}</td>
-                      <td>{session.endTime}</td>
-                      <td>{session.actualHours}</td>
-                      <td>{session.creditedHours}</td>
-                      <td>{session.override}</td>
-                    </tr>
-                  ))}
+                  {model.laborSessions.length > 0 ? (
+                    model.laborSessions.map((session, sessionIndex) => {
+                      const computed = parseSessionHours(session.startTime, session.endTime, session.actualHours);
+                      const isOT = computed > 8;
+                      return (
+                        <tr
+                          className={selectedSessionIndex === sessionIndex ? "is-selected" : undefined}
+                          key={`${selectedServiceRow.id}-labor-session-${sessionIndex}`}
+                          onClick={() => {
+                            setSelectedSessionIndex(sessionIndex);
+                            setIsEditSessionOpen(false);
+                          }}
+                        >
+                          <td>{session.technician}</td>
+                          <td>{session.startDate}</td>
+                          <td>{session.startTime}</td>
+                          <td>{session.endDate || "—"}</td>
+                          <td>{session.endTime || "—"}</td>
+                          <td>{session.actualHours}</td>
+                          <td>{computed > 0 ? `${computed}h` : "—"}</td>
+                          <td>{session.creditedHours}</td>
+                          <td>{isOT ? <span className="legacy-ot-chip">OT</span> : "—"}</td>
+                          <td>{session.override || "—"}</td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr><td colSpan={10}>No labor sessions recorded yet.</td></tr>
+                  )}
                 </tbody>
+                {model.laborSessions.length > 0 && (() => {
+                  const totalHours = model.laborSessions.reduce((sum, s) => sum + parseSessionHours(s.startTime, s.endTime, s.actualHours), 0);
+                  return (
+                    <tfoot>
+                      <tr>
+                        <td colSpan={6} style={{ fontWeight: 700, fontSize: "0.8rem", paddingTop: 6 }}>Total Hours Today: {totalHours.toFixed(1)}h</td>
+                        <td colSpan={4} style={{ fontWeight: 700, fontSize: "0.8rem", paddingTop: 6 }}>Total Hours This Week: {(totalHours * 1.0).toFixed(1)}h</td>
+                      </tr>
+                    </tfoot>
+                  );
+                })()}
               </table>
             </div>
           </section>
-        </>
+          {isEditSessionOpen && selectedSession && selectedSessionIndex !== null && (
+            <section className="legacy-service-pane-section is-compact">
+              <div className="legacy-service-pane-header">
+                <h4>Edit Session / Override Credited Hours</h4>
+                <span>Session {selectedSessionIndex + 1} — {selectedSession.technician}</span>
+              </div>
+              <form
+                className="legacy-service-form"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  const formData = new FormData(event.currentTarget);
+                  const form = event.currentTarget;
+                  const saved = await props.onEditLaborSession({
+                    sessionIndex: selectedSessionIndex,
+                    technician: readWorkbenchFormText(formData, "technician"),
+                    startDate: readWorkbenchFormText(formData, "startDate"),
+                    startTime: readWorkbenchFormText(formData, "startTime"),
+                    endDate: readWorkbenchFormText(formData, "endDate"),
+                    endTime: readWorkbenchFormText(formData, "endTime"),
+                    actualHours: readWorkbenchFormText(formData, "actualHours"),
+                    creditedHours: readWorkbenchFormText(formData, "creditedHours"),
+                    override: readWorkbenchFormText(formData, "override")
+                  });
+                  if (saved) {
+                    form.reset();
+                    setIsEditSessionOpen(false);
+                  }
+                }}
+              >
+                <div className="workflow-grid">
+                  <label className="workflow-field">
+                    <span>Technician</span>
+                    <input defaultValue={selectedSession.technician} name="technician" required />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Start Date</span>
+                    <input defaultValue={selectedSession.startDate} name="startDate" required />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Start Time</span>
+                    <input defaultValue={selectedSession.startTime} name="startTime" required />
+                  </label>
+                  <label className="workflow-field">
+                    <span>End Date</span>
+                    <input defaultValue={selectedSession.endDate} name="endDate" />
+                  </label>
+                  <label className="workflow-field">
+                    <span>End Time</span>
+                    <input defaultValue={selectedSession.endTime} name="endTime" />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Actual Hrs</span>
+                    <input defaultValue={selectedSession.actualHours} name="actualHours" required />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Credited Hrs</span>
+                    <input defaultValue={selectedSession.creditedHours} name="creditedHours" required />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Override Reason</span>
+                    <input defaultValue={selectedSession.override} name="override" placeholder="Optional" />
+                  </label>
+                </div>
+                <div className="workflow-actions">
+                  <button className="workflow-primary" disabled={isMutatingServiceDetail} type="submit">Save Session</button>
+                  <button className="workflow-secondary" onClick={() => setIsEditSessionOpen(false)} type="button">Cancel</button>
+                </div>
+              </form>
+            </section>
+          )}
+          <div className="legacy-service-button-strip">
+            <button
+              className={`legacy-task-status-button${isAddCloseoutSessionOpen ? " is-active" : ""}`}
+              onClick={() => setIsAddCloseoutSessionOpen((prev) => !prev)}
+              type="button"
+            >
+              Add Session
+            </button>
+            <button
+              className={`legacy-task-status-button${isEditSessionOpen ? " is-active" : ""}`}
+              disabled={selectedSessionIndex === null}
+              onClick={() => setIsEditSessionOpen((prev) => selectedSession ? !prev : false)}
+              type="button"
+            >
+              Edit Session
+            </button>
+            <button
+              className="legacy-task-status-button"
+              disabled={isMutatingServiceDetail || selectedSessionIndex === null}
+              onClick={async () => {
+                if (selectedSessionIndex === null) return;
+                const deleted = await props.onDeleteLaborSession(selectedSessionIndex);
+                if (deleted) {
+                  setSelectedSessionIndex(null);
+                  setIsEditSessionOpen(false);
+                }
+              }}
+              type="button"
+            >
+              Delete Session
+            </button>
+            <button
+              className="legacy-task-status-button"
+              onClick={() => window.print()}
+              type="button"
+            >
+              Print Timesheet
+            </button>
+          </div>
+          {isAddCloseoutSessionOpen && (
+            <section className="legacy-service-pane-section is-compact">
+              <div className="legacy-service-pane-header">
+                <h4>Add Labor Session</h4>
+                <span>Post time against a job on this RO</span>
+              </div>
+              <form
+                className="legacy-service-form"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  const formData = new FormData(event.currentTarget);
+                  const form = event.currentTarget;
+                  const saved = await props.onAddLaborSession({
+                    jobId: readWorkbenchFormText(formData, "jobId"),
+                    technician: readWorkbenchFormText(formData, "technician"),
+                    startDate: readWorkbenchFormText(formData, "startDate"),
+                    startTime: readWorkbenchFormText(formData, "startTime"),
+                    endDate: readWorkbenchFormText(formData, "endDate"),
+                    endTime: readWorkbenchFormText(formData, "endTime"),
+                    actualHours: readWorkbenchFormText(formData, "actualHours"),
+                    creditedHours: readWorkbenchFormText(formData, "creditedHours"),
+                    override: readWorkbenchFormText(formData, "override")
+                  });
+                  if (saved) {
+                    form.reset();
+                    setIsAddCloseoutSessionOpen(false);
+                  }
+                }}
+              >
+                <div className="workflow-grid">
+                  <label className="workflow-field">
+                    <span>Job</span>
+                    <select name="jobId" required>
+                      {model.jobs.map((job, jobIndex) => (
+                        <option key={job.id} value={job.id}>
+                          Job {jobIndex + 1}{job.title ? ` — ${job.title}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="workflow-field">
+                    <span>Technician</span>
+                    <input name="technician" required />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Start Date</span>
+                    <input name="startDate" placeholder="MM/DD/YYYY" required />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Start Time</span>
+                    <input name="startTime" placeholder="8:00 AM" required />
+                  </label>
+                  <label className="workflow-field">
+                    <span>End Date</span>
+                    <input name="endDate" placeholder="MM/DD/YYYY" />
+                  </label>
+                  <label className="workflow-field">
+                    <span>End Time</span>
+                    <input name="endTime" placeholder="4:30 PM" />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Actual Hrs</span>
+                    <input defaultValue="1.0" name="actualHours" required />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Credited Hrs</span>
+                    <input defaultValue="1.0" name="creditedHours" required />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Override</span>
+                    <input name="override" placeholder="Optional override reason" />
+                  </label>
+                </div>
+                <div className="workflow-actions">
+                  <button className="workflow-primary" disabled={isMutatingServiceDetail} type="submit">Save Labor Session</button>
+                  <button className="workflow-secondary" onClick={() => setIsAddCloseoutSessionOpen(false)} type="button">Cancel</button>
+                </div>
+              </form>
+            </section>
+          )}
+        </div>
+      );
+      break;
+    }
+    case "invoice": {
+      const fmtInv = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+      const statusTone: Record<string, string> = { Draft: "neutral", Finalized: "accent", Paid: "stable", Voided: "attention" };
+      const blockedJobs = model.jobs.filter((j) => j.status !== "Closed" && j.status !== "Voided");
+
+      function handleInvoiceStatus(s: "Draft" | "Finalized" | "Paid" | "Voided") {
+        setInvoiceStatus(s);
+        void props.onFinalizeInvoice(s);
+      }
+
+      function exportInvoiceCsv(m: ServiceWorkbenchModel) {
+        const lines: string[] = [
+          "RO Invoice Export",
+          `RO#,${m.roNumber}`,
+          `Customer,${m.customerAddress[0] ?? ""}`,
+          "",
+          "Job,Technician,Parts Total,Labor Total,Sublet Total,Job Total",
+          ...m.jobs.map((j) => [j.title, j.technician, j.parts.reduce((s, p) => s + p.price * p.quantity, 0).toFixed(2), j.laborLines.reduce((s, l) => s + l.total, 0).toFixed(2), j.subletLines.reduce((s, sl) => s + sl.price, 0).toFixed(2), j.total.toFixed(2)].join(",")),
+          "",
+          "Summary",
+          `Parts Total,${m.totals.parts}`,
+          `Labor Total,${m.totals.labor}`,
+          `Sublet Total,${m.totals.sublet}`,
+          `Misc Total,${m.totals.misc}`,
+          `Sales Tax,${m.totals.salesTax}`,
+          `Total Due,${m.totals.totalDue}`,
+        ];
+        const csv = lines.join("\n");
+        const blob = new Blob([csv], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `invoice-${m.roNumber}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+
+      paneContent = (
+        <div className="legacy-service-tab-screen">
+          <div className="legacy-invoice-layout" style={{ padding: "16px", overflowY: "auto" }}>
+            {/* Header */}
+            <section className="legacy-info-card legacy-invoice-header">
+              <div className="legacy-command-log-header">
+                <div><strong>Invoice</strong><span>Repair Order #{selectedServiceRow.roNumber}</span></div>
+              </div>
+              <div className="legacy-invoice-header-meta">
+                <span><strong>RO#</strong> {selectedServiceRow.roNumber}</span>
+                <span><strong>Customer:</strong> {selectedServiceRow.customerName}</span>
+                <span><strong>Date:</strong> {new Date().toLocaleDateString("en-US")}</span>
+                <span className={`legacy-chip tone-${statusTone[invoiceStatus] ?? "neutral"}`}>{invoiceStatus}</span>
+              </div>
+              {blockedJobs.length > 0 && (
+                <div className="legacy-invoice-gate-warning">
+                  <div className="legacy-invoice-gate-warning-title">
+                    <span>⚠</span>
+                    <span>{blockedJobs.length} job(s) must be Closed before finalizing.</span>
+                  </div>
+                  {blockedJobs.map((j) => (
+                    <div className="legacy-invoice-gate-job-row" key={j.id}>
+                      <span>{j.title} — {j.status || "No Status"}</span>
+                      <button
+                        className="legacy-task-status-button"
+                        onClick={() => void props.onUpdateJobStatus(j.id, "Closed")}
+                        type="button"
+                      >
+                        Close Job
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="legacy-invoice-actions">
+                <button className="legacy-task-status-button" disabled={blockedJobs.length > 0 || props.userRole === "tech"} onClick={() => handleInvoiceStatus("Finalized")} type="button">Finalize Invoice</button>
+                <button className="legacy-task-status-button" disabled={blockedJobs.length > 0} onClick={() => handleInvoiceStatus("Paid")} type="button">Mark Paid</button>
+                <button className="legacy-task-status-button" disabled={blockedJobs.length > 0} onClick={() => setIsPaymentOpen((o) => !o)} type="button">💳 Take Payment</button>
+                <button className="legacy-task-status-button" disabled={props.userRole !== "admin" && props.userRole !== "manager"} onClick={() => handleInvoiceStatus("Voided")} type="button">Void</button>
+                <button className="legacy-task-status-button" onClick={() => window.print()} type="button">Print</button>
+                <button className="legacy-task-status-button" onClick={() => exportInvoiceCsv(model)} type="button">Export CSV</button>
+                <button className="legacy-task-status-button" onClick={() => { setIsCloseoutOpen((o) => !o); setCloseoutStep(0); }} type="button">📋 Close RO</button>
+              </div>
+              {isPaymentOpen && (
+                <div className="legacy-payment-panel">
+                  <div className="legacy-payment-panel-header">
+                    <span>Record Payment</span>
+                    <button className="legacy-task-status-button" onClick={() => setIsPaymentOpen(false)} type="button">✕</button>
+                  </div>
+                  <div className="legacy-payment-row">
+                    <label>Method</label>
+                    <select onChange={(e) => setPaymentMethod(e.target.value as "Cash" | "Card" | "Check" | "Finance")} style={{ border: "1px solid #c8d8e1", borderRadius: 6, fontSize: "0.85rem", padding: "5px 8px" }} value={paymentMethod}>
+                      {(["Cash", "Card", "Check", "Finance"] as const).map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                  <div className="legacy-payment-row">
+                    <label>Amount ($)</label>
+                    <input onChange={(e) => setPaymentAmount(e.target.value)} placeholder="0.00" type="number" value={paymentAmount} />
+                  </div>
+                  <div className="legacy-payment-row">
+                    <label>Reference</label>
+                    <input onChange={(e) => setPaymentRef(e.target.value)} placeholder="Check # / Auth code" type="text" value={paymentRef} />
+                  </div>
+                  <div className="legacy-payment-actions">
+                    <button className="legacy-task-status-button" onClick={() => setIsPaymentOpen(false)} type="button">Cancel</button>
+                    <button
+                      className="legacy-task-status-button"
+                      onClick={() => {
+                        const amt = parseFloat(paymentAmount);
+                        if (!isNaN(amt) && amt > 0) {
+                          void props.onRecordPayment(paymentMethod, amt, paymentRef);
+                          setInvoiceStatus("Paid");
+                          setIsPaymentOpen(false);
+                        }
+                      }}
+                      type="button"
+                    >
+                      Confirm Payment
+                    </button>
+                  </div>
+                </div>
+              )}
+              {isCloseoutOpen && (
+                <div className="legacy-closeout-wizard">
+                  <div className="legacy-closeout-wizard-header">
+                    <span>RO Closeout — Step {closeoutStep + 1} of 4</span>
+                    <button className="legacy-task-status-button" onClick={() => setIsCloseoutOpen(false)} type="button">✕</button>
+                  </div>
+                  <div className="legacy-closeout-steps">
+                    {["Jobs", "Invoice", "Payment", "Archive"].map((label, i) => (
+                      <div key={label} className={`legacy-closeout-step${i === closeoutStep ? " is-active" : ""}${i < closeoutStep ? " is-done" : ""}`}>
+                        <span className="legacy-closeout-step-num">{i < closeoutStep ? "✓" : i + 1}</span>
+                        <span>{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="legacy-closeout-body">
+                    {closeoutStep === 0 && (
+                      <div>
+                        {blockedJobs.length === 0 ? (
+                          <p className="legacy-closeout-all-ok">✅ All jobs are closed.</p>
+                        ) : (
+                          blockedJobs.map(j => (
+                            <div className="legacy-closeout-job-row" key={j.id}>
+                              <span>{j.title} — {j.status || "Open"}</span>
+                              <button className="legacy-task-status-button" onClick={() => void props.onUpdateJobStatus(j.id, "Closed")} type="button">Close Job</button>
+                            </div>
+                          ))
+                        )}
+                        <div className="legacy-closeout-footer">
+                          <button className="legacy-task-status-button" disabled={blockedJobs.length > 0} onClick={() => setCloseoutStep(1)} type="button">Next →</button>
+                        </div>
+                      </div>
+                    )}
+                    {closeoutStep === 1 && (
+                      <div>
+                        <div className="legacy-closeout-totals">
+                          <div><span>Parts</span><span>{fmtInv(model.totals.parts)}</span></div>
+                          <div><span>Labor</span><span>{fmtInv(model.totals.labor)}</span></div>
+                          <div><span>Misc</span><span>{fmtInv(model.totals.misc)}</span></div>
+                          <div><span>Tax</span><span>{fmtInv(model.totals.salesTax)}</span></div>
+                          <div className="is-total"><span>Total Due</span><span>{fmtInv(model.totals.totalDue)}</span></div>
+                        </div>
+                        <div className="legacy-closeout-footer">
+                          <button className="legacy-task-status-button" onClick={() => { handleInvoiceStatus("Finalized"); setCloseoutStep(2); }} type="button">Finalize Invoice →</button>
+                        </div>
+                      </div>
+                    )}
+                    {closeoutStep === 2 && (
+                      <div>
+                        <p style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.65)", marginBottom: 10 }}>Record payment to proceed.</p>
+                        <div className="legacy-payment-panel">
+                          <div className="legacy-payment-row">
+                            <label>Method</label>
+                            <select onChange={(e) => setPaymentMethod(e.target.value as "Cash"|"Card"|"Check"|"Finance")} value={paymentMethod} style={{ border: "1px solid #c8d8e1", borderRadius: 6, fontSize: "0.85rem", padding: "5px 8px" }}>
+                              {(["Cash", "Card", "Check", "Finance"] as const).map(m => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                          </div>
+                          <div className="legacy-payment-row">
+                            <label>Amount ($)</label>
+                            <input type="number" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} placeholder="0.00" />
+                          </div>
+                          <div className="legacy-payment-row">
+                            <label>Reference</label>
+                            <input type="text" value={paymentRef} onChange={e => setPaymentRef(e.target.value)} placeholder="Check # / Auth code" />
+                          </div>
+                        </div>
+                        <div className="legacy-closeout-footer">
+                          <button className="legacy-task-status-button" onClick={async () => {
+                            const ok = await props.onRecordPayment(paymentMethod, parseFloat(paymentAmount) || 0, paymentRef);
+                            if (ok) { setCloseoutStep(3); }
+                          }} type="button">Record Payment →</button>
+                        </div>
+                      </div>
+                    )}
+                    {closeoutStep === 3 && (
+                      <div>
+                        <p className="legacy-closeout-all-ok">✅ All steps complete. RO is ready to archive.</p>
+                        <div className="legacy-closeout-footer">
+                          <button className="legacy-task-status-button" disabled={props.userRole === "tech"} onClick={() => { void props.onFinalizeInvoice("Paid"); setIsCloseoutOpen(false); setWorkbenchNotice("RO Archived successfully."); }} type="button">📁 Archive RO</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* Job line items */}
+            {model.jobs.map((job) => {
+              const jobPartsTotal = job.parts.reduce((s, p) => s + p.price * p.quantity, 0);
+              const jobLaborTotal = job.laborLines.reduce((s, l) => s + l.total, 0);
+              const jobSubletTotal = job.subletLines.reduce((s, l) => s + l.price, 0);
+              const jobTotal = jobPartsTotal + jobLaborTotal + jobSubletTotal;
+              return (
+                <div className="legacy-invoice-job-block" key={job.id}>
+                  <div className="legacy-invoice-job-header">
+                    <span><strong>{job.title}</strong></span>
+                    <span>{job.technician}</span>
+                    <span className={`legacy-chip tone-${job.status === "Complete" ? "stable" : "neutral"}`}>{job.status}</span>
+                  </div>
+                  {job.parts.length > 0 && (
+                    <table className="legacy-invoice-sub-table">
+                      <thead><tr><th>Part #</th><th>Description</th><th>Qty</th><th className="is-right">Price</th><th className="is-right">Total</th></tr></thead>
+                      <tbody>
+                        {job.parts.map((p) => (
+                          <tr key={p.partNumber}>
+                            <td>{p.partNumber}</td><td>{p.description}</td>
+                            <td>{p.quantity}</td>
+                            <td className="is-right">{fmtInv(p.price)}</td>
+                            <td className="is-right">{fmtInv(p.price * p.quantity)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  {job.laborLines.length > 0 && (
+                    <table className="legacy-invoice-sub-table">
+                      <thead><tr><th>Tech</th><th>Hrs</th><th className="is-right">Rate</th><th className="is-right">Total</th></tr></thead>
+                      <tbody>
+                        {job.laborLines.map((l, i) => (
+                          <tr key={i}>
+                            <td>{l.technician}</td>
+                            <td>{l.quantity}</td>
+                            <td className="is-right">{fmtInv(l.rate)}</td>
+                            <td className="is-right">{fmtInv(l.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  {job.subletLines.length > 0 && (
+                    <table className="legacy-invoice-sub-table">
+                      <thead><tr><th>Vendor</th><th>Description</th><th className="is-right">Price</th></tr></thead>
+                      <tbody>
+                        {job.subletLines.map((sl, i) => (
+                          <tr key={i}>
+                            <td>{sl.vendor}</td><td>{sl.description}</td>
+                            <td className="is-right">{fmtInv(sl.price)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  <div className="legacy-invoice-sub-total">Job Subtotal: {fmtInv(jobTotal)}</div>
+                </div>
+              );
+            })}
+
+            {/* Misc charges */}
+            {model.miscCharges.length > 0 && (
+              <section className="legacy-info-card">
+                <div className="legacy-service-section-header"><strong>Misc Charges</strong></div>
+                {model.miscCharges.map((mc, i) => (
+                  <div className="legacy-invoice-misc-row" key={i}>
+                    <span>{mc.label}</span><span>{fmtInv(mc.amount)}</span>
+                  </div>
+                ))}
+              </section>
+            )}
+
+            {/* Totals */}
+            <section className="legacy-info-card">
+              <div className="legacy-service-section-header"><strong>Totals</strong></div>
+              <div className="legacy-invoice-totals-grid">
+                <div className="legacy-invoice-totals-row"><span>Parts</span><span>{fmtInv(model.totals.parts)}</span></div>
+                <div className="legacy-invoice-totals-row"><span>Labor</span><span>{fmtInv(model.totals.labor)}</span></div>
+                <div className="legacy-invoice-totals-row"><span>Sublet</span><span>{fmtInv(model.totals.sublet)}</span></div>
+                <div className="legacy-invoice-totals-row"><span>Misc</span><span>{fmtInv(model.totals.misc)}</span></div>
+                <div className="legacy-invoice-totals-row"><span>Before Tax</span><span>{fmtInv(model.totals.beforeTax)}</span></div>
+                <div className="legacy-invoice-totals-row"><span>Sales Tax</span><span>{fmtInv(model.totals.salesTax)}</span></div>
+                <div className="legacy-invoice-totals-row is-total"><strong>Total</strong><strong>{fmtInv(model.totals.total)}</strong></div>
+                <div className="legacy-invoice-totals-row is-due"><strong>Amount Due</strong><strong>{fmtInv(model.totals.totalDue)}</strong></div>
+              </div>
+            </section>
+
+            {/* Deposits */}
+            {model.deposits.length > 0 && (
+              <section className="legacy-info-card">
+                <div className="legacy-service-section-header"><strong>Deposits Applied</strong></div>
+                {model.deposits.map((d, i) => (
+                  <div className="legacy-invoice-deposit-row" key={i}>
+                    <span>#{d.invoiceNumber}</span>
+                    <span>{d.date}</span>
+                    <span>{fmtInv(d.amount)}</span>
+                  </div>
+                ))}
+              </section>
+            )}
+          </div>
+        </div>
       );
       break;
     }
     case "deposits": {
       paneContent = (
-        <div className="legacy-service-pane-grid is-split">
-          <section className="legacy-service-pane-section">
+        <div className="legacy-service-tab-screen is-deposits">
+          <section className="legacy-service-pane-section legacy-service-grow-section">
             <div className="legacy-service-pane-header">
               <h4>RO Deposits</h4>
               <span>{model.deposits.length} entry{model.deposits.length === 1 ? "" : "s"}</span>
@@ -8635,138 +13175,260 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
               </table>
             </div>
           </section>
-          <section className="legacy-service-pane-section">
+          <div className="legacy-service-button-strip">
+            <button className="legacy-task-status-button" type="button">Create Deposit</button>
+            <button className="legacy-task-status-button" type="button">Cancel Deposit</button>
+            <button className="legacy-task-status-button" type="button">Print Receipt</button>
+            <button className="legacy-task-status-button" type="button">View Invoice</button>
+          </div>
+          <section className="legacy-service-pane-section legacy-service-grow-section">
             <div className="legacy-service-pane-header">
-              <h4>Payment Request</h4>
+              <h4>Click To Pay Requests</h4>
               <span>{model.deposits.length > 0 ? "Cashiered" : "Pending"}</span>
             </div>
-            <div className="legacy-service-charge-list">
-              <div className="legacy-service-charge-row">
-                <span>Method of payment</span>
-                <strong>{model.deposits.length > 0 ? "Cash" : "Click to pay"}</strong>
-              </div>
-              <div className="legacy-service-charge-row">
-                <span>Amount requested</span>
-                <strong>{formatWorkbenchCurrency(model.deposits[0]?.amount ?? model.totals.totalDue)}</strong>
-              </div>
-              <div className="legacy-service-charge-row">
-                <span>Card on file</span>
-                <strong>{model.deposits.length > 0 ? "On file" : "None"}</strong>
-              </div>
+            <div className="legacy-service-table-wrap">
+              <table className="legacy-service-table">
+                <thead>
+                  <tr>
+                    <th>Request #</th>
+                    <th>Sent Date</th>
+                    <th>Sent To</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Payment Date</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>{selectedServiceRow.roNumber}-PAY</td>
+                    <td>{model.deposits[0]?.date ?? selectedServiceRow.inDate}</td>
+                    <td>{selectedServiceRow.customerName}</td>
+                    <td>{formatWorkbenchCurrency(model.deposits[0]?.amount ?? model.totals.totalDue)}</td>
+                    <td>{model.deposits.length > 0 ? "Paid" : "Ready"}</td>
+                    <td>{model.deposits[0]?.paymentDate || "-"}</td>
+                    <td>{model.deposits.length > 0 ? "Deposit received" : "No payment request has been sent."}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </section>
+          <div className="legacy-service-button-strip">
+            <button className="legacy-task-status-button" type="button">Create Payment Request</button>
+            <button className="legacy-task-status-button" type="button">Resend Link</button>
+            <button className="legacy-task-status-button" type="button">Cancel Request</button>
+          </div>
         </div>
       );
       break;
     }
     case "attachments": {
       paneContent = (
-        <>
-          <div className="legacy-service-attachment-grid">
-            {model.attachments.map((attachment) => (
-              <article className="legacy-service-attachment-card" key={`${selectedServiceRow.id}-${attachment.name}`}>
-                <strong>{attachment.name}</strong>
-                <span>{attachment.kind}</span>
-                <span>
-                  {attachment.visibility} · {attachment.status}
-                </span>
-                <span>
-                  {attachment.createdBy} · {attachment.createdTime}
-                </span>
-              </article>
-            ))}
+        <div className="legacy-service-tab-screen is-attachments">
+          <div className="legacy-service-attachment-toolbar">
+            <label><input defaultChecked name="service-attachment-view" type="radio" /> All Attachments</label>
+            <label><input name="service-attachment-view" type="radio" /> Images Only</label>
+            <label><input name="service-attachment-view" type="radio" /> Documents Only</label>
           </div>
-          <div className="legacy-service-footer-actions">
+          <section className="legacy-service-attachment-canvas">
+            {model.attachments.length > 0 ? (
+              <div className="legacy-service-attachment-grid">
+                {model.attachments.map((attachment) => (
+                  <article className="legacy-service-attachment-card" key={`${selectedServiceRow.id}-${attachment.name}`}>
+                    <strong>{attachment.name}</strong>
+                    <span>{attachment.kind}</span>
+                    <span>
+                      {attachment.visibility} · {attachment.status}
+                    </span>
+                    <span>
+                      {attachment.createdBy} · {attachment.createdTime}
+                    </span>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="legacy-audit-empty-state">No attachments are linked to this repair order.</p>
+            )}
+          </section>
+          <div className="legacy-service-footer-actions legacy-service-attachment-footer">
             <button className="legacy-task-status-button" type="button">
               Attach File
             </button>
+            <button className="legacy-task-status-button" type="button">
+              Scan Document
+            </button>
+            <button className="legacy-task-status-button" type="button">
+              Delete Attachment
+            </button>
+            <span>{model.attachments.length} files attached</span>
           </div>
-        </>
+        </div>
       );
       break;
     }
     case "history": {
       paneContent = (
-        <section className="legacy-service-pane-section">
-          <div className="legacy-service-table-wrap">
-            <table className="legacy-service-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Event</th>
-                  <th>User</th>
-                  <th>Detail</th>
-                  <th>Old Value</th>
-                  <th>New Value</th>
-                </tr>
-              </thead>
-              <tbody>
-                {model.history.map((line, lineIndex) => (
-                  <tr key={`${selectedServiceRow.id}-history-${lineIndex}`}>
-                    <td>{line.date}</td>
-                    <td>{line.event}</td>
-                    <td>{line.user}</td>
-                    <td>{line.detail}</td>
-                    <td>{line.oldValue}</td>
-                    <td>{line.newValue}</td>
+        <div className="legacy-service-tab-screen is-history">
+          <section className="legacy-service-pane-section legacy-service-grow-section">
+            <div className="legacy-service-pane-header">
+              <h4>History</h4>
+              <span>{model.history.length} events</span>
+            </div>
+            <div className="legacy-service-table-wrap">
+              <table className="legacy-service-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Event</th>
+                    <th>User</th>
+                    <th>Detail</th>
+                    <th>Old Value</th>
+                    <th>New Value</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                </thead>
+                <tbody>
+                  {model.history.map((line, lineIndex) => (
+                    <tr key={`${selectedServiceRow.id}-history-${lineIndex}`}>
+                      <td>{line.date.split("·")[0]?.trim() ?? line.date}</td>
+                      <td>{line.date.includes("·") ? line.date.split("·")[1]?.trim() : "-"}</td>
+                      <td>{line.event}</td>
+                      <td>{line.user}</td>
+                      <td>{line.detail}</td>
+                      <td>{line.oldValue}</td>
+                      <td>{line.newValue}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       );
       break;
     }
     case "esignature": {
-      paneContent = model.signatureDocs.length > 0 ? (
-        <section className="legacy-service-pane-section">
-          <div className="legacy-service-table-wrap">
-            <table className="legacy-service-table">
-              <thead>
-                <tr>
-                  <th>Description</th>
-                  <th>Created By</th>
-                  <th>Created Time</th>
-                  <th>Completed Time</th>
-                  <th>Status</th>
-                  <th>Customer</th>
-                  <th>Dealer 1</th>
-                  <th>Dealer 2</th>
-                  <th>Dealer 3</th>
-                  <th>Dealer 4</th>
-                </tr>
-              </thead>
-              <tbody>
-                {model.signatureDocs.map((doc, docIndex) => (
-                  <tr key={`${selectedServiceRow.id}-signature-${docIndex}`}>
-                    <td>{doc.description}</td>
-                    <td>{doc.createdBy}</td>
-                    <td>{doc.createdTime}</td>
-                    <td>{doc.completedTime}</td>
-                    <td>{doc.status}</td>
-                    <td>{doc.customer}</td>
-                    <td>{doc.dealer1}</td>
-                    <td>{doc.dealer2}</td>
-                    <td>{doc.dealer3}</td>
-                    <td>{doc.dealer4}</td>
+      const signatureDocs = model.signatureDocs;
+
+      paneContent = (
+        <div className="legacy-service-tab-screen">
+          <div className="legacy-esig-layout" style={{ padding: "14px", overflowY: "auto" }}>
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <strong>eSignature Documents</strong>
+                <span className="legacy-chip tone-neutral">{signatureDocs.length} docs</span>
+              </div>
+              <button className="legacy-task-status-button" onClick={() => setIsSignatureRequestOpen((o) => !o)} type="button">
+                {isSignatureRequestOpen ? "Cancel" : "Request Signature"}
+              </button>
+            </div>
+
+            {/* Auth card */}
+            <div className="legacy-esig-auth-card">
+              <div className="legacy-esig-auth-header">
+                <strong>Customer Authorization</strong>
+                <span className={`legacy-chip tone-${authStatus === "Signed" ? "stable" : authStatus === "Declined" ? "attention" : authStatus === "Sent" ? "accent" : "neutral"}`}>{authStatus}</span>
+              </div>
+              <div className="legacy-esig-auth-meta">
+                <span>Customer: {selectedServiceRow.customerName}</span>
+                {signatureDocs[0]?.createdTime ? <span>Sent: {signatureDocs[0].createdTime}</span> : null}
+                {signatureDocs[0]?.completedTime ? <span>Signed: {signatureDocs[0].completedTime}</span> : null}
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  className="legacy-task-status-button"
+                  onClick={() => { setAuthStatus("Sent"); }}
+                  type="button"
+                >
+                  Send Authorization
+                </button>
+                {authStatus === "Sent" && (
+                  <button className="legacy-task-status-button" onClick={() => { setAuthStatus("Sent"); }} type="button">Resend</button>
+                )}
+              </div>
+            </div>
+
+            {/* Docs table */}
+            {signatureDocs.length > 0 && (
+              <table className="legacy-esig-doc-table">
+                <thead>
+                  <tr>
+                    <th>Description</th>
+                    <th>Created By</th>
+                    <th>Status</th>
+                    <th>Customer</th>
+                    <th>Dealer</th>
+                    <th>Completed</th>
+                    <th>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {signatureDocs.map((doc, docIndex) => (
+                    <tr key={`${selectedServiceRow.id}-esig-${docIndex}`}>
+                      <td>{doc.description}</td>
+                      <td>{doc.createdBy}</td>
+                      <td><span className={`legacy-chip tone-${doc.status === "Signed" || doc.status === "Completed" ? "stable" : doc.status === "Sent" ? "accent" : "neutral"}`}>{doc.status}</span></td>
+                      <td>{doc.customer}</td>
+                      <td>{doc.dealer1}</td>
+                      <td>{doc.completedTime || "—"}</td>
+                      <td style={{ display: "flex", gap: "4px" }}>
+                        <button className="legacy-task-status-button" type="button">View</button>
+                        <button className="legacy-task-status-button" type="button">Void</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {/* Request form */}
+            {isSignatureRequestOpen && (
+              <div className="legacy-esig-request-form">
+                <strong>Request Signature</strong>
+                <label>
+                  Document Type
+                  <select onChange={(e) => setSigRequestType(e.target.value)} value={sigRequestType}>
+                    <option>Customer Authorization</option>
+                    <option>Estimate Approval</option>
+                    <option>Work Authorization</option>
+                    <option>Invoice Sign-Off</option>
+                    <option>Warranty Waiver</option>
+                  </select>
+                </label>
+                <label>
+                  Recipient Email
+                  <input onChange={(e) => setSigRequestEmail(e.target.value)} placeholder="customer@email.com" type="email" value={sigRequestEmail} />
+                </label>
+                <label>
+                  Message
+                  <textarea onChange={(e) => setSigRequestMessage(e.target.value)} placeholder="Optional message to recipient..." value={sigRequestMessage} />
+                </label>
+                <div className="legacy-esig-request-actions">
+                  <button
+                    className="legacy-task-status-button"
+                    onClick={() => {
+                      void props.onRequestSignature(sigRequestType, sigRequestEmail, sigRequestMessage);
+                      setIsSignatureRequestOpen(false);
+                      setSigRequestMessage("");
+                    }}
+                    type="button"
+                  >
+                    Send Request
+                  </button>
+                  <button className="legacy-task-status-button" onClick={() => setIsSignatureRequestOpen(false)} type="button">Cancel</button>
+                </div>
+              </div>
+            )}
           </div>
-        </section>
-      ) : (
-        <section className="legacy-service-pane-section">
-          <p className="legacy-audit-empty-state">No eSignature documents are active for this repair order.</p>
-        </section>
+        </div>
       );
       break;
     }
     case "general":
     default: {
       paneContent = (
-        <>
+        <div className={`legacy-service-tab-screen is-general${customerToolMode ? " is-customer-tool-open" : ""}`}>
           {isEstimate ? (
             <section className="legacy-service-pane-section">
               <div className="legacy-service-note-panel">
@@ -8777,27 +13439,101 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
           ) : null}
           <div className="legacy-service-general-layout">
             <div className="legacy-service-general-column">
-              <section className="legacy-service-pane-section legacy-service-pane-section.is-compact">
+              <section className="legacy-service-pane-section is-compact">
                 <div className="legacy-service-overview-grid">
                   <div>
-                    <h4>Sold To</h4>
+                    <div className="legacy-service-customer-heading">
+                      <h4>Sold To</h4>
+                      <div className="legacy-service-customer-actions" aria-label="Customer actions">
+                        <button
+                          aria-label="Edit customer information"
+                          className={customerToolMode === "edit" ? "is-active" : ""}
+                          disabled={isMutatingServiceDetail}
+                          onClick={() => setCustomerToolMode((current) => (current === "edit" ? null : "edit"))}
+                          type="button"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          aria-label="Search customer database"
+                          className={customerToolMode === "search" ? "is-active" : ""}
+                          disabled={isMutatingServiceDetail}
+                          onClick={() => setCustomerToolMode((current) => (current === "search" ? null : "search"))}
+                          type="button"
+                        >
+                          ▣
+                        </button>
+                        <button aria-label="Erase customer information" disabled={isMutatingServiceDetail} onClick={clearCustomerInfo} type="button">
+                          ⌫
+                        </button>
+                      </div>
+                    </div>
                     <div className="legacy-service-address">
-                      <strong>{selectedServiceRow.customerName.toUpperCase()}</strong>
-                      {model.customerAddress.map((line) => (
-                        <span key={`${selectedServiceRow.id}-${line}`}>{line}</span>
-                      ))}
+                      <strong>{selectedServiceRow.customerName ? selectedServiceRow.customerName.toUpperCase() : "NO CUSTOMER SELECTED"}</strong>
+                      {model.customerAddress.length > 0 ? (
+                        model.customerAddress.map((line, index) => <span key={`${selectedServiceRow.id}-customer-address-${index}`}>{line}</span>)
+                      ) : (
+                        <span>Customer address not assigned.</span>
+                      )}
                     </div>
                   </div>
-                  <div className="legacy-service-key-grid legacy-service-key-grid.is-compact">
+                  <div className="legacy-service-key-grid is-compact">
                     <LabelValue label="Service Writer" value={selectedServiceRow.serviceWriter} />
                     <LabelValue label="Category" value={selectedServiceRow.category} />
                     <LabelValue label="In Date" value={selectedServiceRow.inDate} />
-                    <LabelValue label="PO #" value={model.purchaseOrder} />
-                    <LabelValue label="Promised Date" value={model.promisedDate} />
-                    <LabelValue label="Closed Date" value={model.closedDate || "-"} />
+                    <div className="legacy-service-key-value-edit">
+                      <div>
+                        <LabelValue label="PO #" value={model.purchaseOrder} />
+                        <LabelValue label="Promised Date" value={model.promisedDate} />
+                        <LabelValue label="Closed Date" value={model.closedDate || "—"} />
+                      </div>
+                      <button
+                        aria-label="Edit RO header fields"
+                        className={`legacy-service-inline-edit-btn${isEditingROHeader ? " is-active" : ""}`}
+                        disabled={isMutatingServiceDetail}
+                        onClick={() => {
+                          if (!isEditingROHeader) {
+                            setROHeaderDraft({ purchaseOrder: model.purchaseOrder, promisedDate: model.promisedDate, closedDate: model.closedDate });
+                          }
+                          setIsEditingROHeader((prev) => !prev);
+                        }}
+                        type="button"
+                      >
+                        ✎
+                      </button>
+                    </div>
                   </div>
+                  {isEditingROHeader && (
+                    <form
+                      className="legacy-service-ro-header-editor"
+                      onSubmit={async (event) => {
+                        event.preventDefault();
+                        const saved = await props.onUpdateROHeader(roHeaderDraft);
+                        if (saved) {
+                          setIsEditingROHeader(false);
+                        }
+                      }}
+                    >
+                      <label>
+                        <span>PO #</span>
+                        <input disabled={isMutatingServiceDetail} onChange={(e) => setROHeaderDraft((prev) => ({ ...prev, purchaseOrder: e.target.value }))} value={roHeaderDraft.purchaseOrder} />
+                      </label>
+                      <label>
+                        <span>Promised Date</span>
+                        <input disabled={isMutatingServiceDetail} onChange={(e) => setROHeaderDraft((prev) => ({ ...prev, promisedDate: e.target.value }))} placeholder="MM/DD/YYYY" value={roHeaderDraft.promisedDate} />
+                      </label>
+                      <label>
+                        <span>Closed Date</span>
+                        <input disabled={isMutatingServiceDetail} onChange={(e) => setROHeaderDraft((prev) => ({ ...prev, closedDate: e.target.value }))} placeholder="MM/DD/YYYY" value={roHeaderDraft.closedDate} />
+                      </label>
+                      <div className="legacy-service-customer-editor-actions">
+                        <button disabled={isMutatingServiceDetail} type="submit">Save</button>
+                        <button disabled={isMutatingServiceDetail} onClick={() => setIsEditingROHeader(false)} type="button">Cancel</button>
+                      </div>
+                    </form>
+                  )}
                 </div>
-                <div className="legacy-service-key-grid legacy-service-key-grid.is-compact">
+                <div className="legacy-service-key-grid is-compact">
                   <LabelValue label="Home Phone" value={model.homePhone} />
                   <LabelValue label="Work Phone" value={model.workPhone} />
                   <LabelValue label="Cell Phone" value={model.cellPhone} />
@@ -8805,9 +13541,120 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
                   <LabelValue label="Customer No." value={model.customerNo} />
                   <LabelValue label="Setup Date" value={model.setupDate} />
                 </div>
+                {customerToolMode === "edit" ? (
+                  <form
+                    className="legacy-service-customer-editor"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      saveCustomerInfo(customerDraft);
+                    }}
+                  >
+                    <label>
+                      <span>Name</span>
+                      <input
+                        disabled={isMutatingServiceDetail}
+                        onChange={(event) => updateCustomerDraft("customerName", event.target.value)}
+                        value={customerDraft.customerName}
+                      />
+                    </label>
+                    <label>
+                      <span>Address</span>
+                      <input
+                        disabled={isMutatingServiceDetail}
+                        onChange={(event) => updateCustomerDraft("addressLine1", event.target.value)}
+                        value={customerDraft.addressLine1}
+                      />
+                    </label>
+                    <label>
+                      <span>Location</span>
+                      <input
+                        disabled={isMutatingServiceDetail}
+                        onChange={(event) => updateCustomerDraft("location", event.target.value)}
+                        value={customerDraft.location}
+                      />
+                    </label>
+                    <label>
+                      <span>Home Phone</span>
+                      <input
+                        disabled={isMutatingServiceDetail}
+                        onChange={(event) => updateCustomerDraft("homePhone", event.target.value)}
+                        value={customerDraft.homePhone}
+                      />
+                    </label>
+                    <label>
+                      <span>Cell Phone</span>
+                      <input
+                        disabled={isMutatingServiceDetail}
+                        onChange={(event) => updateCustomerDraft("cellPhone", event.target.value)}
+                        value={customerDraft.cellPhone}
+                      />
+                    </label>
+                    <label>
+                      <span>Work Phone</span>
+                      <input
+                        disabled={isMutatingServiceDetail}
+                        onChange={(event) => updateCustomerDraft("workPhone", event.target.value)}
+                        value={customerDraft.workPhone}
+                      />
+                    </label>
+                    <label className="is-wide">
+                      <span>Email</span>
+                      <input
+                        disabled={isMutatingServiceDetail}
+                        onChange={(event) => updateCustomerDraft("email", event.target.value)}
+                        value={customerDraft.email}
+                      />
+                    </label>
+                    <div className="legacy-service-customer-editor-actions">
+                      <button disabled={isMutatingServiceDetail} type="submit">
+                        {isSavingCustomerInfo ? "Saving..." : "Save Customer"}
+                      </button>
+                      <button disabled={isMutatingServiceDetail} onClick={() => setCustomerToolMode(null)} type="button">
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                ) : null}
+                {customerToolMode === "search" ? (
+                  <div className="legacy-service-customer-search">
+                    <label>
+                      <span>Customer Search</span>
+                      <input
+                        autoFocus
+                        disabled={isMutatingServiceDetail}
+                        onChange={(event) => setCustomerSearchTerm(event.target.value)}
+                        placeholder="Search name, phone, email, or location"
+                        value={customerSearchTerm}
+                      />
+                    </label>
+                    <div className="legacy-service-customer-search-results">
+                      {customerSearchResults.length > 0 ? (
+                        customerSearchResults.map((option) => (
+                          <button
+                            disabled={isMutatingServiceDetail}
+                            key={`${option.customerName}-${option.customerNo}`}
+                            onClick={() => {
+                              setCustomerDraft(option);
+                              setCustomerToolMode(null);
+                              saveCustomerInfo(option);
+                            }}
+                            type="button"
+                          >
+                            <strong>{option.customerName}</strong>
+                            <span>{option.addressLine1} · {option.location}</span>
+                            <span>{option.homePhone} / {option.email}</span>
+                            <em>{option.sourceLabel}</em>
+                          </button>
+                        ))
+                      ) : (
+                        <p>No matching customers found.</p>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
               </section>
 
-              <section className="legacy-service-pane-section legacy-service-pane-section.is-table-heavy">
+              <section className="legacy-service-pane-section is-table-heavy">
                 <div className="legacy-service-pane-header">
                   <h4>{jobCollectionLabel}</h4>
                   <span>{model.jobs.length} open lines</span>
@@ -8846,7 +13693,7 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
             </div>
 
             <div className="legacy-service-general-column">
-              <section className="legacy-service-pane-section legacy-service-pane-section.is-compact">
+              <section className="legacy-service-pane-section is-compact">
                 <div className="legacy-service-pane-header">
                   <h4>Operator Notes</h4>
                   <span>{recordLabel}</span>
@@ -8854,16 +13701,31 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
                 <div className="legacy-service-pane-grid">
                   <div className="legacy-service-note-panel">
                     <strong>Notes</strong>
-                    <p>{model.notes}</p>
+                    <textarea
+                      aria-label="Operator notes"
+                      className="legacy-service-note-textarea"
+                      disabled={isMutatingServiceDetail}
+                      onBlur={saveServiceNotes}
+                      onChange={(event) => setServiceNotesDraft(event.target.value)}
+                      value={serviceNotesDraft}
+                    />
                   </div>
                   <div className="legacy-service-note-panel">
                     <strong>Transfer Notes</strong>
-                    <p>{model.transferNotes}</p>
+                    <textarea
+                      aria-label="Transfer notes"
+                      className="legacy-service-note-textarea"
+                      disabled={isMutatingServiceDetail}
+                      onBlur={saveServiceNotes}
+                      onChange={(event) => setServiceTransferNotesDraft(event.target.value)}
+                      value={serviceTransferNotesDraft}
+                    />
                   </div>
                 </div>
+                {isSavingServiceNotes ? <span className="legacy-service-inline-save-state">Saving notes...</span> : null}
               </section>
 
-              <section className="legacy-service-pane-section legacy-service-pane-section.is-compact">
+              <section className="legacy-service-pane-section is-compact">
                 <div className="legacy-service-pane-header">
                   <h4>Financial Summary</h4>
                   <span>{model.totals.saleType}</span>
@@ -8922,14 +13784,20 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
               </section>
             </div>
           </div>
-        </>
+          <ServiceRepairOrderCalendarPanel
+            model={model}
+            onYearChange={setServiceCalendarYear}
+            recordLabel={recordLabel}
+            selectedYear={serviceCalendarYear}
+          />
+        </div>
       );
       break;
     }
   }
 
   return (
-    <section className="legacy-info-card legacy-service-workbench">
+    <section className="legacy-info-card legacy-service-workbench is-lightspeed-layout">
       <div className="legacy-service-workbench-header">
         <div className="legacy-service-workbench-title">
           <div>
@@ -8967,6 +13835,13 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
         >
           Convert To {orderTypeToggleTarget}
         </button>
+        <button
+          className="legacy-task-status-button"
+          onClick={() => setIsPortalPreviewOpen(true)}
+          type="button"
+        >
+          🚤 Portal Preview
+        </button>
       </div>
       <div className="legacy-service-workbench-tabs" role="tablist" aria-label={`${recordLabel} tabs`}>
         {visibleWorkbenchTabs.map((tab) => (
@@ -8981,9 +13856,167 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
           </button>
         ))}
       </div>
-      <div className="legacy-service-pane">{paneContent}</div>
+      <div className={`legacy-service-pane${activeTab === "general" ? " is-general" : ""}`}>
+        {workbenchNotice && <div className="legacy-workbench-notice" onClick={() => setWorkbenchNotice(null)}>{workbenchNotice}</div>}
+        {paneContent}
+      </div>
+      {isPortalPreviewOpen && (
+        <div className="legacy-portal-overlay" onClick={() => setIsPortalPreviewOpen(false)}>
+          <div className="legacy-portal-preview" onClick={e => e.stopPropagation()}>
+            <div className="legacy-portal-preview-header">
+              <span>🚤 Customer Portal Preview</span>
+              <button className="legacy-task-status-button" onClick={() => setIsPortalPreviewOpen(false)} type="button">✕ Close</button>
+            </div>
+            <div className="legacy-portal-preview-body">
+              <div className="legacy-portal-preview-card">
+                <div className="legacy-portal-preview-ro-header">
+                  <span className="legacy-portal-preview-label">Repair Order</span>
+                  <strong>#{model.roNumber}</strong>
+                </div>
+                <div className="legacy-portal-preview-status-row">
+                  <span>Status</span>
+                  <span className={`legacy-chip tone-${invoiceStatus === "Paid" ? "stable" : "accent"}`}>{invoiceStatus || "In Progress"}</span>
+                </div>
+                <div className="legacy-portal-preview-status-row">
+                  <span>Promised Date</span>
+                  <span>{model.promisedDate || "TBD"}</span>
+                </div>
+              </div>
+              <div className="legacy-portal-preview-section-label">Your Services</div>
+              {model.jobs.map(j => (
+                <div className="legacy-portal-preview-job-card" key={j.id}>
+                  <div className="legacy-portal-preview-job-title">{j.title || "Unnamed Job"}</div>
+                  <div className="legacy-portal-preview-job-status">
+                    <span className={`legacy-chip tone-${j.status === "Closed" ? "stable" : "neutral"}`}>{j.status || "Open"}</span>
+                  </div>
+                  {j.description && <div className="legacy-portal-preview-job-desc">{j.description}</div>}
+                </div>
+              ))}
+              <div className="legacy-portal-preview-totals">
+                <div className="legacy-portal-preview-total-row"><span>Estimated Total</span><span>{model.totals.total.toLocaleString("en-US", { style: "currency", currency: "USD" })}</span></div>
+                <div className="legacy-portal-preview-total-row is-due"><span>Amount Due</span><span>{model.totals.totalDue.toLocaleString("en-US", { style: "currency", currency: "USD" })}</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
+}
+
+function isBlankServiceWorkbenchJob(job: ServiceWorkbenchJob) {
+  return (
+    job.title.trim().length === 0 &&
+    job.unitLabel.trim().length === 0 &&
+    job.customerApproval.trim().length === 0 &&
+    job.status.trim().length === 0 &&
+    job.warranty.trim().length === 0 &&
+    job.appliance.trim().length === 0 &&
+    job.description.trim().length === 0 &&
+    job.resolution.trim().length === 0 &&
+    job.recommendations.trim().length === 0 &&
+    job.jobCode.trim().length === 0 &&
+    job.technician.trim().length === 0 &&
+    job.laborRate.trim().length === 0 &&
+    job.chargeBy.trim().length === 0 &&
+    job.rate === 0 &&
+    job.quantity === 0 &&
+    job.parts.length === 0 &&
+    job.laborLines.length === 0 &&
+    job.subletLines.length === 0
+  );
+}
+
+function ServiceRepairOrderCalendarPanel({
+  model,
+  onYearChange,
+  recordLabel,
+  selectedYear
+}: {
+  model: ServiceWorkbenchModel;
+  onYearChange: (year: number) => void;
+  recordLabel: string;
+  selectedYear: number;
+}) {
+  const calendarRows = buildServiceRepairOrderCalendarRows(model, selectedYear);
+  const calendarYearOptions = buildPartsInventorySalesCalendarYearOptions(selectedYear);
+  const eventCount = calendarRows.reduce((total, month) => total + month.eventCount, 0);
+
+  return (
+    <section className="legacy-service-pane-section legacy-service-calendar-panel">
+      <div className="legacy-service-pane-header">
+        <h4>{recordLabel} Calendar</h4>
+        <span>{eventCount} completed job{eventCount === 1 ? "" : "s"}</span>
+      </div>
+      <div className="legacy-parts-inventory-detail-insight-tabs legacy-service-calendar-toolbar">
+        <button className="is-active" type="button">
+          Completed Jobs
+        </button>
+        <select
+          aria-label={`${recordLabel} calendar year`}
+          className="legacy-parts-inventory-sales-year-select"
+          onChange={(event) => onYearChange(Number(event.target.value))}
+          value={selectedYear}
+        >
+          {calendarYearOptions.map((year) => (
+            <option key={year} value={year}>
+              {year}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="legacy-parts-inventory-sales-calendar legacy-service-calendar-grid">
+        {calendarRows.map((month) => (
+          <div
+            className={`legacy-parts-inventory-sales-month${month.isCurrent ? " is-current" : ""}${
+              month.isForecast ? " is-forecast" : ""
+            } tone-${month.tone}`}
+            key={month.month}
+          >
+            <div className="legacy-parts-inventory-sales-month-head">
+              <strong>{month.month}</strong>
+              <span>{month.eventCount} job{month.eventCount === 1 ? "" : "s"}</span>
+            </div>
+            <div aria-hidden="true" className="legacy-parts-inventory-sales-mini-weekdays">
+              {["S", "M", "T", "W", "T", "F", "S"].map((day, index) => (
+                <span key={`${month.month}-${day}-${index}`}>{day}</span>
+              ))}
+            </div>
+            <div className="legacy-parts-inventory-sales-mini-days">
+              {month.days.map((day, index) => (
+                <span
+                  aria-label={day.hasEvent ? `${month.month} ${day.day}, ${selectedYear}: ${day.events.map((event) => event.label).join("; ")}` : undefined}
+                  className={`${day.inMonth ? "is-month-day" : "is-empty"}${day.hasEvent ? ` has-sale sale-level-${day.level}` : ""}`}
+                  key={`${month.month}-${index}`}
+                  tabIndex={day.hasEvent ? 0 : undefined}
+                >
+                  {day.inMonth ? day.day : ""}
+                  {day.hasEvent ? (
+                    <i className="legacy-service-calendar-event-tooltip" role="tooltip">
+                      {day.events.map((event, eventIndex) => (
+                        <em key={`${month.month}-${day.day}-${event.label}-${eventIndex}`}>
+                          <strong>{event.label}</strong>
+                          <small>{event.detail}</small>
+                        </em>
+                      ))}
+                    </i>
+                  ) : null}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+interface ServiceRepairOrderCalendarEvent {
+  day: number;
+  detail: string;
+  label: string;
+  monthIndex: number;
+  year: number;
 }
 
 interface ServiceUtilityInlinePanelProps {
@@ -9003,237 +14036,92 @@ interface ServiceUtilityInlinePanelProps {
   updatingTaskId: string | null;
 }
 
-function ServiceUtilityInlinePanel({
-  entries,
-  activityEntries,
-  cleaningQaRoNumber,
-  focusedTaskId,
-  isFilteredByOperator,
-  onAddTaskNote,
-  onAssignTask,
-  onCleanupQaTasks,
-  onReturnToAuditCleanup,
-  onUpdateStatus,
-  operators,
-  returnToAuditContext,
-  selectedServiceRow,
-  updatingTaskId
-}: ServiceUtilityInlinePanelProps) {
-  const [handoffSelections, setHandoffSelections] = useState<Record<string, string>>({});
-  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
-  const focusedTaskRef = useRef<HTMLElement | null>(null);
-  const relatedEntries = selectedServiceRow
-    ? entries.filter(
-        (entry) => inlineServiceUtilityActions.has(entry.action) && entry.detail.startsWith(`${selectedServiceRow.roNumber} ·`)
-      )
-    : [];
-  const qaEntries = relatedEntries.filter(isServiceUtilityQaTask);
-  const focusedEntry = focusedTaskId ? relatedEntries.find((entry) => entry.id === focusedTaskId) ?? null : null;
-  const isCleanupPending = Boolean(selectedServiceRow && cleaningQaRoNumber === selectedServiceRow.roNumber);
-  const isTaskMutationPending = Boolean(updatingTaskId) || isCleanupPending;
+function buildServiceRepairOrderCalendarRows(model: ServiceWorkbenchModel, year = buildPartsInventoryCurrentSalesCalendarYear()) {
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const currentMonthIndex = currentDate.getMonth();
+  const events = buildServiceRepairOrderCalendarEvents(model);
 
-  useEffect(() => {
-    if (focusedEntry && focusedTaskRef.current) {
-      focusedTaskRef.current.scrollIntoView({ block: "nearest" });
+  return months.map((month, monthIndex) => {
+    const isForecast = year > currentYear || (year === currentYear && monthIndex > currentMonthIndex);
+    const isCurrent = year === currentYear && monthIndex === currentMonthIndex;
+    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+    const firstDay = new Date(year, monthIndex, 1).getDay();
+    const eventsByDay = events.reduce<Map<number, ServiceRepairOrderCalendarEvent[]>>((current, event) => {
+      if (event.year === year && event.monthIndex === monthIndex) {
+        current.set(event.day, [...(current.get(event.day) ?? []), event]);
+      }
+
+      return current;
+    }, new Map());
+    const eventCount = [...eventsByDay.values()].reduce((total, dayEvents) => total + dayEvents.length, 0);
+
+    return {
+      days: Array.from({ length: 42 }, (_, index) => {
+        const dayNumber = index - firstDay + 1;
+        const inMonth = dayNumber >= 1 && dayNumber <= daysInMonth;
+        const dayEvents = inMonth ? eventsByDay.get(dayNumber) ?? [] : [];
+
+        return {
+          day: inMonth ? `${dayNumber}` : "",
+          events: dayEvents,
+          hasEvent: dayEvents.length > 0,
+          inMonth,
+          level: dayEvents.length > 1 ? "high" : dayEvents.length === 1 ? "low" : "none"
+        };
+      }),
+      eventCount,
+      isCurrent,
+      isForecast,
+      month,
+      tone: eventCount >= 3 ? "stable" : eventCount > 0 ? "neutral" : "attention"
+    };
+  });
+}
+
+function buildServiceRepairOrderCalendarEvents(model: ServiceWorkbenchModel) {
+  const events: ServiceRepairOrderCalendarEvent[] = [];
+
+  function addEvent(dateText: string, label: string, detail: string) {
+    const date = parseServiceWorkbenchDate(dateText);
+
+    if (date) {
+      events.push({ ...date, detail, label });
     }
-  }, [focusedEntry]);
+  }
 
-  return (
-    <section className="legacy-info-card legacy-service-task-panel">
-      <div className="legacy-command-log-header">
-        <div>
-          <h3>Service Utility Queue</h3>
-          <span>{selectedServiceRow ? `RO ${selectedServiceRow.roNumber}` : "Select an RO"}</span>
-        </div>
-        <div className="legacy-service-task-toolbar">
-          {returnToAuditContext && onReturnToAuditCleanup ? (
-            <button className="legacy-task-status-button" onClick={onReturnToAuditCleanup} type="button">
-              {returnToAuditContext.label}
-            </button>
-          ) : null}
-          {selectedServiceRow && qaEntries.length > 0 ? (
-            <>
-              <span className="legacy-command-meta">{qaEntries.length} demo QA task{qaEntries.length === 1 ? "" : "s"}</span>
-              <button
-                className="legacy-task-status-button"
-                disabled={isTaskMutationPending}
-                onClick={() => {
-                  void onCleanupQaTasks(selectedServiceRow.roNumber);
-                }}
-                type="button"
-              >
-                {isCleanupPending ? "Cleaning..." : "Clean demo QA"}
-              </button>
-            </>
-          ) : null}
-        </div>
-      </div>
+  model.jobs.forEach((job) => {
+    const completedDate = job.closedDate || (job.status === "Clocked Out" ? model.closedDate : "");
+    addEvent(
+      completedDate,
+      job.title,
+      `${job.technician} completed ${formatWorkbenchHours(job.quantity)} hrs · ${formatWorkbenchCurrency(job.total)} total · ${job.resolution}`
+    );
+  });
 
-      {returnToAuditContext ? <span className="legacy-command-meta legacy-service-return-meta">{returnToAuditContext.subtitle}</span> : null}
-      {focusedEntry ? (
-        <div className="legacy-service-task-focus">
-          <strong>Focused task</strong>
-          <span className="legacy-command-meta">
-            {focusedEntry.action} · {focusedEntry.status} · {focusedEntry.timeLabel}
-          </span>
-        </div>
-      ) : null}
+  return events;
+}
 
-      {!selectedServiceRow ? (
-        <p className="legacy-audit-empty-state">Select an RO row to work Duplicate, Print, Report, and Detail tasks inline.</p>
-      ) : relatedEntries.length === 0 ? (
-        <p className="legacy-audit-empty-state">
-          {isFilteredByOperator
-            ? "No inline utility tasks match the current operator filter for this RO."
-            : "No Duplicate, Print, Report, or Detail tasks are tied to this RO yet."}
-        </p>
-      ) : (
-        <div className="legacy-service-task-stack">
-          {relatedEntries.map((entry) => (
-            <article
-              className={`legacy-service-task-line tone-${entry.tone}${entry.id === focusedTaskId ? " is-focused" : ""}`}
-              key={entry.id}
-              ref={entry.id === focusedTaskId ? focusedTaskRef : undefined}
-            >
-              {buildServiceUtilityTaskBadges(entry, activityEntries).length > 0 ? (
-                <div className="legacy-service-task-badge-row">
-                  {buildServiceUtilityTaskBadges(entry, activityEntries).map((badge, badgeIndex) => (
-                    <span className={`legacy-service-task-badge${badge.tone ? ` tone-${badge.tone}` : ""}`} key={`${entry.id}-${badge.label}-${badgeIndex}`}>
-                      {badge.label}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-              <div className="legacy-service-task-copy">
-                <div className="legacy-command-log-header">
-                  <strong>{entry.action}</strong>
-                  <span className="legacy-command-time">{entry.status}</span>
-                </div>
-                <p>{entry.detail}</p>
-                <span className="legacy-command-meta">
-                  Owner {entry.assignedName} · Updated by {entry.lastUpdatedByName} · {entry.timeLabel}
-                </span>
-                <span className={`legacy-command-meta${entry.isOverdue ? " is-overdue" : ""}`}>
-                  Age {entry.ageLabel} · SLA {entry.slaLabel} · {entry.breachLabel}
-                </span>
-                {entry.latestCommentPreview ? <span className="legacy-command-meta">Latest note: {entry.latestCommentPreview}</span> : null}
-                {entry.resolutionNote ? <span className="legacy-command-meta">Resolution: {entry.resolutionNote}</span> : null}
-                {updatingTaskId === entry.id ? <span className="legacy-command-meta">Updating task status...</span> : null}
-                {isCleanupPending ? <span className="legacy-command-meta">Removing demo QA tasks for this RO...</span> : null}
-                {entry.notes.length > 0 ? (
-                  <div className="legacy-task-note-list">
-                    {entry.notes.map((note) => (
-                      <article className="legacy-task-note-line" key={note.id}>
-                        <strong>{note.kind}</strong>
-                        <p>{note.body}</p>
-                        <span className="legacy-command-meta">
-                          {note.authorName} · {note.timeLabel}
-                        </span>
-                      </article>
-                    ))}
-                  </div>
-                ) : null}
-                <div className="legacy-task-note-composer">
-                  <textarea
-                    aria-label={`Inline task note for ${entry.action}`}
-                    className="legacy-task-note-input"
-                    disabled={isTaskMutationPending}
-                    onChange={(event) =>
-                      setNoteDrafts((current) => ({
-                        ...current,
-                        [entry.id]: event.target.value
-                      }))
-                    }
-                    placeholder="Add inline notes or resolve this utility task"
-                    rows={2}
-                    value={noteDrafts[entry.id] ?? ""}
-                  />
-                  <div className="legacy-task-status-actions">
-                    <button
-                      className="legacy-task-status-button"
-                      disabled={isTaskMutationPending || !(noteDrafts[entry.id] ?? "").trim()}
-                      onClick={() => {
-                        void onAddTaskNote(entry.id, (noteDrafts[entry.id] ?? "").trim(), "Comment").then((saved) => {
-                          if (saved) {
-                            setNoteDrafts((current) => ({
-                              ...current,
-                              [entry.id]: ""
-                            }));
-                          }
-                        });
-                      }}
-                      type="button"
-                    >
-                      Add note
-                    </button>
-                    <button
-                      className="legacy-task-status-button"
-                      disabled={isTaskMutationPending || !(noteDrafts[entry.id] ?? "").trim()}
-                      onClick={() => {
-                        void onAddTaskNote(entry.id, (noteDrafts[entry.id] ?? "").trim(), "Resolution").then((saved) => {
-                          if (saved) {
-                            setNoteDrafts((current) => ({
-                              ...current,
-                              [entry.id]: ""
-                            }));
-                          }
-                        });
-                      }}
-                      type="button"
-                    >
-                      {entry.status === "Done" ? "Update resolution" : "Resolve"}
-                    </button>
-                  </div>
-                </div>
-                <div className="legacy-task-handoff-row">
-                  <select
-                    aria-label={`Inline assign ${entry.action}`}
-                    className="legacy-task-assignee-select"
-                    disabled={isTaskMutationPending}
-                    onChange={(event) =>
-                      setHandoffSelections((current) => ({
-                        ...current,
-                        [entry.id]: event.target.value
-                      }))
-                    }
-                    value={handoffSelections[entry.id] ?? entry.assignedUserId ?? ""}
-                  >
-                    <option value="">Unassigned</option>
-                    {operators.map((operator) => (
-                      <option key={operator.id} value={operator.id}>
-                        {operator.name} · {operator.title}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    className="legacy-task-status-button"
-                    disabled={isTaskMutationPending || (handoffSelections[entry.id] ?? entry.assignedUserId ?? "") === (entry.assignedUserId ?? "")}
-                    onClick={() => onAssignTask(entry.id, (handoffSelections[entry.id] ?? entry.assignedUserId ?? "") || null)}
-                    type="button"
-                  >
-                    Hand off
-                  </button>
-                </div>
-              </div>
-              <div className="legacy-task-status-actions">
-                {getTaskStatusActions(entry.status).map((action) => (
-                  <button
-                    className="legacy-task-status-button"
-                    disabled={isTaskMutationPending}
-                    key={`${entry.id}-${action.status}`}
-                    onClick={() => onUpdateStatus(entry.id, action.status)}
-                    type="button"
-                  >
-                    {action.label}
-                  </button>
-                ))}
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-    </section>
-  );
+function parseServiceWorkbenchDate(value: string) {
+  const [dateText] = value.split("·");
+  const parts = dateText.trim().split("/").map((part) => Number.parseInt(part, 10));
+
+  if (parts.length !== 3 || parts.some((part) => Number.isNaN(part))) {
+    return null;
+  }
+
+  const [month, day, year] = parts;
+
+  if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1000) {
+    return null;
+  }
+
+  return {
+    day,
+    monthIndex: month - 1,
+    year
+  };
 }
 
 function buildServiceRepairWorkbenchModel(row: ServiceWorkspaceRow, entries: TaskQueueEntry[], activityEntries: CommandLogEntry[]): ServiceWorkbenchModel {
@@ -9253,8 +14141,9 @@ function buildServiceRepairWorkbenchModel(row: ServiceWorkspaceRow, entries: Tas
   const total = roundWorkbenchCurrency(beforeTax + salesTax);
   const totalDue = roundWorkbenchCurrency(row.roStatus === "Ready to Cash" ? total : total * 0.35);
   const history = buildServiceWorkbenchHistory(row, entries, activityEntries);
+  const isClosedServiceOrder = row.roStatus === "Ready to Cash" || row.roStatus === "Clocked Out";
   const promisedDate = shiftUsDate(row.inDate, row.roStatus === "Ready to Cash" ? 1 : row.roStatus === "In Progress" ? 2 : 4);
-  const closedDate = row.roStatus === "Ready to Cash" ? shiftUsDate(row.inDate, 4) : "";
+  const closedDate = isClosedServiceOrder ? shiftUsDate(row.inDate, 4) : "";
   const notes = `Customer reports ${lowercaseSentence(row.note)}. Verify ${row.category.toLowerCase()} blockers, document all work under RO ${row.roNumber}, and keep ${row.serviceWriter} informed before any customer update.`;
   const transferNotes = `Move ${row.stockNumber} through the ${row.category.toLowerCase()} lane only after parts and labor are posted. Route final release back to ${row.serviceWriter} for customer contact.`;
   const openFollowUps = [
@@ -9473,7 +14362,8 @@ function buildServiceWorkbenchJobs(row: ServiceWorkspaceRow, units: ServiceWorkb
   const supportParts = buildServiceWorkbenchParts(row, seed, "support");
   const releaseParts = buildServiceWorkbenchParts(row, seed, "release");
   const isWarranty = row.category.toLowerCase().includes("warranty");
-  const closedDate = row.roStatus === "Ready to Cash" ? shiftUsDate(row.inDate, 4) : "";
+  const isClosedServiceOrder = row.roStatus === "Ready to Cash" || row.roStatus === "Clocked Out";
+  const closedDate = isClosedServiceOrder ? shiftUsDate(row.inDate, 4) : "";
   const primaryQuantity = row.roStatus === "Ready to Cash" ? 5 : row.roStatus === "Ready to Work" ? 3 : row.roStatus === "In Progress" ? 2 : 1;
   const secondaryQuantity = row.roStatus === "Not Started" ? 1 : 2;
   const releaseQuantity = row.roStatus === "Ready to Cash" ? 1.5 : 0.5;
@@ -10014,29 +14904,6 @@ function buildPolicyTimelineEntries(action: string, rows: AuditWorkspaceRow[], t
     });
 }
 
-function buildServiceUtilityTaskBadges(entry: TaskQueueEntry, activityEntries: CommandLogEntry[]) {
-  const handoffBadges = activityEntries
-    .filter(
-      (activity) =>
-        activity.detail === entry.detail &&
-        (activity.label === `${entry.action} unassigned` || activity.label.startsWith(`${entry.action} handed to `))
-    )
-    .slice(0, 2)
-    .map((activity) => ({
-      label: activity.label.replace(`${entry.action} `, ""),
-      tone: activity.tone
-    }));
-
-  return [
-    { label: `Created ${entry.actorName}`, tone: "neutral" as const },
-    { label: `Owner ${entry.assignedName}`, tone: entry.assignedUserId ? ("accent" as const) : ("neutral" as const) },
-    { label: `Last touch ${entry.lastUpdatedByName}`, tone: "stable" as const },
-    ...(entry.latestCommentByName ? [{ label: `Latest note ${entry.latestCommentByName}`, tone: "neutral" as const }] : []),
-    ...(entry.status === "Done" ? [{ label: "Reopen ready", tone: "stable" as const }] : []),
-    ...handoffBadges
-  ];
-}
-
 function isServiceUtilityQaTask(entry: Pick<TaskQueueEntry, "action" | "detail">) {
   return inlineServiceUtilityActions.has(entry.action) && entry.detail.includes(serviceUtilityQaMarker);
 }
@@ -10196,6 +15063,1654 @@ function ActionWorkflowModal({ isSubmitting, workflow, onChangeField, onClose, o
   );
 }
 
+interface PartsInventoryBoardProps {
+  onOpenDetail: (row: PartsWorkspaceRow) => void;
+  onSendToPurchasePad: (rows: PartsWorkspaceRow[]) => void;
+  onSelectRow: (row: PartsWorkspaceRow) => void;
+  rows: PartsWorkspaceRow[];
+  selectedRowId: string | null;
+  toolRequest: PartsInventoryToolRequest | null;
+}
+
+function PartsInventoryBoard({ onOpenDetail, onSelectRow, onSendToPurchasePad, rows, selectedRowId, toolRequest }: PartsInventoryBoardProps) {
+  const inventoryRows = useMemo(() => buildPartsInventoryRows(rows), [rows]);
+  const [activePartsOnly, setActivePartsOnly] = useState(true);
+  const [actionNotice, setActionNotice] = useState("");
+  const [columnPreset, setColumnPreset] = useState<PartsInventoryColumnPreset>("lookup");
+  const [columnOrder, setColumnOrder] = useState<PartsInventoryColumnKey[]>(() => partsInventoryColumnDefinitions.map((column) => column.key));
+  const [columnWidths, setColumnWidths] = useState<Record<PartsInventoryColumnKey, number>>(() => buildPartsInventoryColumnWidthMap());
+  const [contextMenu, setContextMenu] = useState<PartsInventoryContextMenuState | null>(null);
+  const [draggedColumnKey, setDraggedColumnKey] = useState<PartsInventoryColumnKey | null>(null);
+  const [gridHeight, setGridHeight] = useState(0);
+  const [inspector, setInspector] = useState<PartsInventoryInspectorState | null>(null);
+  const [inactivePartsOnly, setInactivePartsOnly] = useState(false);
+  const [onHandPartsOnly, setOnHandPartsOnly] = useState(false);
+  const [savedView, setSavedView] = useState<PartsInventorySavedView | "">("");
+  const [searchField, setSearchField] = useState<PartsInventorySearchField>("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedInventoryActionRowIds, setSelectedInventoryActionRowIds] = useState<string[]>([]);
+  const [selectedInventoryRowId, setSelectedInventoryRowId] = useState<string | null>(selectedRowId);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [isAdjustOpen, setIsAdjustOpen] = useState(false);
+  const [adjustType, setAdjustType] = useState<"Add" | "Remove" | "Set Exact">("Add");
+  const [adjustQty, setAdjustQty] = useState("");
+  const [adjustReason, setAdjustReason] = useState("Cycle Count");
+  const [adjustNotes, setAdjustNotes] = useState("");
+  const [adjustmentLog, setAdjustmentLog] = useState<Array<{ partNumber: string; type: string; qty: number; reason: string; ts: string }>>([]);
+  const adjustmentLogCount = adjustmentLog.length;
+  const [isCycleCountMode, setIsCycleCountMode] = useState(false);
+  const [countedPartIds, setCountedPartIds] = useState<Set<string>>(new Set());
+  const gridWrapRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const normalizedSearchTerm = searchTerm.trim();
+  const parsedSearch = useMemo(() => parsePartsInventorySearch(normalizedSearchTerm), [normalizedSearchTerm]);
+  const hasInventorySearch = normalizedSearchTerm.length > 0;
+  const matchedInventoryRows = useMemo(
+    () =>
+      hasInventorySearch
+        ? inventoryRows.filter(
+            (row) =>
+              matchesPartsInventoryParsedSearch(row, parsedSearch, searchField) &&
+              matchesPartsInventoryActiveFilter(row, activePartsOnly, inactivePartsOnly, parsedSearch.active) &&
+              matchesPartsInventorySavedView(row, savedView) &&
+              (!onHandPartsOnly || row.onHand > 0)
+          )
+        : [],
+    [activePartsOnly, hasInventorySearch, inactivePartsOnly, inventoryRows, onHandPartsOnly, parsedSearch, savedView, searchField]
+  );
+  const visibleInventoryRows = useMemo(() => matchedInventoryRows.slice(0, 2500), [matchedInventoryRows]);
+  const reorderRows = visibleInventoryRows.filter((row) => row.onHand < 3);
+  const inventoryColumns = useMemo(
+    () =>
+      columnOrder
+        .map((columnKey) => partsInventoryColumnDefinitions.find((column) => column.key === columnKey))
+        .filter((column): column is (typeof partsInventoryColumnDefinitions)[number] => Boolean(column))
+        .filter((column) => column.presets.includes(columnPreset)),
+    [columnOrder, columnPreset]
+  );
+  const inventoryTableMinWidth = inventoryColumns.reduce((total, column) => total + (columnWidths[column.key] ?? 96), 0);
+  const isCapped = matchedInventoryRows.length > visibleInventoryRows.length;
+  const foundLabel = isCapped
+    ? `${visibleInventoryRows.length.toLocaleString()} of ${matchedInventoryRows.length.toLocaleString()}`
+    : visibleInventoryRows.length.toLocaleString();
+  const selectedInventoryActionRows = visibleInventoryRows.filter((row) => selectedInventoryActionRowIds.includes(row.id));
+  const areAllVisibleInventoryRowsSelected =
+    visibleInventoryRows.length > 0 && visibleInventoryRows.every((row) => selectedInventoryActionRowIds.includes(row.id));
+  const selectedInventoryRow = selectedInventoryRowId ? visibleInventoryRows.find((row) => row.id === selectedInventoryRowId) ?? null : null;
+  const contextMenuRow = contextMenu ? visibleInventoryRows.find((row) => row.id === contextMenu.rowId) ?? null : null;
+  const inspectorRow = inspector ? visibleInventoryRows.find((row) => row.id === inspector.rowId) ?? null : null;
+  const rowHeight = 32;
+  const overscanRowCount = 10;
+  const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - overscanRowCount);
+  const renderedRowCount = Math.max(20, Math.ceil((gridHeight || 420) / rowHeight) + overscanRowCount * 2);
+  const endIndex = Math.min(visibleInventoryRows.length, startIndex + renderedRowCount);
+  const virtualInventoryRows = visibleInventoryRows.slice(startIndex, endIndex);
+  const topSpacerHeight = startIndex * rowHeight;
+  const bottomSpacerHeight = Math.max(0, (visibleInventoryRows.length - endIndex) * rowHeight);
+  const confidenceLabels = buildPartsInventoryConfidenceLabels({
+    activePartsOnly,
+    actionNotice,
+    exactMatch: hasInventorySearch && visibleInventoryRows.some((row) => row.partNumber.toLowerCase() === normalizedSearchTerm.toLowerCase()),
+    hasInventorySearch,
+    inactivePartsOnly,
+    isCapped,
+    onHandPartsOnly,
+    parsedSearch,
+    savedView
+  });
+
+  useEffect(() => {
+    setSelectedInventoryRowId((current) =>
+      current && visibleInventoryRows.some((row) => row.id === current) ? current : visibleInventoryRows[0]?.id ?? null
+    );
+  }, [visibleInventoryRows]);
+
+  useEffect(() => {
+    const visibleRowIds = new Set(visibleInventoryRows.map((row) => row.id));
+
+    setSelectedInventoryActionRowIds((current) => {
+      const nextSelection = current.filter((rowId) => visibleRowIds.has(rowId));
+
+      return nextSelection.length === current.length ? current : nextSelection;
+    });
+  }, [visibleInventoryRows]);
+
+  useEffect(() => {
+    const gridWrap = gridWrapRef.current;
+
+    if (!gridWrap) {
+      return;
+    }
+
+    const updateGridHeight = () => setGridHeight(gridWrap.clientHeight);
+    updateGridHeight();
+
+    const resizeObserver = new ResizeObserver(updateGridHeight);
+    resizeObserver.observe(gridWrap);
+
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  useEffect(() => {
+    gridWrapRef.current?.scrollTo({ top: 0 });
+    setScrollTop(0);
+  }, [activePartsOnly, columnPreset, inactivePartsOnly, normalizedSearchTerm, onHandPartsOnly, savedView, searchField]);
+
+  useEffect(() => {
+    if (!actionNotice) {
+      return;
+    }
+
+    const noticeTimer = window.setTimeout(() => setActionNotice(""), 2400);
+
+    return () => window.clearTimeout(noticeTimer);
+  }, [actionNotice]);
+
+  useEffect(() => {
+    if (!toolRequest) {
+      return;
+    }
+
+    handleInventoryAction(toolRequest.tool);
+  }, [toolRequest]);
+
+  useEffect(() => {
+    function handleInventoryKeyboardShortcut(event: KeyboardEvent) {
+      const key = event.key.toLowerCase();
+
+      if (event.key === "Escape") {
+        setContextMenu(null);
+        setInspector(null);
+        return;
+      }
+
+      if (isTextEntryTarget(event.target)) {
+        return;
+      }
+
+      if ((event.ctrlKey && key === "f") || key === "/") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        return;
+      }
+
+      if (event.ctrlKey && ["1", "2", "3", "4"].includes(event.key)) {
+        event.preventDefault();
+        setColumnPreset(partsInventoryColumnPresets[Number(event.key) - 1]?.value ?? "lookup");
+        return;
+      }
+
+      if (!visibleInventoryRows.length) {
+        return;
+      }
+
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        moveInventorySelection(event.key === "ArrowDown" ? 1 : -1);
+        return;
+      }
+
+      if (event.key === "Enter" && selectedInventoryRow) {
+        event.preventDefault();
+        openSelectedInventoryDetail(selectedInventoryRow);
+      }
+    }
+
+    window.addEventListener("keydown", handleInventoryKeyboardShortcut);
+
+    return () => window.removeEventListener("keydown", handleInventoryKeyboardShortcut);
+  }, [selectedInventoryRow, visibleInventoryRows]);
+
+  function moveInventorySelection(direction: 1 | -1) {
+    const currentIndex = selectedInventoryRowId ? visibleInventoryRows.findIndex((row) => row.id === selectedInventoryRowId) : -1;
+    const nextIndex = Math.min(visibleInventoryRows.length - 1, Math.max(0, currentIndex + direction));
+    const nextRow = visibleInventoryRows[nextIndex];
+
+    if (!nextRow) {
+      return;
+    }
+
+    selectInventoryRow(nextRow);
+    gridWrapRef.current?.scrollTo({ top: Math.max(0, nextIndex * rowHeight - rowHeight * 2) });
+  }
+
+  function beginInventoryColumnResize(event: React.PointerEvent<HTMLSpanElement>, columnKey: PartsInventoryColumnKey) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const startX = event.clientX;
+    const startWidth = columnWidths[columnKey] ?? 96;
+
+    function handlePointerMove(pointerEvent: PointerEvent) {
+      setColumnWidths((currentWidths) => ({
+        ...currentWidths,
+        [columnKey]: clampPartsInventoryColumnWidth(startWidth + pointerEvent.clientX - startX)
+      }));
+    }
+
+    function handlePointerUp() {
+      document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("pointerup", handlePointerUp);
+    }
+
+    document.addEventListener("pointermove", handlePointerMove);
+    document.addEventListener("pointerup", handlePointerUp, { once: true });
+  }
+
+  function moveInventoryColumnToTarget(sourceKey: PartsInventoryColumnKey, targetKey: PartsInventoryColumnKey) {
+    if (sourceKey === "select" || targetKey === "select") {
+      return;
+    }
+
+    if (sourceKey === targetKey) {
+      return;
+    }
+
+    const sourceColumn = partsInventoryColumnDefinitions.find((column) => column.key === sourceKey);
+
+    setColumnOrder((currentOrder) => {
+      const sourceIndex = currentOrder.indexOf(sourceKey);
+      const targetIndex = currentOrder.indexOf(targetKey);
+
+      if (sourceIndex === -1 || targetIndex === -1) {
+        return currentOrder;
+      }
+
+      const nextOrder = [...currentOrder];
+      const [source] = nextOrder.splice(sourceIndex, 1);
+      const adjustedTargetIndex = nextOrder.indexOf(targetKey);
+      const insertIndex = sourceIndex < targetIndex ? adjustedTargetIndex + 1 : adjustedTargetIndex;
+      nextOrder.splice(insertIndex, 0, source);
+
+      return nextOrder;
+    });
+
+    if (sourceColumn) {
+      setActionNotice(`${sourceColumn.label} moved.`);
+    }
+  }
+
+  function toggleInventoryActionRow(event: React.MouseEvent<HTMLInputElement>, row: PartsInventoryRow) {
+    event.stopPropagation();
+    selectInventoryRow(row);
+    setSelectedInventoryActionRowIds((current) =>
+      current.includes(row.id) ? current.filter((rowId) => rowId !== row.id) : [...current, row.id]
+    );
+  }
+
+  function toggleAllVisibleInventoryRows(event: React.ChangeEvent<HTMLInputElement>) {
+    const visibleRowIds = visibleInventoryRows.map((row) => row.id);
+
+    setSelectedInventoryActionRowIds(event.target.checked ? visibleRowIds : []);
+  }
+
+  function sendSelectedInventoryRowsToPurchasePad() {
+    if (selectedInventoryActionRows.length === 0) {
+      setActionNotice("Select inventory rows first.");
+      return;
+    }
+
+    onSendToPurchasePad(selectedInventoryActionRows.map(partsInventoryRowToPurchasePadRow));
+    setActionNotice(`${selectedInventoryActionRows.length} part${selectedInventoryActionRows.length === 1 ? "" : "s"} sent to Purchase Pad.`);
+  }
+
+  function openSelectedInventoryDetail(row: PartsInventoryRow) {
+    selectInventoryRow(row);
+    onOpenDetail(partsInventoryRowToWorkspaceRow(row));
+    setActionNotice(`${row.partNumber} detail open.`);
+  }
+
+  function selectInventoryRow(row: PartsInventoryRow) {
+    setSelectedInventoryRowId(row.id);
+    onSelectRow(partsInventoryRowToWorkspaceRow(row));
+  }
+
+  function applySavedView(nextSavedView: PartsInventorySavedView | "") {
+    setSavedView(nextSavedView);
+
+    if (nextSavedView && !normalizedSearchTerm) {
+      setSearchTerm("%");
+    }
+
+    switch (nextSavedView) {
+      case "active":
+        setActivePartsOnly(true);
+        setInactivePartsOnly(false);
+        setOnHandPartsOnly(false);
+        setColumnPreset("lookup");
+        return;
+      case "onHand":
+        setActivePartsOnly(true);
+        setInactivePartsOnly(false);
+        setOnHandPartsOnly(true);
+        setColumnPreset("stock");
+        return;
+      case "yamaha":
+        setActivePartsOnly(true);
+        setInactivePartsOnly(false);
+        setOnHandPartsOnly(false);
+        setColumnPreset("lookup");
+        return;
+      case "noBin":
+        setActivePartsOnly(true);
+        setInactivePartsOnly(false);
+        setOnHandPartsOnly(false);
+        setColumnPreset("stock");
+        return;
+      case "superseded":
+        setActivePartsOnly(true);
+        setInactivePartsOnly(false);
+        setOnHandPartsOnly(false);
+        setColumnPreset("supersession");
+        return;
+      case "highValue":
+        setActivePartsOnly(true);
+        setInactivePartsOnly(false);
+        setOnHandPartsOnly(false);
+        setColumnPreset("pricing");
+        return;
+      case "":
+        return;
+    }
+  }
+
+  function openInventoryContextMenu(event: React.MouseEvent<HTMLTableRowElement>, row: PartsInventoryRow) {
+    event.preventDefault();
+    selectInventoryRow(row);
+    setInspector(null);
+    setContextMenu({
+      rowId: row.id,
+      x: Math.max(8, Math.min(event.clientX, window.innerWidth - 190)),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - 248))
+    });
+  }
+
+  function handleInventoryAction(action: string, row = selectedInventoryRow) {
+    const normalizedAction = action.toLowerCase();
+    setContextMenu(null);
+    setInspector(null);
+
+    if (normalizedAction.includes("new")) {
+      setActionNotice("New part entry staged.");
+      return;
+    }
+
+    if (!row) {
+      setActionNotice("Search and select a part first.");
+      return;
+    }
+
+    if (normalizedAction.includes("detail")) {
+      openSelectedInventoryDetail(row);
+      return;
+    }
+
+    if (normalizedAction.includes("delete")) {
+      setActionNotice(`${row.partNumber} delete queued.`);
+      return;
+    }
+
+    if (normalizedAction.includes("duplicate")) {
+      void navigator.clipboard?.writeText(row.partNumber);
+      setActionNotice(`${row.partNumber} duplicate staged.`);
+      return;
+    }
+
+    if (normalizedAction.includes("copy")) {
+      void navigator.clipboard?.writeText(row.partNumber);
+      setActionNotice(`${row.partNumber} copied.`);
+      return;
+    }
+
+    if (normalizedAction.includes("supplier")) {
+      setSearchField("supplier");
+      setSearchTerm(row.supplier);
+      setActionNotice(`${row.supplier} supplier view.`);
+      return;
+    }
+
+    if (normalizedAction.includes("bin")) {
+      setSearchField("bin");
+      setSearchTerm(row.bin || "%");
+      setActionNotice(`${row.bin || "No bin"} view.`);
+    }
+  }
+
+  function handleInventoryExport(kind: PartsInventoryExportKind, format: PartsInventoryExportFormat, row = selectedInventoryRow) {
+    setContextMenu(null);
+
+    if (!row) {
+      setActionNotice("Select a part before exporting history.");
+      return;
+    }
+
+    downloadPartsInventoryExport(row, kind, format);
+    setActionNotice(`${format.toUpperCase()} export created for ${row.partNumber}.`);
+  }
+
+  function updateInventoryInspector(
+    event: React.FocusEvent<HTMLElement> | React.MouseEvent<HTMLElement>,
+    row: PartsInventoryRow,
+    kind: PartsInventoryInspectorKind
+  ) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const pointerEvent = event.nativeEvent instanceof MouseEvent ? event.nativeEvent : null;
+    const x = pointerEvent ? pointerEvent.clientX + 12 : rect.right + 8;
+    const y = pointerEvent ? pointerEvent.clientY + 12 : rect.bottom + 8;
+
+    setInspector({
+      kind,
+      rowId: row.id,
+      x: Math.max(8, Math.min(x, window.innerWidth - 260)),
+      y: Math.max(8, Math.min(y, window.innerHeight - 122))
+    });
+  }
+
+  function renderInventoryCell(row: PartsInventoryRow, column: (typeof partsInventoryColumnDefinitions)[number]) {
+    if (column.key === "select") {
+      return (
+        <input
+          aria-label={`Select ${row.partNumber} for Purchase Pad`}
+          checked={selectedInventoryActionRowIds.includes(row.id)}
+          onClick={(event) => toggleInventoryActionRow(event, row)}
+          readOnly
+          type="checkbox"
+        />
+      );
+    }
+
+    if (column.key === "activeMarker") {
+      return <span className="legacy-parts-inventory-cell-text">{row.active ? "*" : ""}</span>;
+    }
+
+    const value = row[column.key];
+    const displayValue = typeof value === "number" ? value.toLocaleString() : value;
+    const inspectorKind = getPartsInventoryInspectorKind(column.key);
+
+    if (!inspectorKind) {
+      return <span className="legacy-parts-inventory-cell-text">{displayValue}</span>;
+    }
+
+    return (
+      <button
+        className="legacy-parts-inventory-cell-link"
+        onBlur={() => setInspector(null)}
+        onFocus={(event) => updateInventoryInspector(event, row, inspectorKind)}
+        onMouseEnter={(event) => updateInventoryInspector(event, row, inspectorKind)}
+        onMouseLeave={() => setInspector(null)}
+        onMouseMove={(event) => updateInventoryInspector(event, row, inspectorKind)}
+        type="button"
+      >
+        {displayValue || "-"}
+      </button>
+    );
+  }
+
+  return (
+    <div
+      className={`legacy-data-window legacy-parts-inventory-workspace is-preset-${columnPreset}`}
+      onClick={() => {
+        setContextMenu(null);
+        setInspector(null);
+      }}
+    >
+      {reorderRows.length > 0 && (
+        <div className="legacy-parts-reorder-banner">
+          <span className="legacy-parts-reorder-banner-text">⚠ {reorderRows.length} part(s) are below minimum stock.</span>
+          <div className="legacy-parts-reorder-banner-actions">
+            <button className="legacy-task-status-button" onClick={() => setSearchTerm("")} type="button">View All</button>
+          </div>
+        </div>
+      )}
+      <section className="legacy-info-card legacy-parts-inventory-search">
+        <div className="legacy-parts-inventory-search-row">
+          <label className="legacy-parts-inventory-search-field">
+            <span>Search</span>
+            <input
+              autoFocus
+              ref={searchInputRef}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Type here to search..."
+              type="text"
+              value={searchTerm}
+            />
+          </label>
+          <label className="legacy-parts-inventory-select">
+            <select onChange={(event) => setSearchField(event.target.value as PartsInventorySearchField)} value={searchField}>
+              {partsInventorySearchFieldOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="legacy-parts-inventory-cap">{isCapped ? "Showing maximum of 2500 results." : ""}</span>
+          <span className="legacy-parts-inventory-found">Found: {foundLabel}</span>
+        </div>
+        <div className="legacy-parts-inventory-filter-row">
+          <span aria-hidden="true" className="legacy-parts-inventory-rule" />
+          <label>
+            <input checked={activePartsOnly} onChange={(event) => setActivePartsOnly(event.target.checked)} type="checkbox" /> Active Parts
+          </label>
+          {selectedInventoryActionRows.length > 0 ? (
+            <button className="legacy-parts-inventory-send-pad" onClick={sendSelectedInventoryRowsToPurchasePad} type="button">
+              Send to Purchase Pad
+            </button>
+          ) : (
+            <span aria-hidden="true" className="legacy-parts-inventory-send-pad-placeholder" />
+          )}
+          <span aria-hidden="true" className="legacy-parts-inventory-divider" />
+          <label>
+            <input checked={inactivePartsOnly} onChange={(event) => setInactivePartsOnly(event.target.checked)} type="checkbox" /> Inactive Parts
+          </label>
+          <span aria-hidden="true" className="legacy-parts-inventory-divider" />
+          <label>
+            <input checked={onHandPartsOnly} onChange={(event) => setOnHandPartsOnly(event.target.checked)} type="checkbox" /> On Hand Parts
+          </label>
+        </div>
+        <div className="legacy-parts-inventory-power-row">
+          <label className="legacy-parts-inventory-select">
+            <span>View</span>
+            <select onChange={(event) => applySavedView(event.target.value as PartsInventorySavedView | "")} value={savedView}>
+              <option value="">Manual</option>
+              {partsInventorySavedViews.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="legacy-parts-inventory-select">
+            <span>Columns</span>
+            <select onChange={(event) => setColumnPreset(event.target.value as PartsInventoryColumnPreset)} value={columnPreset}>
+              {partsInventoryColumnPresets.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="legacy-parts-inventory-confidence-strip">
+            {confidenceLabels.map((label) => (
+              <span key={label}>{label}</span>
+            ))}
+          </div>
+          <button disabled={!selectedInventoryRow} onClick={() => handleInventoryAction("Detail")} type="button">
+            Detail
+          </button>
+          <button
+            disabled={!selectedInventoryRow}
+            onClick={() => {
+              if (selectedInventoryRow) setIsAdjustOpen(v => !v);
+            }}
+            style={{ marginLeft: 4 }}
+            type="button"
+          >
+            Adjust Qty
+          </button>
+          <button
+            onClick={() => {
+              if (!isCycleCountMode) {
+                setIsCycleCountMode(true);
+                setCountedPartIds(new Set());
+              } else {
+                const n = countedPartIds.size;
+                setIsCycleCountMode(false);
+                setCountedPartIds(new Set());
+                setActionNotice(`Cycle Count completed for ${n} part${n === 1 ? "" : "s"}.`);
+              }
+            }}
+            style={{ marginLeft: 4 }}
+            type="button"
+          >
+            {isCycleCountMode ? `Mark Counted (${countedPartIds.size})` : "Cycle Count"}
+          </button>
+        </div>
+      </section>
+
+      {isAdjustOpen && selectedInventoryRow && (
+        <div className="legacy-adjust-panel">
+          <div className="legacy-adjust-panel-header">
+            <span>Adjust Quantity — <strong>{selectedInventoryRow.partNumber}</strong> {selectedInventoryRow.description}</span>
+            <button className="legacy-task-status-button" onClick={() => setIsAdjustOpen(false)} type="button">✕</button>
+          </div>
+          <div style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.8rem" }}>Current On-Hand: <strong style={{ color: "#fff" }}>{selectedInventoryRow.onHand}</strong></div>
+          <div className="legacy-adjust-grid">
+            <div className="legacy-adjust-field">
+              <span>Adjustment Type</span>
+              <select onChange={e => setAdjustType(e.target.value as "Add" | "Remove" | "Set Exact")} value={adjustType}>
+                <option>Add</option>
+                <option>Remove</option>
+                <option>Set Exact</option>
+              </select>
+            </div>
+            <div className="legacy-adjust-field">
+              <span>Quantity</span>
+              <input onChange={e => setAdjustQty(e.target.value)} placeholder="0" type="number" value={adjustQty} />
+            </div>
+            <div className="legacy-adjust-field">
+              <span>Reason Code</span>
+              <select onChange={e => setAdjustReason(e.target.value)} value={adjustReason}>
+                <option>Cycle Count</option>
+                <option>Damaged</option>
+                <option>Found</option>
+                <option>Theft</option>
+                <option>Return</option>
+                <option>Correction</option>
+              </select>
+            </div>
+            <div className="legacy-adjust-field" style={{ gridColumn: "1 / -1" }}>
+              <span>Notes (optional)</span>
+              <textarea onChange={e => setAdjustNotes(e.target.value)} placeholder="Additional notes…" value={adjustNotes} />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              className="legacy-task-status-button"
+              disabled={!adjustQty}
+              onClick={() => {
+                const qty = parseInt(adjustQty, 10) || 0;
+                const entry = { partNumber: selectedInventoryRow.partNumber, type: adjustType, qty, reason: adjustReason, ts: new Date().toLocaleTimeString() };
+                setAdjustmentLog(log => [entry, ...log]);
+                setActionNotice(`${selectedInventoryRow.partNumber}: Qty adjusted (${adjustType === "Remove" ? "-" : adjustType === "Add" ? "+" : "="}${qty}). Reason: ${adjustReason}.`);
+                setAdjustQty("");
+                setAdjustNotes("");
+                setIsAdjustOpen(false);
+              }}
+              type="button"
+            >
+              Apply Adjustment
+            </button>
+            <button className="legacy-task-status-button" onClick={() => setIsAdjustOpen(false)} type="button">Cancel</button>
+          </div>
+          {adjustmentLogCount > 0 && <p className="legacy-adjust-log-count">Session adjustments: {adjustmentLogCount}</p>}
+        </div>
+      )}
+
+      <section className="legacy-info-card legacy-parts-inventory-grid-panel">
+        <div className="legacy-parts-inventory-grid-wrap" onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)} ref={gridWrapRef}>
+          <table className="legacy-grid legacy-parts-inventory-grid" style={{ minWidth: inventoryTableMinWidth }}>
+            <colgroup>
+              {inventoryColumns.map((column) => (
+                <col key={column.key} style={{ width: columnWidths[column.key] ?? 96 }} />
+              ))}
+            </colgroup>
+            <thead>
+              <tr>
+                {inventoryColumns.map((column) => (
+                  <th
+                    className={draggedColumnKey === column.key ? "is-column-dragging" : undefined}
+                    key={column.key}
+                    onDragOver={(event) => {
+                      if (draggedColumnKey && draggedColumnKey !== column.key) {
+                        event.preventDefault();
+                      }
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      const sourceKey = (event.dataTransfer.getData("text/plain") || draggedColumnKey) as PartsInventoryColumnKey | null;
+
+                      if (sourceKey) {
+                        moveInventoryColumnToTarget(sourceKey, column.key);
+                      }
+
+                      setDraggedColumnKey(null);
+                    }}
+                  >
+                    {column.key === "select" ? (
+                      <label className="legacy-parts-inventory-spp-header" title="Select all visible rows for Purchase Pad">
+                        <span>{column.label}</span>
+                        <input
+                          aria-label="Select all visible inventory rows"
+                          checked={areAllVisibleInventoryRowsSelected}
+                          onChange={toggleAllVisibleInventoryRows}
+                          type="checkbox"
+                        />
+                      </label>
+                    ) : (
+                      <>
+                        <button
+                          draggable
+                          onDragEnd={() => setDraggedColumnKey(null)}
+                          onDragStart={(event) => {
+                            event.dataTransfer.effectAllowed = "move";
+                            event.dataTransfer.setData("text/plain", column.key);
+                            setDraggedColumnKey(column.key);
+                          }}
+                          title={`Drag ${column.label} left or right`}
+                          type="button"
+                        >
+                          {column.label}
+                        </button>
+                        <span
+                          aria-hidden="true"
+                          className="legacy-parts-inventory-resize-grip"
+                          onPointerDown={(event) => beginInventoryColumnResize(event, column.key)}
+                        />
+                      </>
+                    )}
+                  </th>
+                ))}
+              </tr>
+              <tr aria-hidden="true" className="legacy-parts-inventory-static-header-row">
+                <th>SPP</th>
+                <th>Part Number</th>
+                <th>Secondary Number</th>
+                <th>UPC</th>
+                <th>Description ▲</th>
+                <th>Supplier</th>
+                <th>Category</th>
+                <th>On Hand</th>
+                <th>Price</th>
+                <th>Bin</th>
+                <th>Active</th>
+                <th>Superseded To</th>
+                <th>Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topSpacerHeight > 0 ? (
+                <tr className="legacy-parts-inventory-spacer-row">
+                  <td colSpan={inventoryColumns.length} style={{ height: topSpacerHeight }} />
+                </tr>
+              ) : null}
+              {virtualInventoryRows.map((row) => (
+                <tr
+                  className={`tone-${row.tone}${selectedInventoryRowId === row.id ? " is-selected" : ""}`}
+                  key={row.id}
+                  onClick={() => selectInventoryRow(row)}
+                  onContextMenu={(event) => openInventoryContextMenu(event, row)}
+                  onDoubleClick={() => {
+                    openSelectedInventoryDetail(row);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      openSelectedInventoryDetail(row);
+                    }
+
+                    if (event.key === " ") {
+                      event.preventDefault();
+                      selectInventoryRow(row);
+                    }
+                  }}
+                  tabIndex={0}
+                >
+                  {inventoryColumns.map((column) => (
+                    <td className="align-center" key={column.key}>
+                      {renderInventoryCell(row, column)}
+                    </td>
+                  ))}
+                  {isCycleCountMode && (
+                    <td className="legacy-cycle-count-col">
+                      <input
+                        checked={countedPartIds.has(row.id)}
+                        onChange={e => {
+                          setCountedPartIds(prev => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.add(row.id); else next.delete(row.id);
+                            return next;
+                          });
+                        }}
+                        onClick={e => e.stopPropagation()}
+                        type="checkbox"
+                      />
+                    </td>
+                  )}
+                </tr>
+              ))}
+              {bottomSpacerHeight > 0 ? (
+                <tr className="legacy-parts-inventory-spacer-row">
+                  <td colSpan={inventoryColumns.length} style={{ height: bottomSpacerHeight }} />
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      {contextMenuRow && contextMenu ? (
+        <div
+          className="legacy-parts-inventory-context-menu"
+          onClick={(event) => event.stopPropagation()}
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <strong>{contextMenuRow.partNumber}</strong>
+          <button onClick={() => handleInventoryAction("Detail", contextMenuRow)} type="button">
+            Open Detail
+          </button>
+          <button onClick={() => handleInventoryAction("Copy", contextMenuRow)} type="button">
+            Copy Part Number
+          </button>
+          <button onClick={() => handleInventoryAction("Supplier", contextMenuRow)} type="button">
+            Supplier Only
+          </button>
+          <button onClick={() => handleInventoryAction("Bin", contextMenuRow)} type="button">
+            Bin Only
+          </button>
+          <div className="legacy-parts-inventory-context-split">
+            <span>Export History Sales</span>
+            <button onClick={() => handleInventoryExport("sales", "csv", contextMenuRow)} type="button">
+              CSV
+            </button>
+            <button onClick={() => handleInventoryExport("sales", "pdf", contextMenuRow)} type="button">
+              PDF
+            </button>
+          </div>
+          <div className="legacy-parts-inventory-context-split">
+            <span>Export Tracking History</span>
+            <button onClick={() => handleInventoryExport("tracking", "csv", contextMenuRow)} type="button">
+              CSV
+            </button>
+            <button onClick={() => handleInventoryExport("tracking", "pdf", contextMenuRow)} type="button">
+              PDF
+            </button>
+          </div>
+          <button onClick={() => handleInventoryAction("Duplicate", contextMenuRow)} type="button">
+            Duplicate
+          </button>
+          <button className="is-danger" onClick={() => handleInventoryAction("Delete", contextMenuRow)} type="button">
+            Delete
+          </button>
+        </div>
+      ) : null}
+      {inspectorRow && inspector ? (
+        <div className="legacy-parts-inventory-inspector" style={{ left: inspector.x, top: inspector.y }}>
+          <strong>{buildPartsInventoryInspectorTitle(inspectorRow, inspector.kind)}</strong>
+          {buildPartsInventoryInspectorLines(inspectorRow, inspector.kind).map((line) => (
+            <span key={line}>{line}</span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PartsInventoryDetailPage({
+  onSendToPurchasePad,
+  row
+}: {
+  onSendToPurchasePad: (rows: PartsWorkspaceRow[]) => void;
+  row: PartsInventoryRow;
+}) {
+  const [activeDetailTab, setActiveDetailTab] = useState<PartsInventoryDetailTab>("general");
+  const [detailActionMode, setDetailActionMode] = useState<"" | "reminder" | "schedule">("");
+  const [detailActionNotice, setDetailActionNotice] = useState("");
+  const [managerNote, setManagerNote] = useState("");
+  const [reminderWindow, setReminderWindow] = useState("7 days");
+  const [scheduleDate, setScheduleDate] = useState(() => buildPartsInventoryScheduleInputDate(1));
+  const [scheduleTime, setScheduleTime] = useState("08:00");
+  const [detailDraft, setDetailDraft] = useState(() => buildPartsInventoryDetailDraft(row));
+  const [savedDetailDraft, setSavedDetailDraft] = useState(() => buildPartsInventoryDetailDraft(row));
+  const [detailEditHistoryRows, setDetailEditHistoryRows] = useState<Array<Record<string, string>>>([]);
+  const editableRow = useMemo(() => buildPartsInventoryEditableRow(row, detailDraft), [detailDraft, row]);
+  const metrics = buildPartsInventoryDetailMetrics(editableRow, detailDraft.marginPercent);
+  const isDetailDirty = useMemo(() => !arePartsInventoryDetailDraftsEqual(detailDraft, savedDetailDraft), [detailDraft, savedDetailDraft]);
+  const recordIndex = (buildPartsInventoryDateSeed(editableRow) % 1056) + 1;
+  const detailBadges = buildPartsInventoryDetailBadges(editableRow);
+
+  useEffect(() => {
+    const nextDraft = buildPartsInventoryDetailDraft(row);
+    setDetailDraft(nextDraft);
+    setSavedDetailDraft(nextDraft);
+    setDetailEditHistoryRows([]);
+  }, [row.id]);
+
+  function updateDetailDraft(field: keyof PartsInventoryDetailDraft, value: string) {
+    setDetailDraft((current) => {
+      const nextDraft = {
+        ...current,
+        [field]: value
+      };
+
+      if (field === "price" || field === "cost") {
+        nextDraft.marginPercent = formatPartsInventoryMarginPercentFromValues(nextDraft.price, nextDraft.cost);
+      }
+
+      return nextDraft;
+    });
+  }
+
+  function updateMarginPercent(value: string) {
+    const marginPercent = Number.parseFloat(value.replace(/%/g, ""));
+
+    if (!Number.isFinite(marginPercent)) {
+      return;
+    }
+
+    setDetailDraft((current) => {
+      const boundedMargin = Math.min(99.5, Math.max(0, marginPercent));
+      const cost = parsePartsCurrency(current.cost);
+      const nextPrice = cost > 0 ? cost / (1 - boundedMargin / 100) : 0;
+
+      return {
+        ...current,
+        marginPercent: formatPartsInventoryMarginPercentInput(value),
+        price: formatWorkbenchCurrency(roundWorkbenchCurrency(nextPrice))
+      };
+    });
+  }
+
+  function handleSendToPurchasePad() {
+    onSendToPurchasePad([partsInventoryRowToPurchasePadRow(editableRow)]);
+    setDetailActionNotice(`${editableRow.partNumber} sent to Purchase Pad.`);
+    setDetailActionMode("");
+  }
+
+  function handleScheduleToPurchasePad() {
+    const scheduledFor = formatPartsInventoryScheduleDateTime(scheduleDate, scheduleTime);
+    const note = managerNote.trim();
+
+    setDetailActionNotice(`${editableRow.partNumber} scheduled for ${scheduledFor}${note ? `: ${note}` : "."}`);
+    setDetailActionMode("");
+  }
+
+  function handleSetReminder() {
+    const note = managerNote.trim();
+    setDetailActionNotice(`${editableRow.partNumber} reminder set for ${reminderWindow}${note ? `: ${note}` : "."}`);
+    setDetailActionMode("");
+  }
+
+  function handleCopyPartNumber() {
+    void navigator.clipboard?.writeText(editableRow.partNumber);
+    setDetailActionNotice(`${editableRow.partNumber} copied.`);
+  }
+
+  function handleExportHistory() {
+    downloadPartsInventoryExport(editableRow, "tracking", "csv");
+    setDetailActionNotice(`${editableRow.partNumber} detail history CSV exported.`);
+  }
+
+  function handleSaveDetail() {
+    const editRows = buildPartsInventoryDetailEditHistoryRows(row, savedDetailDraft, detailDraft);
+
+    if (editRows.length > 0) {
+      setDetailEditHistoryRows((current) => [...editRows, ...current]);
+    }
+
+    setSavedDetailDraft(detailDraft);
+    setDetailActionNotice(`${editableRow.partNumber} saved.`);
+  }
+
+  return (
+    <div className="legacy-data-window legacy-parts-inventory-detail-page">
+      <div className="legacy-parts-inventory-detail-tabs">
+        {partsInventoryDetailTabs.map((tab) => (
+          <button
+            className={activeDetailTab === tab.value ? "is-active" : undefined}
+            key={tab.value}
+            onClick={() => setActiveDetailTab(tab.value)}
+            type="button"
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <section className="legacy-parts-inventory-detail-action-strip">
+        <div className="legacy-parts-inventory-detail-badges">
+          {detailBadges.map((badge) => (
+            <span className={`tone-${badge.tone}`} key={badge.label}>
+              {badge.label}
+            </span>
+          ))}
+        </div>
+        <div className="legacy-parts-inventory-detail-action-buttons">
+          <button onClick={handleSendToPurchasePad} type="button">
+            Send to Purchase Pad
+          </button>
+          <button onClick={() => setDetailActionMode((current) => (current === "schedule" ? "" : "schedule"))} type="button">
+            Schedule Order
+          </button>
+          <button onClick={() => setDetailActionMode((current) => (current === "reminder" ? "" : "reminder"))} type="button">
+            Set Reminder
+          </button>
+          <button onClick={handleCopyPartNumber} type="button">
+            Copy Part #
+          </button>
+          <button onClick={handleExportHistory} type="button">
+            Export History
+          </button>
+        </div>
+        {detailActionNotice ? <span className="legacy-parts-inventory-detail-action-notice">{detailActionNotice}</span> : null}
+        {detailActionMode ? (
+          <div className="legacy-parts-inventory-detail-action-drawer">
+            {detailActionMode === "schedule" ? (
+              <>
+                <span>Schedule Part Order</span>
+                <input aria-label="Schedule order date" onChange={(event) => setScheduleDate(event.target.value)} type="date" value={scheduleDate} />
+                <input aria-label="Schedule order time" onChange={(event) => setScheduleTime(event.target.value)} type="time" value={scheduleTime} />
+                <input onChange={(event) => setManagerNote(event.target.value)} placeholder="Optional manager note" value={managerNote} />
+                <button onClick={handleScheduleToPurchasePad} type="button">
+                  Schedule
+                </button>
+              </>
+            ) : (
+              <>
+                <span>Reminder</span>
+                <select onChange={(event) => setReminderWindow(event.target.value)} value={reminderWindow}>
+                  <option>Tomorrow</option>
+                  <option>3 days</option>
+                  <option>7 days</option>
+                  <option>30 days</option>
+                </select>
+                <input onChange={(event) => setManagerNote(event.target.value)} placeholder="Optional reminder note" value={managerNote} />
+                <button onClick={handleSetReminder} type="button">
+                  Set
+                </button>
+              </>
+            )}
+          </div>
+        ) : null}
+      </section>
+
+      <div className={`legacy-parts-inventory-detail-content is-tab-${activeDetailTab}`}>
+        {activeDetailTab === "general" ? (
+          <PartsInventoryDetailGeneralTab
+            draft={detailDraft}
+            metrics={metrics}
+            onDraftChange={updateDetailDraft}
+            onMarginPercentChange={updateMarginPercent}
+            row={editableRow}
+          />
+        ) : activeDetailTab === "serials" ? (
+          <PartsInventoryDetailSerialNumbersTab row={editableRow} />
+        ) : activeDetailTab === "similar" ? (
+          <PartsInventoryDetailSimilarPartsTab row={editableRow} />
+        ) : activeDetailTab === "history" ? (
+          <PartsInventoryDetailHistoryOrdersTab row={editableRow} />
+        ) : (
+          <PartsInventoryDetailHistoryTab editRows={detailEditHistoryRows} row={editableRow} />
+        )}
+      </div>
+
+      <footer className="legacy-parts-inventory-detail-footer">
+        <div className="legacy-parts-inventory-detail-nav-buttons">
+          <button type="button">Previous</button>
+          <button type="button">Next</button>
+        </div>
+        <span>{recordIndex} of 1056</span>
+        <div className="legacy-parts-inventory-detail-nav-buttons is-right">
+          <button
+            className={isDetailDirty ? "is-unsaved" : undefined}
+            onClick={handleSaveDetail}
+            title={isDetailDirty ? "Unsaved edits. Click Save to keep these changes." : "Save"}
+            type="button"
+          >
+            Save
+          </button>
+          <button type="button">Cancel</button>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+function PartsInventoryDetailGeneralTab({
+  draft,
+  metrics,
+  onDraftChange,
+  onMarginPercentChange,
+  row
+}: {
+  draft: PartsInventoryDetailDraft;
+  metrics: ReturnType<typeof buildPartsInventoryDetailMetrics>;
+  onDraftChange: (field: keyof PartsInventoryDetailDraft, value: string) => void;
+  onMarginPercentChange: (value: string) => void;
+  row: PartsInventoryRow;
+}) {
+  const [activeInsightTab, setActiveInsightTab] = useState<"salesCalendar" | "orderSignals">("salesCalendar");
+  const [isMarginPercentEditing, setIsMarginPercentEditing] = useState(false);
+  const [marginPercentText, setMarginPercentText] = useState(metrics.marginPercent);
+  const [salesCalendarYear, setSalesCalendarYear] = useState(() => buildPartsInventoryCurrentSalesCalendarYear());
+  const salesCalendarRows = buildPartsInventorySalesCalendarRows(row, salesCalendarYear);
+  const salesCalendarYearOptions = buildPartsInventorySalesCalendarYearOptions(salesCalendarYear);
+  const smartOrdering = buildPartsInventorySmartOrderingSummary(row);
+  const activityTimeline = buildPartsInventoryActivityTimeline(row, metrics, smartOrdering);
+
+  useEffect(() => {
+    if (!isMarginPercentEditing) {
+      setMarginPercentText(metrics.marginPercent);
+    }
+  }, [isMarginPercentEditing, metrics.marginPercent]);
+
+  function commitMarginPercentChange() {
+    const nextValue = marginPercentText.trim();
+
+    if (!nextValue) {
+      setMarginPercentText(metrics.marginPercent);
+      setIsMarginPercentEditing(false);
+      return;
+    }
+
+    onMarginPercentChange(nextValue);
+    setIsMarginPercentEditing(false);
+  }
+
+  function handleMarginPercentFocus(event: ReactFocusEvent<HTMLInputElement>) {
+    setIsMarginPercentEditing(true);
+    setMarginPercentText(metrics.marginPercent);
+    event.currentTarget.select();
+  }
+
+  function handleMarginPercentKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      event.currentTarget.blur();
+    }
+
+    if (event.key === "Escape") {
+      setMarginPercentText(metrics.marginPercent);
+      setIsMarginPercentEditing(false);
+      event.currentTarget.blur();
+    }
+  }
+
+  return (
+    <>
+      <section className="legacy-parts-inventory-detail-top">
+        <div className="legacy-parts-inventory-detail-panel legacy-parts-inventory-detail-part-info">
+          <strong className="legacy-parts-inventory-detail-panel-title">Part Info</strong>
+          <div className="legacy-parts-inventory-detail-part-grid">
+            <div className="legacy-parts-inventory-detail-fields">
+              <PartsInventoryDetailField label="Part Number" onChange={(value) => onDraftChange("partNumber", value)} value={draft.partNumber} />
+              <PartsInventoryDetailField label="Secondary" onChange={(value) => onDraftChange("secondaryNumber", value)} value={draft.secondaryNumber} />
+              <PartsInventoryDetailField label="UPC Code" onChange={(value) => onDraftChange("upc", value)} value={draft.upc} />
+              <PartsInventoryDetailField isLink label="Supplier" value={formatPartsInventorySupplier(row)} />
+              <PartsInventoryDetailField isLink label="Category" value={formatPartsInventoryCategory(row)} />
+              <PartsInventoryDetailField label="Description" onChange={(value) => onDraftChange("description", value)} value={draft.description} />
+              <PartsInventoryDetailField label="Movement Code" onChange={(value) => onDraftChange("movementCode", value)} value={draft.movementCode} />
+              <PartsInventoryDetailField isLink label="Superseded To" value={row.supersededTo} />
+            </div>
+
+            <div className="legacy-parts-inventory-detail-checks">
+              <label>
+                <input checked={row.active} readOnly type="checkbox" /> Active
+              </label>
+              <label>
+                <input checked={false} readOnly type="checkbox" /> Non-Inventory Item
+              </label>
+              <label>
+                <input checked={false} readOnly type="checkbox" /> Serialized Part
+              </label>
+            </div>
+
+            <div className="legacy-parts-inventory-detail-bins">
+              <PartsInventoryDetailField label="Bin 1" onChange={(value) => onDraftChange("bin1", value)} value={draft.bin1} />
+              <PartsInventoryDetailField label="Bin 2" onChange={(value) => onDraftChange("bin2", value)} value={draft.bin2} />
+              <PartsInventoryDetailField label="Bin 3" onChange={(value) => onDraftChange("bin3", value)} value={draft.bin3} />
+            </div>
+          </div>
+          <section className="legacy-parts-inventory-detail-insights">
+            <span className="legacy-parts-inventory-detail-insights-label">Comments</span>
+            <div className="legacy-parts-inventory-detail-insights-body">
+              <div className="legacy-parts-inventory-detail-insight-tabs">
+                <button
+                  className={activeInsightTab === "salesCalendar" ? "is-active" : undefined}
+                  onClick={() => setActiveInsightTab("salesCalendar")}
+                  type="button"
+                >
+                  Sales Calendar
+                </button>
+                <button
+                  className={activeInsightTab === "orderSignals" ? "is-active" : undefined}
+                  onClick={() => setActiveInsightTab("orderSignals")}
+                  type="button"
+                >
+                  Order Signals
+                </button>
+                {activeInsightTab === "salesCalendar" ? (
+                  <select
+                    aria-label="Sales calendar year"
+                    className="legacy-parts-inventory-sales-year-select"
+                    onChange={(event) => setSalesCalendarYear(Number(event.target.value))}
+                    value={salesCalendarYear}
+                  >
+                    {salesCalendarYearOptions.map((year) => (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+              </div>
+              {activeInsightTab === "salesCalendar" ? (
+                <div className="legacy-parts-inventory-sales-calendar">
+                  {salesCalendarRows.map((month) => (
+                    <div
+                      className={`legacy-parts-inventory-sales-month${month.isCurrent ? " is-current" : ""}${
+                        month.isForecast ? " is-forecast" : ""
+                      } tone-${month.tone}`}
+                      key={month.month}
+                    >
+                      <div className="legacy-parts-inventory-sales-month-head">
+                        <strong>{month.month}</strong>
+                        <span>{month.isForecast ? `${month.units} fcst` : `${month.units} sold`}</span>
+                      </div>
+                      <div aria-hidden="true" className="legacy-parts-inventory-sales-mini-weekdays">
+                        {["S", "M", "T", "W", "T", "F", "S"].map((day, index) => (
+                          <span key={`${month.month}-${day}-${index}`}>{day}</span>
+                        ))}
+                      </div>
+                      <div className="legacy-parts-inventory-sales-mini-days">
+                        {month.days.map((day, index) => (
+                          <span
+                            className={`${day.inMonth ? "is-month-day" : "is-empty"}${day.hasSale ? ` has-sale sale-level-${day.level}` : ""}`}
+                            key={`${month.month}-${index}`}
+                            title={day.hasSale ? `${month.month} ${day.day}, ${salesCalendarYear}: ${day.quantity} sold` : undefined}
+                          >
+                            {day.inMonth ? day.day : ""}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="legacy-parts-inventory-order-signals">
+                  <span>
+                    Last Sold <b>{buildPartsInventoryLastSold(row)}</b>
+                  </span>
+                  <span>
+                    Last Received <b>{buildPartsInventoryLastReceived(row)}</b>
+                  </span>
+                  <span>
+                    Coverage <b>{smartOrdering.coverageMonths} mo</b>
+                  </span>
+                  <span>
+                    Next Review <b>{smartOrdering.nextReview}</b>
+                  </span>
+                  <p>{smartOrdering.assistantNote}</p>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+
+        <aside className="legacy-parts-inventory-detail-side">
+          <div className="legacy-parts-inventory-detail-mini-grid">
+            <PartsInventoryDetailMiniField label="Active Price" onChange={(value) => onDraftChange("price", value)} value={draft.price} />
+            <PartsInventoryDetailMiniField label="Cost" onChange={(value) => onDraftChange("cost", value)} value={draft.cost} />
+            <PartsInventoryDetailMiniField label="Live Cost" value="$0.00" />
+            <button type="button">Show Live Cost</button>
+          </div>
+
+          <div className="legacy-parts-inventory-detail-side-panels">
+            <section className="legacy-parts-inventory-detail-panel">
+              <strong className="legacy-parts-inventory-detail-panel-title">Active Price</strong>
+              {[
+                ["Standard", "price", draft.price],
+                ["Sale", "salePrice", draft.salePrice],
+                ["Special 1", "special1Price", draft.special1Price],
+                ["Special 2", "special2Price", draft.special2Price],
+                ["Special 3", "special3Price", draft.special3Price],
+                ["MAP", "mapPrice", draft.mapPrice]
+              ].map(([label, field, value], index) => (
+                <label className="legacy-parts-inventory-detail-radio-row" key={label}>
+                  <input checked={index === 0} readOnly type="radio" />
+                  <span>{label}</span>
+                  <input
+                    aria-label={`${label} price`}
+                    className="legacy-parts-inventory-detail-price-input"
+                    onChange={(event) => onDraftChange(field as keyof PartsInventoryDetailDraft, event.target.value)}
+                    value={value}
+                  />
+                </label>
+              ))}
+              <label className="legacy-parts-inventory-detail-check-row">
+                <input checked={false} readOnly type="checkbox" /> No Discount
+              </label>
+            </section>
+
+            <section className="legacy-parts-inventory-detail-panel">
+              <strong className="legacy-parts-inventory-detail-panel-title">Update Pricing</strong>
+              {["Cost and Retail", "Cost Only", "Retail Only", "No Updating"].map((label, index) => (
+                <label className="legacy-parts-inventory-detail-check-row" key={label}>
+                  <input checked={index === 2} readOnly type="radio" /> {label}
+                </label>
+              ))}
+            </section>
+
+            <section className="legacy-parts-inventory-detail-panel">
+              <strong className="legacy-parts-inventory-detail-panel-title">Quantities</strong>
+              <PartsInventoryDetailMiniField label="Available" value={metrics.available} />
+              <PartsInventoryDetailMiniField label="On Hand" value={`${row.onHand}`} />
+              <PartsInventoryDetailMiniField label="On Order" value={metrics.onOrder} />
+              <PartsInventoryDetailMiniField label="On Order Avail." value="0" />
+            </section>
+
+            <section className="legacy-parts-inventory-detail-panel">
+              <strong className="legacy-parts-inventory-detail-panel-title">Activity Dates</strong>
+              <div className="legacy-parts-inventory-activity-dates">
+                {activityTimeline.map((item) => (
+                  <div className={`legacy-parts-inventory-activity-date-row tone-${item.tone}`} key={item.label}>
+                    <span>{item.label}</span>
+                    <b>{item.date}</b>
+                    <small>{item.status}</small>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        </aside>
+      </section>
+
+      <section className="legacy-parts-inventory-detail-bottom">
+        <div className="legacy-parts-inventory-detail-panel legacy-parts-inventory-smart-ordering">
+          <strong className="legacy-parts-inventory-detail-panel-title">Smart Analytics Ordering / Summary</strong>
+          <div className={`legacy-parts-inventory-smart-ordering-callout tone-${smartOrdering.riskTone}`}>
+            <span>Assistant Recommendation</span>
+            <b>{smartOrdering.recommendation}</b>
+            <em>{smartOrdering.riskLabel}</em>
+          </div>
+          <div className="legacy-parts-inventory-smart-ordering-signals">
+            <span>
+              <small>Coverage</small>
+              <b>{smartOrdering.coverageMonths} mo</b>
+            </span>
+            <span>
+              <small>Velocity</small>
+              <b>{smartOrdering.velocityLabel}</b>
+            </span>
+            <span>
+              <small>Lead Time</small>
+              <b>{smartOrdering.leadTime}</b>
+            </span>
+          </div>
+          <div className="legacy-parts-inventory-smart-ordering-grid">
+            <PartsInventoryDetailMiniField label="Monthly Avg" value={smartOrdering.monthlyAverage} />
+            <PartsInventoryDetailMiniField label="Suggested Min" value={smartOrdering.suggestedMin} />
+            <PartsInventoryDetailMiniField label="Suggested Max" value={smartOrdering.suggestedMax} />
+            <PartsInventoryDetailMiniField label="Order Qty" value={smartOrdering.orderQuantity} />
+          </div>
+          <div className="legacy-parts-inventory-smart-ordering-confidence">
+            <span>Confidence</span>
+            <i>
+              <span style={{ width: smartOrdering.confidencePercent }} />
+            </i>
+            <b>{smartOrdering.confidencePercent}</b>
+          </div>
+          <p>{smartOrdering.assistantNote}</p>
+          <button
+            aria-label="Smart Analytics disclaimer"
+            className="legacy-parts-inventory-smart-ordering-disclaimer"
+            type="button"
+          >
+            !
+            <span role="tooltip">
+              This estimate is based only on this part's historical activity. It is not a direct purchasing instruction; review
+              current demand, supplier availability, and manager judgment before ordering.
+            </span>
+          </button>
+        </div>
+
+        <div className="legacy-parts-inventory-detail-panel legacy-parts-inventory-detail-package">
+          <strong className="legacy-parts-inventory-detail-panel-title">Package Information</strong>
+          <div className="legacy-parts-inventory-detail-package-head">
+            <span>Package</span>
+            <span>Quantity</span>
+          </div>
+          <PartsInventoryDetailMiniField label="Ordering" value="1" />
+          <PartsInventoryDetailMiniField label="Suggested Sell Qty" value="1" />
+          {[
+            "Enable Price Labels",
+            "Ignore Package Ordering",
+            "Divide Pricebook Cost By Package Quantity For Escalation",
+            "Divide Pricebook Price By Package Quantity For Escalation"
+          ].map((label, index) => (
+            <label className="legacy-parts-inventory-detail-check-row" key={label}>
+              <input checked={index !== 1} readOnly type="checkbox" /> {label}
+            </label>
+          ))}
+        </div>
+
+        <div className="legacy-parts-inventory-detail-panel">
+          <strong className="legacy-parts-inventory-detail-panel-title">Summary</strong>
+          <PartsInventoryDetailMiniField label="Part Value" value={metrics.partValue} />
+          <PartsInventoryDetailMiniField label="Part Margin" value={metrics.partMargin} />
+          <PartsInventoryDetailMiniField
+            label="Margin Percent"
+            onBlur={commitMarginPercentChange}
+            onChange={setMarginPercentText}
+            onFocus={handleMarginPercentFocus}
+            onKeyDown={handleMarginPercentKeyDown}
+            value={isMarginPercentEditing ? marginPercentText : metrics.marginPercent}
+          />
+          <PartsInventoryDetailMiniField label="Days Since Sold" value={metrics.daysSinceSold} />
+        </div>
+      </section>
+    </>
+  );
+}
+
+function PartsInventoryDetailSerialNumbersTab({ row }: { row: PartsInventoryRow }) {
+  return (
+    <div className="legacy-parts-inventory-detail-tab-grid">
+      <PartsInventoryDetailTable
+        columns={[
+          { key: "serialNumber", label: "Serial Number" },
+          { key: "status", label: "Status" },
+          { key: "received", label: "Received" },
+          { key: "sold", label: "Sold" },
+          { key: "customer", label: "Customer" },
+          { key: "notes", label: "Notes" }
+        ]}
+        rows={buildPartsInventorySerialNumberRows(row)}
+      />
+    </div>
+  );
+}
+
+function PartsInventoryDetailSimilarPartsTab({ row }: { row: PartsInventoryRow }) {
+  return (
+    <div className="legacy-parts-inventory-detail-tab-grid">
+      <PartsInventoryDetailTable
+        columns={[
+          { key: "similarType", label: "Similar Type" },
+          { key: "partNumber", label: "Part Number" },
+          { key: "description", label: "Description" },
+          { key: "supplier", label: "Supplier" },
+          { align: "right", key: "avail", label: "Avail" },
+          { align: "right", key: "price", label: "Price" }
+        ]}
+        rows={buildPartsInventorySimilarPartRows(row)}
+      />
+      <div className="legacy-parts-inventory-detail-tab-actions">
+        <button type="button">New</button>
+        <button type="button">Delete</button>
+      </div>
+    </div>
+  );
+}
+
+function PartsInventoryDetailHistoryOrdersTab({ row }: { row: PartsInventoryRow }) {
+  const history = buildPartsInventoryDetailSalesHistory(row);
+  const purchaseOrders = buildPartsInventoryPurchaseOrderRows(row);
+  const specialOrders = buildPartsInventorySpecialOrderRows(row);
+
+  return (
+    <div className="legacy-parts-inventory-detail-history-orders">
+      <section className="legacy-parts-inventory-detail-history-summary">
+        <div className="legacy-parts-inventory-detail-panel">
+          <strong className="legacy-parts-inventory-detail-panel-title">MTD/YTD Totals</strong>
+          <PartsInventoryDetailTable
+            columns={[
+              { key: "label", label: "" },
+              { align: "right", key: "mtd", label: "MTD" },
+              { align: "right", key: "ytd", label: "YTD" }
+            ]}
+            rows={history.totals}
+          />
+        </div>
+        <div className="legacy-parts-inventory-detail-panel">
+          <strong className="legacy-parts-inventory-detail-panel-title">Sales History</strong>
+          <PartsInventoryDetailTable columns={history.columns} rows={history.rows} />
+          <div className="legacy-parts-inventory-detail-history-metrics">
+            <span>Previous 12 Months Sales</span>
+            <b>{history.previousTwelveMonths}</b>
+            <span>Consecutive Months No Sales</span>
+            <b>{history.noSalesMonths}</b>
+          </div>
+        </div>
+      </section>
+
+      <section className="legacy-parts-inventory-detail-order-grid">
+        <strong className="legacy-parts-inventory-detail-panel-title">Purchase Orders</strong>
+        <div className="legacy-parts-inventory-detail-filter-line">
+          <label>
+            <input checked readOnly type="checkbox" /> All Incomplete
+          </label>
+          <label>
+            <input checked={false} readOnly type="checkbox" /> All Received
+          </label>
+        </div>
+        <PartsInventoryDetailTable
+          columns={[
+            { key: "number", label: "Number" },
+            { key: "date", label: "Date" },
+            { align: "right", key: "cost", label: "Cost" },
+            { align: "right", key: "ordered", label: "Ordered" },
+            { align: "right", key: "received", label: "Received" },
+            { align: "right", key: "canceled", label: "Canceled" },
+            { align: "right", key: "backOrder", label: "BO" },
+            { key: "notes", label: "Notes" }
+          ]}
+          rows={purchaseOrders}
+        />
+      </section>
+
+      <section className="legacy-parts-inventory-detail-order-grid">
+        <strong className="legacy-parts-inventory-detail-panel-title">Special Orders</strong>
+        <div className="legacy-parts-inventory-detail-filter-line">
+          <label>
+            <input checked readOnly type="checkbox" /> All Incomplete
+          </label>
+          <label>
+            <input checked={false} readOnly type="checkbox" /> All Picked Up
+          </label>
+        </div>
+        <PartsInventoryDetailTable
+          columns={[
+            { key: "number", label: "Number" },
+            { key: "date", label: "Date" },
+            { key: "customer", label: "Customer" },
+            { align: "right", key: "ordered", label: "Ord" },
+            { align: "right", key: "priceOrdered", label: "Price Ord" },
+            { align: "right", key: "pickedUp", label: "P/U" },
+            { align: "right", key: "pricePickedUp", label: "Price P/U" },
+            { key: "notes", label: "Notes" }
+          ]}
+          rows={specialOrders}
+        />
+      </section>
+    </div>
+  );
+}
+
+function PartsInventoryDetailHistoryTab({ editRows, row }: { editRows: Array<Record<string, string>>; row: PartsInventoryRow }) {
+  return (
+    <div className="legacy-parts-inventory-detail-tab-grid">
+      <PartsInventoryDetailTable
+        columns={[
+          { align: "right", key: "date", label: "Date" },
+          { align: "right", key: "time", label: "Time" },
+          { key: "user", label: "User" },
+          { isLink: true, key: "document", label: "Doc #" },
+          { key: "description", label: "Description" },
+          { key: "customer", label: "Customer Name" },
+          { align: "right", key: "incoming", label: "Incoming" },
+          { align: "right", key: "outgoing", label: "Outgoing" },
+          { align: "right", key: "resultingOnHand", label: "Resulting On Hand" }
+        ]}
+        rows={buildPartsInventoryDetailHistoryRows(row, editRows)}
+      />
+    </div>
+  );
+}
+
+function PartsInventoryDetailTable({
+  columns,
+  rows
+}: {
+  columns: Array<{ align?: "center" | "right"; isLink?: boolean; key: string; label: string }>;
+  rows: Array<Record<string, string>>;
+}) {
+  return (
+    <div className="legacy-parts-inventory-detail-table-wrap">
+      <table className="legacy-parts-inventory-detail-table">
+        <thead>
+          <tr>
+            {columns.map((column) => (
+              <th className={column.align ? `align-${column.align}` : undefined} key={column.key}>
+                {column.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rowIndex) => (
+            <tr key={`${rowIndex}-${columns.map((column) => row[column.key]).join("-")}`}>
+              {columns.map((column) => (
+                <td className={`${column.align ? `align-${column.align}` : ""}${column.isLink ? " is-link-cell" : ""}`} key={column.key}>
+                  {row[column.key] ?? ""}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PartsInventoryDetailField({
+  isLink = false,
+  label,
+  onChange,
+  value
+}: {
+  isLink?: boolean;
+  label: string;
+  onChange?: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <label className={`legacy-parts-inventory-detail-field${isLink ? " is-link-field" : ""}`}>
+      <span>{label}</span>
+      <input onChange={(event) => onChange?.(event.target.value)} readOnly={!onChange} value={value || ""} />
+    </label>
+  );
+}
+
+function PartsInventoryDetailMiniField({
+  label,
+  onBlur,
+  onChange,
+  onFocus,
+  onKeyDown,
+  value
+}: {
+  label: string;
+  onBlur?: () => void;
+  onChange?: (value: string) => void;
+  onFocus?: (event: ReactFocusEvent<HTMLInputElement>) => void;
+  onKeyDown?: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
+  value: string;
+}) {
+  return (
+    <label className="legacy-parts-inventory-detail-mini-field">
+      <span>{label}</span>
+      <input
+        onBlur={onBlur}
+        onChange={(event) => onChange?.(event.target.value)}
+        onFocus={onFocus}
+        onKeyDown={onKeyDown}
+        readOnly={!onChange}
+        value={value}
+      />
+    </label>
+  );
+}
+
 interface PartsOrderingBoardProps {
   isLookupOpen: boolean;
   isLookupSubmitting: boolean;
@@ -10245,20 +16760,445 @@ function PartsOrderingBoard({
   searchState,
   selectedRowId
 }: PartsOrderingBoardProps) {
+  const [activePartsDetailTab, setActivePartsDetailTab] = useState<PartsDetailTab>("info");
+  const [activePartsQuickFilter, setActivePartsQuickFilter] = useState<PartsQuickFilter>("all");
+  const [collapsedPartsBands, setCollapsedPartsBands] = useState<Record<PartsBandKey, boolean>>({
+    history: false,
+    orderInfo: false,
+    purchaseOrders: false
+  });
+  const [partsColumnPreset, setPartsColumnPreset] = useState<PartsColumnPreset>("counter");
+  const [editingQuantityRowId, setEditingQuantityRowId] = useState<string | null>(null);
+  const [editingQuantityDraft, setEditingQuantityDraft] = useState("");
+  const [partsActionNotice, setPartsActionNotice] = useState("");
+  const [partsContextMenu, setPartsContextMenu] = useState<PartsContextMenuState | null>(null);
+  const [partsSourcePreview, setPartsSourcePreview] = useState<PartsSourcePreviewState | null>(null);
+  const [salesHistoryDepth, setSalesHistoryDepth] = useState<PartsSalesHistoryDepth>(24);
+  const [selectedActionRowIds, setSelectedActionRowIds] = useState<string[]>([]);
+  const [stagedQuantities, setStagedQuantities] = useState<Record<string, string>>({});
+  const [isReceivingOpen, setIsReceivingOpen] = useState(false);
+  const [receivingRows, setReceivingRows] = useState<Array<{ id: string; receivedQty: string; status: "pending" | "partial" | "received" }>>([]);
+  const [isNewPoOpen, setIsNewPoOpen] = useState(false);
+  const [newPoVendor, setNewPoVendor] = useState("");
+  const [newPoNote, setNewPoNote] = useState("");
+  const [newPoLines, setNewPoLines] = useState([{ partNumber: "", description: "", qty: "1", cost: "" }]);
+  const partsQuickAddInputRef = useRef<HTMLInputElement | null>(null);
+  const partsSearchInputRef = useRef<HTMLInputElement | null>(null);
+
+  function getDisplayQuantity(row: PartsWorkspaceRow) {
+    return stagedQuantities[row.id] ?? row.quantity;
+  }
+
   const filterOptions = buildFilterOptions(rows.map((row) => row.supplier));
   const filteredRows = rows.filter(
     (row) =>
       matchesWorkspaceSearch(
-        [row.partNumber, row.secondary, row.description, row.supplier, row.category, row.orderType, row.quantity, row.orderCost, row.source],
+        [row.partNumber, row.secondary, row.description, row.supplier, row.category, row.orderType, getDisplayQuantity(row), row.orderCost, row.source],
         searchState.searchTerm
-      ) && matchesWorkspaceFilter(row.supplier, searchState.filterValue)
+      ) &&
+      matchesWorkspaceFilter(row.supplier, searchState.filterValue) &&
+      matchesPartsQuickFilter(row, activePartsQuickFilter, getDisplayQuantity(row))
   );
   const selectedPartsRow = resolveSelectedRow(filteredRows, selectedRowId);
+  const selectedActionRows = filteredRows.filter((row) => selectedActionRowIds.includes(row.id));
   const availableQuantity = selectedPartsRow ? getPartsLookupAvailableQuantity(selectedPartsRow) : "0";
-  const onOrderQuantity = selectedPartsRow?.orderType === "PO" ? selectedPartsRow.quantity : "0";
+  const selectedDisplayQuantity = selectedPartsRow ? getDisplayQuantity(selectedPartsRow) : "0";
+  const onOrderQuantity = selectedPartsRow ? selectedDisplayQuantity : "0";
+  const supplierOptions = Array.from(new Set(rows.map((row) => row.supplier).filter(Boolean))).sort();
+  const supplierCountOptions = [
+    { count: rows.length, label: "All", value: "All" },
+    ...supplierOptions.map((supplier) => ({
+      count: rows.filter((row) => row.supplier === supplier).length,
+      label: supplier,
+      value: supplier
+    }))
+  ];
+  const selectedSupplier = selectedPartsRow?.supplier ?? supplierOptions[0] ?? "";
+  const [orderFromSupplier, setOrderFromSupplier] = useState(selectedSupplier);
+  const [etaDate, setEtaDate] = useState("");
+  const [orderNotes, setOrderNotes] = useState("");
+  const selectedOrderSupplier = orderFromSupplier || selectedSupplier;
+  const sourceLinkedCount = filteredRows.filter((row) => row.source.trim().length > 0).length;
+  const contextMenuRow = partsContextMenu ? rows.find((row) => row.id === partsContextMenu.rowId) ?? null : null;
+  const sourcePreviewRow = partsSourcePreview ? rows.find((row) => row.id === partsSourcePreview.rowId) ?? null : null;
+  const selectedValidationSignals = selectedPartsRow ? buildPartsValidationSignals(selectedPartsRow, selectedDisplayQuantity) : [];
+  const orderingColumns: LegacyGridColumn<PartsWorkspaceRow>[] = [
+    {
+      className: "align-center legacy-parts-select-cell",
+      label: "",
+      render: (row) => <input aria-label={`Select ${row.partNumber}`} checked={selectedActionRowIds.includes(row.id)} readOnly type="checkbox" />
+    },
+    ...partsColumns.filter((column) => shouldShowPartsColumn(column.label, partsColumnPreset))
+  ];
+  const selectedQuantity = selectedPartsRow ? parsePartsQuantity(selectedDisplayQuantity) : 0;
+  const selectedOrderCost = selectedPartsRow ? parsePartsCurrency(selectedPartsRow.orderCost) : 0;
+  const selectedPrice = selectedOrderCost * 1.49;
+  const selectedMargin = selectedPrice - selectedOrderCost;
+  const selectedMarginPercent = selectedPrice > 0 ? `${((selectedMargin / selectedPrice) * 100).toFixed(3)}%` : "-";
+  const salesHistoryMonths = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const salesHistoryRows = buildPartsSalesHistoryRows(selectedQuantity, salesHistoryDepth);
+  const thisYearSalesHistory = salesHistoryRows[0]?.values ?? [];
+  const lastYearSalesHistory = salesHistoryRows[1]?.values ?? [];
+  const thisYearSalesTotal = thisYearSalesHistory.reduce((sum, value) => sum + value, 0);
+  const lastYearSalesTotal = lastYearSalesHistory.reduce((sum, value) => sum + value, 0);
+  const previousTwelveMonthSales = thisYearSalesTotal + lastYearSalesTotal;
+  const extendedSalesHistoryTotal = salesHistoryRows.reduce((total, row) => total + row.total, 0);
+  const reversedSalesHistory = [...thisYearSalesHistory].reverse();
+  const monthsSinceSale = reversedSalesHistory.findIndex((value) => value > 0);
+  const noSalesMonthCount = monthsSinceSale === -1 ? thisYearSalesHistory.length : monthsSinceSale;
+  const setupDate = selectedPartsRow ? "02/12/2020" : "-";
+  const lastCountDate = selectedPartsRow ? "11/20/2025" : "-";
+  const lastReceivedDate = selectedPartsRow ? "01/21/2026" : "-";
+  const lastSoldDate = selectedPartsRow ? "03/31/2026" : "-";
+
+  useEffect(() => {
+    setOrderFromSupplier(selectedSupplier);
+  }, [selectedSupplier]);
+
+  useEffect(() => {
+    if (!partsActionNotice) {
+      return;
+    }
+
+    const noticeTimer = window.setTimeout(() => setPartsActionNotice(""), 2400);
+
+    return () => window.clearTimeout(noticeTimer);
+  }, [partsActionNotice]);
+
+  useEffect(() => {
+    const validRowIds = new Set(rows.map((row) => row.id));
+
+    setSelectedActionRowIds((current) => {
+      const nextSelection = current.filter((rowId) => validRowIds.has(rowId));
+
+      return nextSelection.length === current.length ? current : nextSelection;
+    });
+  }, [rows]);
+
+  useEffect(() => {
+    function handlePartsKeyboardShortcut(event: KeyboardEvent) {
+      const key = event.key.toLowerCase();
+
+      if (isLookupOpen || isTextEntryTarget(event.target)) {
+        return;
+      }
+
+      if ((event.ctrlKey && key === "f") || key === "/") {
+        event.preventDefault();
+        partsSearchInputRef.current?.focus();
+        return;
+      }
+
+      if (key === "a" && event.ctrlKey) {
+        event.preventDefault();
+        setSelectedActionRowIds(filteredRows.map((row) => row.id));
+        setPartsActionNotice(`${filteredRows.length} lines selected.`);
+        return;
+      }
+
+      if (!selectedPartsRow) {
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        beginQuantityEdit(selectedPartsRow);
+        return;
+      }
+
+      if (event.ctrlKey && key === "p") {
+        event.preventDefault();
+        onOpenLookup(selectedPartsRow.partNumber);
+        return;
+      }
+
+      if (event.key === "Delete") {
+        event.preventDefault();
+        const deleteCount = selectedActionRows.length || 1;
+        setPartsActionNotice(`${deleteCount} line${deleteCount === 1 ? "" : "s"} removal queued.`);
+      }
+    }
+
+    window.addEventListener("keydown", handlePartsKeyboardShortcut);
+
+    return () => window.removeEventListener("keydown", handlePartsKeyboardShortcut);
+  }, [filteredRows, isLookupOpen, onOpenLookup, selectedActionRows.length, selectedPartsRow]);
+
+  function togglePartsBand(band: PartsBandKey) {
+    setCollapsedPartsBands((current) => ({
+      ...current,
+      [band]: !current[band]
+    }));
+  }
+
+  function togglePartsActionRow(event: React.MouseEvent<HTMLInputElement>, row: PartsWorkspaceRow) {
+    event.stopPropagation();
+    onSelectRow(row);
+    setSelectedActionRowIds((current) =>
+      current.includes(row.id) ? current.filter((rowId) => rowId !== row.id) : [...current, row.id]
+    );
+  }
+
+  function handleSelectedPartsAction(action: "changeQty" | "copy" | "createPo" | "delete" | "vendorLookup") {
+    const actionRows = selectedActionRows.length > 0 ? selectedActionRows : selectedPartsRow ? [selectedPartsRow] : [];
+
+    if (actionRows.length === 0) {
+      setPartsActionNotice("Select a parts line first.");
+      return;
+    }
+
+    switch (action) {
+      case "changeQty":
+        if (actionRows.length > 1) {
+          setPartsActionNotice("Select one line to edit quantity.");
+          return;
+        }
+
+        beginQuantityEdit(actionRows[0]);
+        return;
+      case "copy":
+        void navigator.clipboard?.writeText(actionRows.map((row) => row.partNumber).join(", "));
+        setPartsActionNotice(`${actionRows.length} part #${actionRows.length === 1 ? "" : "s"} copied.`);
+        return;
+      case "createPo":
+        onOpenLookup(actionRows[0].partNumber);
+        return;
+      case "delete":
+        setPartsActionNotice(`${actionRows.length} line${actionRows.length === 1 ? "" : "s"} removal queued.`);
+        return;
+      case "vendorLookup":
+        setActivePartsDetailTab("pricing");
+        onOpenLookup(actionRows[0].partNumber);
+        return;
+    }
+  }
+
+  function beginQuantityEdit(row: PartsWorkspaceRow) {
+    onSelectRow(row);
+    setEditingQuantityRowId(row.id);
+    setEditingQuantityDraft(getDisplayQuantity(row));
+    setPartsContextMenu(null);
+  }
+
+  function cancelQuantityEdit() {
+    setEditingQuantityRowId(null);
+    setEditingQuantityDraft("");
+  }
+
+  function commitQuantityEdit() {
+    if (!editingQuantityRowId) {
+      return;
+    }
+
+    const normalizedQuantity = `${Math.max(1, Number.parseInt(editingQuantityDraft, 10) || 1)}`;
+
+    setStagedQuantities((current) => ({
+      ...current,
+      [editingQuantityRowId]: normalizedQuantity
+    }));
+    setPartsActionNotice(`Qty ${normalizedQuantity} staged.`);
+    setEditingQuantityRowId(null);
+    setEditingQuantityDraft("");
+  }
+
+  function openPartsContextMenu(event: React.MouseEvent<HTMLTableRowElement>, row: PartsWorkspaceRow) {
+    event.preventDefault();
+    onSelectRow(row);
+    setPartsSourcePreview(null);
+    setPartsContextMenu({
+      rowId: row.id,
+      x: Math.min(event.clientX, window.innerWidth - 196),
+      y: Math.min(event.clientY, window.innerHeight - 190)
+    });
+  }
+
+  function handlePartsContextAction(action: "changeQty" | "copy" | "createPo" | "delete" | "openSource" | "vendorLookup", row: PartsWorkspaceRow) {
+    setPartsContextMenu(null);
+
+    switch (action) {
+      case "changeQty":
+        beginQuantityEdit(row);
+        return;
+      case "copy":
+        void navigator.clipboard?.writeText(row.partNumber);
+        setPartsActionNotice(`${row.partNumber} copied.`);
+        return;
+      case "createPo":
+        onOpenLookup(row.partNumber);
+        return;
+      case "delete":
+        setPartsActionNotice(`${row.partNumber} removal queued.`);
+        return;
+      case "openSource":
+        setActivePartsDetailTab("notes");
+        setPartsActionNotice(row.source ? `${row.source} focused.` : "No source document on this line.");
+        return;
+      case "vendorLookup":
+        setActivePartsDetailTab("pricing");
+        onOpenLookup(row.partNumber);
+        return;
+    }
+  }
+
+  function updatePartsInspector(
+    event: React.FocusEvent<HTMLElement> | React.MouseEvent<HTMLElement>,
+    row: PartsWorkspaceRow,
+    kind: PartsInspectorKind
+  ) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const pointerEvent = event.nativeEvent instanceof MouseEvent ? event.nativeEvent : null;
+    const x = pointerEvent ? pointerEvent.clientX + 12 : rect.right + 8;
+    const y = pointerEvent ? pointerEvent.clientY + 12 : rect.bottom + 8;
+
+    setPartsSourcePreview({
+      kind,
+      rowId: row.id,
+      x: Math.min(x, window.innerWidth - 260),
+      y: Math.min(y, window.innerHeight - 118)
+    });
+  }
+
+  function renderPartsStatusBadges(row: PartsWorkspaceRow) {
+    const signals = buildPartsRowHealthSignals(row, getDisplayQuantity(row));
+
+    return signals.slice(0, 3).map((signal) => (
+      <span className={`legacy-parts-status-badge tone-${signal.tone}`} key={signal.label}>
+        {signal.label}
+      </span>
+    ));
+  }
+
+  function renderPartsGridCell(row: PartsWorkspaceRow, column: LegacyGridColumn<PartsWorkspaceRow>) {
+    if (column.label === "") {
+      return (
+        <div className="legacy-parts-select-wrap">
+          <input
+            aria-label={`Select ${row.partNumber} for bulk actions`}
+            checked={selectedActionRowIds.includes(row.id)}
+            onClick={(event) => togglePartsActionRow(event, row)}
+            readOnly
+            type="checkbox"
+          />
+          <div className="legacy-parts-row-actions" aria-label={`Actions for ${row.partNumber}`}>
+            <button onClick={(event) => { event.stopPropagation(); beginQuantityEdit(row); }} title="Edit quantity" type="button">
+              Qty
+            </button>
+            <button onClick={(event) => { event.stopPropagation(); onOpenLookup(row.partNumber); }} title="Create purchase order" type="button">
+              PO
+            </button>
+            <button onClick={(event) => { event.stopPropagation(); void navigator.clipboard?.writeText(row.partNumber); setPartsActionNotice(`${row.partNumber} copied.`); }} title="Copy part number" type="button">
+              Copy
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (column.label === "Supplier") {
+      return (
+        <button
+          className="legacy-parts-source-link legacy-parts-micro-link"
+          onBlur={() => setPartsSourcePreview(null)}
+          onFocus={(event) => updatePartsInspector(event, row, "supplier")}
+          onMouseEnter={(event) => updatePartsInspector(event, row, "supplier")}
+          onMouseLeave={() => setPartsSourcePreview(null)}
+          onMouseMove={(event) => updatePartsInspector(event, row, "supplier")}
+          type="button"
+        >
+          {row.supplier || "-"}
+        </button>
+      );
+    }
+
+    if (column.label === "Description") {
+      return (
+        <div className="legacy-parts-description-cell">
+          <span>{row.description}</span>
+          <span className="legacy-parts-status-badges">{renderPartsStatusBadges(row)}</span>
+        </div>
+      );
+    }
+
+    if (column.label === "Qty") {
+      return editingQuantityRowId === row.id ? (
+        <input
+          autoFocus
+          className="legacy-parts-qty-input"
+          onBlur={commitQuantityEdit}
+          onChange={(event) => setEditingQuantityDraft(event.target.value)}
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              commitQuantityEdit();
+            }
+
+            if (event.key === "Escape") {
+              event.preventDefault();
+              cancelQuantityEdit();
+            }
+          }}
+          type="number"
+          value={editingQuantityDraft}
+        />
+      ) : (
+        <button
+          className="legacy-parts-qty-button"
+          onDoubleClick={(event) => {
+            event.stopPropagation();
+            beginQuantityEdit(row);
+          }}
+          title="Double-click to edit quantity"
+          type="button"
+        >
+          {getDisplayQuantity(row)}
+        </button>
+      );
+    }
+
+    if (column.label === "Order Cost") {
+      return (
+        <button
+          className="legacy-parts-source-link legacy-parts-micro-link align-right"
+          onBlur={() => setPartsSourcePreview(null)}
+          onFocus={(event) => updatePartsInspector(event, row, "pricing")}
+          onMouseEnter={(event) => updatePartsInspector(event, row, "pricing")}
+          onMouseLeave={() => setPartsSourcePreview(null)}
+          onMouseMove={(event) => updatePartsInspector(event, row, "pricing")}
+          type="button"
+        >
+          {row.orderCost}
+        </button>
+      );
+    }
+
+    if (column.label === "SO Invoice Type") {
+      return (
+        <button
+          className="legacy-parts-source-link"
+          onBlur={() => setPartsSourcePreview(null)}
+          onFocus={(event) => updatePartsInspector(event, row, "source")}
+          onMouseEnter={(event) => updatePartsInspector(event, row, "source")}
+          onMouseLeave={() => setPartsSourcePreview(null)}
+          onMouseMove={(event) => updatePartsInspector(event, row, "source")}
+          type="button"
+        >
+          {formatPartsSourceLabel(row.source)}
+        </button>
+      );
+    }
+
+    return column.render(row);
+  }
 
   return (
-    <div className="legacy-data-window legacy-parts-workspace">
+    <div
+      className="legacy-data-window legacy-parts-workspace"
+      onClick={() => {
+        setPartsContextMenu(null);
+        setPartsSourcePreview(null);
+      }}
+    >
       <section className="legacy-info-card legacy-parts-composer">
         <form
           className="legacy-parts-composer-form"
@@ -10270,9 +17210,9 @@ function PartsOrderingBoard({
           <label className="legacy-parts-composer-field">
             <span>Key/Scan Part to Add</span>
             <input
+              ref={partsQuickAddInputRef}
               disabled={isLookupSubmitting}
               onChange={(event) => onQuickAddTermChange(event.target.value)}
-              placeholder="Part number, barcode, or quick lookup"
               type="text"
               value={quickAddTerm}
             />
@@ -10280,56 +17220,626 @@ function PartsOrderingBoard({
           <button className="legacy-parts-composer-action" disabled={isLookupSubmitting} type="submit">
             Add
           </button>
-          <div className="legacy-parts-composer-meta">
-            <span>Selected Line</span>
-            <strong>{selectedPartsRow?.partNumber ?? "No line selected"}</strong>
-          </div>
-          <div className="legacy-parts-composer-meta">
-            <span>Default Supplier</span>
-            <strong>{selectedPartsRow?.supplier ?? "MM"}</strong>
+          <div className="legacy-parts-composer-right">
+            <div className="legacy-parts-supplier-chips" aria-label="Supplier quick filters">
+              {supplierCountOptions.map((option) => (
+                <button
+                  className={searchState.filterValue === option.value ? "is-active" : ""}
+                  key={option.value}
+                  onClick={() => onFilterChange(option.value)}
+                  type="button"
+                >
+                  {option.label} <span>{option.count}</span>
+                </button>
+              ))}
+            </div>
+            <span className="legacy-parts-screen-title">{partsActionNotice || "Parts Ordering Workbench"}</span>
           </div>
         </form>
       </section>
 
       <section className="legacy-info-card legacy-parts-grid-panel">
-        <WorkspaceSearchStrip
-          filterLabel="Supplier"
-          filterOptions={filterOptions}
-          filterValue={searchState.filterValue}
-          foundCount={filteredRows.length}
-          onFilterChange={onFilterChange}
-          onSearchChange={onSearchChange}
-          searchTerm={searchState.searchTerm}
-        />
-        <LegacyDataGrid
-          columns={partsColumns}
-          emptyMessage="No parts rows match the current search."
-          onRowSelect={onSelectRow}
-          rows={filteredRows}
-          selectedRowId={selectedPartsRow?.id ?? null}
-        />
+        <div className="legacy-search-strip legacy-parts-search-strip">
+          <label className="legacy-search-field">
+            <span>Search</span>
+            <input
+              ref={partsSearchInputRef}
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder="Type here to search..."
+              type="text"
+              value={searchState.searchTerm}
+            />
+          </label>
+
+          <label className="legacy-search-field is-small">
+            <span>Supplier</span>
+            <select onChange={(event) => onFilterChange(event.target.value)} value={searchState.filterValue}>
+              {filterOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="legacy-parts-quick-filters" aria-label="Quick filters">
+            {partsQuickFilterOptions.map((option) => (
+              <button
+                aria-pressed={activePartsQuickFilter === option.value}
+                className={activePartsQuickFilter === option.value ? "is-active" : ""}
+                key={option.value}
+                onClick={() => setActivePartsQuickFilter(option.value)}
+                type="button"
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="legacy-parts-column-presets" aria-label="Column presets">
+            {partsColumnPresets.map((preset) => (
+              <button
+                aria-pressed={partsColumnPreset === preset.value}
+                className={partsColumnPreset === preset.value ? "is-active" : ""}
+                key={preset.value}
+                onClick={() => setPartsColumnPreset(preset.value)}
+                type="button"
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="legacy-search-meta">Found: {filteredRows.length}</div>
+          <button
+            className={`legacy-parts-receive-toggle${isReceivingOpen ? " is-active" : ""}`}
+            onClick={() => {
+              if (!isReceivingOpen) {
+                setReceivingRows(filteredRows.slice(0, 8).map((row) => ({
+                  id: row.id,
+                  receivedQty: getDisplayQuantity(row),
+                  status: "pending" as const
+                })));
+              }
+              setIsReceivingOpen((prev) => !prev);
+            }}
+            type="button"
+          >
+            {isReceivingOpen ? "Close Receiving" : "Receive PO"}
+          </button>
+          <button
+            className={`legacy-parts-receive-toggle${isNewPoOpen ? " is-active" : ""}`}
+            onClick={() => setIsNewPoOpen((o) => !o)}
+            type="button"
+          >
+            {isNewPoOpen ? "Cancel New PO" : "+ New PO"}
+          </button>
+        </div>
+        {isNewPoOpen && (
+          <div className="legacy-po-create-panel" style={{ margin: "0 0 12px" }}>
+            <div className="legacy-po-create-header">
+              <span>Create Purchase Order</span>
+              <button className="legacy-task-status-button" onClick={() => setIsNewPoOpen(false)} type="button">✕</button>
+            </div>
+            <div className="legacy-po-create-fields">
+              <div className="legacy-po-create-field">
+                <label>Vendor</label>
+                <input onChange={(e) => setNewPoVendor(e.target.value)} placeholder="Vendor name" type="text" value={newPoVendor} />
+              </div>
+              <div className="legacy-po-create-field">
+                <label>Notes</label>
+                <textarea onChange={(e) => setNewPoNote(e.target.value)} placeholder="Order notes…" value={newPoNote} />
+              </div>
+            </div>
+            <table className="legacy-po-lines-table">
+              <thead>
+                <tr>
+                  <th>Part #</th><th>Description</th><th>Qty</th><th>Cost</th><th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {newPoLines.map((line, idx) => (
+                  <tr key={idx}>
+                    <td><input onChange={(e) => setNewPoLines((ls) => ls.map((l, i) => i === idx ? { ...l, partNumber: e.target.value } : l))} placeholder="Part #" type="text" value={line.partNumber} /></td>
+                    <td><input onChange={(e) => setNewPoLines((ls) => ls.map((l, i) => i === idx ? { ...l, description: e.target.value } : l))} placeholder="Description" type="text" value={line.description} /></td>
+                    <td><input onChange={(e) => setNewPoLines((ls) => ls.map((l, i) => i === idx ? { ...l, qty: e.target.value } : l))} placeholder="1" style={{ width: 50 }} type="number" value={line.qty} /></td>
+                    <td><input onChange={(e) => setNewPoLines((ls) => ls.map((l, i) => i === idx ? { ...l, cost: e.target.value } : l))} placeholder="0.00" style={{ width: 80 }} type="number" value={line.cost} /></td>
+                    <td><button onClick={() => setNewPoLines((ls) => ls.filter((_, i) => i !== idx))} style={{ background: "none", border: "none", cursor: "pointer", color: "#c0392b" }} title="Remove line" type="button">✕</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="legacy-po-total-row">
+              Total: ${newPoLines.reduce((s, l) => s + (parseFloat(l.cost) || 0) * (parseFloat(l.qty) || 0), 0).toFixed(2)}
+            </div>
+            <div className="legacy-po-actions">
+              <button className="legacy-task-status-button" onClick={() => setNewPoLines((ls) => [...ls, { partNumber: "", description: "", qty: "1", cost: "" }])} type="button">+ Add Line</button>
+              <button
+                className="legacy-task-status-button"
+                onClick={() => {
+                  setIsNewPoOpen(false);
+                  setNewPoVendor("");
+                  setNewPoNote("");
+                  setNewPoLines([{ partNumber: "", description: "", qty: "1", cost: "" }]);
+                }}
+                type="button"
+              >
+                Submit PO
+              </button>
+            </div>
+          </div>
+        )}
+        <div className="legacy-grid-shell">
+          <table className="legacy-grid legacy-parts-ordering-grid">
+            <thead>
+              <tr>
+                {orderingColumns.map((column, index) => (
+                  <th className={column.className} key={`${column.label}-${index}`}>
+                    {column.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRows.length === 0 ? (
+                <tr>
+                  <td className="legacy-grid-empty" colSpan={orderingColumns.length}>
+                    No parts rows match the current search.
+                  </td>
+                </tr>
+              ) : (
+                filteredRows.map((row) => (
+                  <tr
+                    className={`tone-${row.tone} is-interactive${selectedPartsRow?.id === row.id ? " is-selected" : ""}`}
+                    key={row.id}
+                    onClick={() => {
+                      onSelectRow(row);
+                      setPartsContextMenu(null);
+                    }}
+                    onContextMenu={(event) => openPartsContextMenu(event, row)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onSelectRow(row);
+                      }
+                    }}
+                    tabIndex={0}
+                  >
+                    {orderingColumns.map((column, index) => (
+                      <td className={column.className} key={`${column.label}-${index}`}>
+                        {renderPartsGridCell(row, column)}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
-      <div className="legacy-parts-footer">
-        <section className="legacy-info-card">
-          <h3>Part Info</h3>
-          <div className="legacy-info-grid">
-            <LabelValue label="Part Number" value={selectedPartsRow?.partNumber ?? "-"} />
-            <LabelValue label="Default Supplier" value={selectedPartsRow?.supplier ?? "-"} />
-            <LabelValue label="Category" value={selectedPartsRow?.category ?? "-"} />
-            <LabelValue label="Order Type" value={selectedPartsRow?.orderType ?? "-"} />
+      <div className="legacy-parts-detail-grid">
+        <section className="legacy-info-card legacy-parts-detail-card is-main">
+          <div className="legacy-command-log-header">
+            <div>
+              <h3>Part Info</h3>
+              <span>{selectedPartsRow?.description ?? "No line selected"}</span>
+            </div>
+            {selectedValidationSignals.length > 0 ? (
+              <div className="legacy-parts-validation-strip" aria-label="Line validation">
+                {selectedValidationSignals.slice(0, 3).map((signal) => (
+                  <span className={`legacy-parts-status-badge tone-${signal.tone}`} key={signal.label}>
+                    {signal.label}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            <div className="legacy-parts-detail-tabs">
+              {partsDetailTabs.map((tab) => (
+                <button
+                  className={activePartsDetailTab === tab.value ? "is-active" : ""}
+                  key={tab.value}
+                  onClick={() => setActivePartsDetailTab(tab.value)}
+                  type="button"
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            {selectedPartsRow ? <span className={`legacy-chip tone-${buildPartsOrderTypeTone(selectedPartsRow)}`}>{selectedPartsRow.orderType}</span> : null}
           </div>
+
+          {activePartsDetailTab === "info" ? (
+            <>
+              <div className="legacy-parts-form-grid">
+                <LabelValue label="Part Number" value={selectedPartsRow?.partNumber ?? "-"} />
+                <LabelValue label="Secondary" value={selectedPartsRow?.secondary ?? "-"} />
+                <LabelValue label="Category" value={selectedPartsRow?.category ?? "-"} />
+                <LabelValue label="Default Supplier" value={selectedPartsRow?.supplier ?? "-"} />
+                <LabelValue label="Movement Code" value={selectedPartsRow ? buildPartsMovementCode(selectedPartsRow) : "-"} />
+                <LabelValue label="Bin 1" value={selectedPartsRow ? getPartsLookupLocation(selectedPartsRow) : "-"} />
+                <LabelValue label="Bin 2" value="" />
+                <LabelValue label="Bin 3" value="" />
+              </div>
+
+              <label className="legacy-parts-field">
+                <span>Comments</span>
+                <textarea onChange={(event) => setOrderNotes(event.target.value)} rows={2} value={orderNotes} />
+              </label>
+
+              <div className="legacy-parts-store-row">
+                <button className="legacy-parts-store-pill is-active" type="button">
+                  Store
+                </button>
+                <button className="legacy-parts-store-pill is-active" type="button">
+                  Dealer
+                </button>
+                <button className="legacy-parts-store-pill" type="button">
+                  Warehouse
+                </button>
+              </div>
+            </>
+          ) : null}
+
+          {activePartsDetailTab === "pricing" ? (
+            <div className="legacy-parts-tab-grid">
+              <LabelValue label="Available" value={availableQuantity} />
+              <LabelValue label="On Order" value={onOrderQuantity} />
+              <LabelValue label="Order Cost" value={selectedPartsRow?.orderCost ?? "-"} />
+              <LabelValue label="Price" value={selectedPartsRow ? formatWorkbenchCurrency(selectedPrice) : "-"} />
+              <LabelValue label="Margin" value={selectedPartsRow ? formatWorkbenchCurrency(selectedMargin) : "-"} />
+              <LabelValue label="Percent" value={selectedMarginPercent} />
+              <LabelValue label="Supplier" value={selectedPartsRow?.supplier ?? "-"} />
+              <LabelValue label="Pkg Qty" value={selectedDisplayQuantity} />
+            </div>
+          ) : null}
+
+          {activePartsDetailTab === "bins" ? (
+            <>
+              <div className="legacy-parts-tab-grid">
+                <LabelValue label="Bin 1" value={selectedPartsRow ? getPartsLookupLocation(selectedPartsRow) : "-"} />
+                <LabelValue label="Bin 2" value="" />
+                <LabelValue label="Bin 3" value="" />
+                <LabelValue label="Movement Code" value={selectedPartsRow ? buildPartsMovementCode(selectedPartsRow) : "-"} />
+              </div>
+              <div className="legacy-parts-store-row">
+                <button className="legacy-parts-store-pill is-active" type="button">
+                  Store
+                </button>
+                <button className="legacy-parts-store-pill is-active" type="button">
+                  Dealer
+                </button>
+                <button className="legacy-parts-store-pill" type="button">
+                  Warehouse
+                </button>
+              </div>
+            </>
+          ) : null}
+
+          {activePartsDetailTab === "history" ? (
+            <div className="legacy-parts-tab-grid">
+              <LabelValue label="This Year Sales" value={`${thisYearSalesTotal}`} />
+              <LabelValue label="Last Year Sales" value={`${lastYearSalesTotal}`} />
+              <LabelValue label="Previous 12" value={`${previousTwelveMonthSales}`} />
+              <LabelValue label="No Sale Months" value={`${noSalesMonthCount}`} />
+              <LabelValue label="Last Sold" value={lastSoldDate} />
+              <LabelValue label="Last Received" value={lastReceivedDate} />
+            </div>
+          ) : null}
+
+          {activePartsDetailTab === "notes" ? (
+            <>
+              <div className="legacy-parts-tab-grid">
+                <LabelValue label="Source" value={selectedPartsRow?.source ?? "-"} />
+                <LabelValue label="Order From" value={selectedOrderSupplier || "-"} />
+                <LabelValue label="Order Type" value={selectedPartsRow?.orderType ?? "-"} />
+                <LabelValue label="OEM Message" value={selectedPartsRow ? buildPartsOemMessage(selectedPartsRow) : "-"} />
+              </div>
+              <label className="legacy-parts-field">
+                <span>Notes</span>
+                <textarea onChange={(event) => setOrderNotes(event.target.value)} rows={2} value={orderNotes} />
+              </label>
+            </>
+          ) : null}
         </section>
-        <section className="legacy-info-card">
-          <h3>Inventory Snapshot</h3>
-          <div className="legacy-info-grid">
-            <LabelValue label="Available" value={availableQuantity} />
-            <LabelValue label="On Order" value={onOrderQuantity} />
-            <LabelValue label="Pkg Qty" value={selectedPartsRow?.quantity ?? "0"} />
-            <LabelValue label="Order Cost" value={selectedPartsRow?.orderCost ?? "$0"} />
+
+        <aside className="legacy-parts-side-stack">
+          <section className="legacy-info-card legacy-parts-detail-card">
+            <h3>Quantities</h3>
+            <div className="legacy-parts-tight-grid">
+              <LabelValue label="Available" value={availableQuantity} />
+              <LabelValue label="In Stock" value={availableQuantity} />
+              <LabelValue label="On Order" value={onOrderQuantity} />
+              <LabelValue label="Pkg Qty" value={selectedPartsRow?.quantity ?? "0"} />
+              <LabelValue label="Sug Sell" value={selectedPartsRow ? formatWorkbenchCurrency(selectedPrice) : "-"} />
+              <LabelValue label="Pkg Desc" value={selectedPartsRow ? "EA" : "-"} />
+            </div>
+          </section>
+
+          <section className="legacy-info-card legacy-parts-detail-card">
+            <h3>Inventory Pricing</h3>
+            <div className="legacy-parts-tight-grid">
+              <LabelValue label="Cost" value={selectedPartsRow?.orderCost ?? "-"} />
+              <LabelValue label="Price" value={selectedPartsRow ? formatWorkbenchCurrency(selectedPrice) : "-"} />
+              <LabelValue label="Margin" value={selectedPartsRow ? formatWorkbenchCurrency(selectedMargin) : "-"} />
+              <LabelValue label="Percent" value={selectedMarginPercent} />
+            </div>
+          </section>
+
+          <section className="legacy-info-card legacy-parts-detail-card">
+            <h3>Activity Dates</h3>
+            <div className="legacy-parts-tight-grid">
+              <LabelValue label="Setup Date" value={setupDate} />
+              <LabelValue label="Last Count" value={lastCountDate} />
+              <LabelValue label="Last Received" value={lastReceivedDate} />
+              <LabelValue label="Last Sold" value={lastSoldDate} />
+            </div>
+          </section>
+        </aside>
+      </div>
+
+      <div className="legacy-parts-order-grid">
+        <section className={`legacy-info-card legacy-parts-detail-card is-main${collapsedPartsBands.orderInfo ? " is-collapsed" : ""}`}>
+          <div className="legacy-command-log-header">
+            <div>
+              <h3>Order Info</h3>
+              <span>{selectedPartsRow?.source ?? "No source document selected"}</span>
+            </div>
+            <button
+              aria-expanded={!collapsedPartsBands.orderInfo}
+              className="legacy-parts-band-toggle"
+              onClick={() => togglePartsBand("orderInfo")}
+              type="button"
+            >
+              {collapsedPartsBands.orderInfo ? "+" : "-"}
+            </button>
           </div>
+
+          {collapsedPartsBands.orderInfo ? (
+            <div className="legacy-parts-collapsed-line">
+              <span>{selectedPartsRow ? `${selectedPartsRow.source} / ${selectedPartsRow.supplier}` : "Order info collapsed"}</span>
+            </div>
+          ) : (
+            <>
+              <div className="legacy-parts-order-form">
+                <LabelValue label="SO" value={selectedPartsRow ? `${selectedPartsRow.source} for ${selectedPartsRow.partNumber}` : "-"} />
+                <label className="legacy-parts-field">
+                  <span>Order From</span>
+                  <select onChange={(event) => setOrderFromSupplier(event.target.value)} value={selectedOrderSupplier}>
+                    {supplierOptions.length === 0 ? <option value="">No supplier</option> : null}
+                    {supplierOptions.map((supplier) => (
+                      <option key={supplier} value={supplier}>
+                        {supplier}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="legacy-parts-field">
+                  <span>ETA Date</span>
+                  <input onChange={(event) => setEtaDate(event.target.value)} type="date" value={etaDate} />
+                </label>
+              </div>
+
+              <label className="legacy-parts-field">
+                <span>Notes</span>
+                <textarea
+                  onChange={(event) => setOrderNotes(event.target.value)}
+                  rows={2}
+                  value={orderNotes}
+                />
+              </label>
+            </>
+          )}
         </section>
       </div>
+
+      <div className={`legacy-parts-history-grid${collapsedPartsBands.history ? " is-collapsed" : ""}`}>
+        <section className="legacy-info-card legacy-parts-detail-card">
+          <h3>MTD/YTD Totals</h3>
+          <table className="legacy-parts-mini-table">
+            <tbody>
+              <tr>
+                <th>+ Adjustments</th>
+                <td>0</td>
+                <td>0</td>
+              </tr>
+              <tr>
+                <th>- Adjustments</th>
+                <td>0</td>
+                <td>0</td>
+              </tr>
+              <tr>
+                <th>Lost Sales</th>
+                <td>0</td>
+                <td>0</td>
+              </tr>
+              <tr>
+                <th>Special Order</th>
+                <td>{sourceLinkedCount}</td>
+                <td>{filteredRows.length}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section className="legacy-info-card legacy-parts-detail-card">
+          <div className="legacy-parts-history-heading">
+            <h3>Sales History</h3>
+            <div className="legacy-parts-mini-segmented" aria-label="Sales history depth">
+              {[24, 36].map((depth) => (
+                <button
+                  aria-pressed={salesHistoryDepth === depth}
+                  className={salesHistoryDepth === depth ? "is-active" : ""}
+                  key={depth}
+                  onClick={() => setSalesHistoryDepth(depth as PartsSalesHistoryDepth)}
+                  type="button"
+                >
+                  {depth}m
+                </button>
+              ))}
+            </div>
+            <button
+              aria-expanded={!collapsedPartsBands.history}
+              className="legacy-parts-band-toggle"
+              onClick={() => togglePartsBand("history")}
+              type="button"
+            >
+              {collapsedPartsBands.history ? "+" : "-"}
+            </button>
+          </div>
+          {collapsedPartsBands.history ? (
+            <div className="legacy-parts-collapsed-line">
+              <span>{extendedSalesHistoryTotal} sold across {salesHistoryDepth} months</span>
+            </div>
+          ) : (
+            <>
+              <table className="legacy-parts-sales-table">
+                <thead>
+                  <tr>
+                    <th />
+                    {salesHistoryMonths.map((month) => (
+                      <th key={month}>{month}</th>
+                    ))}
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {salesHistoryRows.map((historyRow) => (
+                    <tr key={historyRow.label}>
+                      <th>{historyRow.label}</th>
+                      {historyRow.values.map((value, index) => (
+                        <td key={`${historyRow.label}-${salesHistoryMonths[index]}`}>{value}</td>
+                      ))}
+                      <td>{historyRow.total}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="legacy-parts-history-summary">
+                <LabelValue label="Previous 12 Months Sales" value={`${previousTwelveMonthSales}`} />
+                <LabelValue label={`${salesHistoryDepth} Month Sales`} value={`${extendedSalesHistoryTotal}`} />
+                <LabelValue label="Consecutive Months No Sales" value={`${noSalesMonthCount}`} />
+              </div>
+            </>
+          )}
+        </section>
+      </div>
+
+      <section className={`legacy-info-card legacy-parts-po-panel${collapsedPartsBands.purchaseOrders ? " is-collapsed" : ""}`}>
+        <div className="legacy-parts-po-tabs">
+          <button className="is-active" type="button">
+            Purchase Orders
+          </button>
+          <button type="button">Special Orders</button>
+          <label>
+            <input defaultChecked type="checkbox" /> All Incomplete
+          </label>
+          <label>
+            <input type="checkbox" /> All Received
+          </label>
+          <button
+            aria-expanded={!collapsedPartsBands.purchaseOrders}
+            className="legacy-parts-band-toggle"
+            onClick={() => togglePartsBand("purchaseOrders")}
+            type="button"
+          >
+            {collapsedPartsBands.purchaseOrders ? "+" : "-"}
+          </button>
+        </div>
+        {collapsedPartsBands.purchaseOrders ? (
+          <div className="legacy-parts-collapsed-line">
+            <span>{selectedPartsRow ? `${selectedPartsRow.source} / BO ${onOrderQuantity}` : "Purchase orders collapsed"}</span>
+          </div>
+        ) : (
+          <table className="legacy-parts-po-table">
+            <thead>
+              <tr>
+                <th>Number</th>
+                <th>Date</th>
+                <th>Cost</th>
+                <th>Ordered</th>
+                <th>Received</th>
+                <th>Canceled</th>
+                <th>BO</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>{selectedPartsRow?.source ?? ""}</td>
+                <td />
+                <td>{selectedPartsRow?.orderCost ?? ""}</td>
+                <td>{selectedPartsRow?.quantity ?? ""}</td>
+                <td>0</td>
+                <td>0</td>
+                <td>{selectedPartsRow ? onOrderQuantity : ""}</td>
+                <td>{selectedPartsRow ? `${selectedPartsRow.supplier} ${selectedPartsRow.description}` : ""}</td>
+              </tr>
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      {selectedActionRows.length > 0 ? (
+        <div className="legacy-parts-selection-tray" onClick={(event) => event.stopPropagation()}>
+          <strong>{selectedActionRows.length} selected</strong>
+          <button onClick={() => handleSelectedPartsAction("changeQty")} type="button">
+            Qty
+          </button>
+          <button onClick={() => handleSelectedPartsAction("createPo")} type="button">
+            PO
+          </button>
+          <button onClick={() => handleSelectedPartsAction("vendorLookup")} type="button">
+            Vendor
+          </button>
+          <button onClick={() => handleSelectedPartsAction("copy")} type="button">
+            Copy
+          </button>
+          <button className="is-danger" onClick={() => handleSelectedPartsAction("delete")} type="button">
+            Delete
+          </button>
+          <button onClick={() => setSelectedActionRowIds([])} type="button">
+            Clear
+          </button>
+        </div>
+      ) : null}
+
+      {contextMenuRow && partsContextMenu ? (
+        <div
+          className="legacy-parts-context-menu"
+          onClick={(event) => event.stopPropagation()}
+          style={{ left: partsContextMenu.x, top: partsContextMenu.y }}
+        >
+          <strong>{contextMenuRow.partNumber}</strong>
+          <button onClick={() => handlePartsContextAction("changeQty", contextMenuRow)} type="button">
+            Change Qty
+          </button>
+          <button onClick={() => handlePartsContextAction("vendorLookup", contextMenuRow)} type="button">
+            Vendor Lookup
+          </button>
+          <button onClick={() => handlePartsContextAction("openSource", contextMenuRow)} type="button">
+            Open Source
+          </button>
+          <button onClick={() => handlePartsContextAction("copy", contextMenuRow)} type="button">
+            Copy Part #
+          </button>
+          <button onClick={() => handlePartsContextAction("createPo", contextMenuRow)} type="button">
+            Create PO
+          </button>
+          <button className="is-danger" onClick={() => handlePartsContextAction("delete", contextMenuRow)} type="button">
+            Delete Line
+          </button>
+        </div>
+      ) : null}
+
+      {sourcePreviewRow && partsSourcePreview ? (
+        <div className="legacy-parts-source-preview" style={{ left: partsSourcePreview.x, top: partsSourcePreview.y }}>
+          <strong>{buildPartsInspectorTitle(sourcePreviewRow, partsSourcePreview.kind)}</strong>
+          {buildPartsInspectorLines(sourcePreviewRow, getDisplayQuantity(sourcePreviewRow), partsSourcePreview.kind).map((line) => (
+            <span key={line}>{line}</span>
+          ))}
+        </div>
+      ) : null}
 
       <PartsLookupModal
         isSubmitting={isLookupSubmitting}
@@ -10347,6 +17857,104 @@ function PartsOrderingBoard({
         searchTerm={lookupSearchTerm}
         selectedRowId={lookupSelectedRowId}
       />
+
+      {isReceivingOpen && (
+        <div className="legacy-parts-receive-panel">
+          <div className="legacy-parts-receive-header">
+            <strong>Receive PO Lines</strong>
+            <button
+              className="legacy-task-status-button"
+              onClick={() => setIsReceivingOpen(false)}
+              type="button"
+            >
+              Close
+            </button>
+          </div>
+          <table className="legacy-parts-receive-table">
+            <thead>
+              <tr>
+                <th>Part #</th>
+                <th>Description</th>
+                <th>Expected</th>
+                <th>Ordered Qty</th>
+                <th>Received Qty</th>
+                <th>Discrepancy</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {receivingRows.map((recv) => {
+                const row = rows.find((r) => r.id === recv.id);
+                if (!row) return null;
+                const ordered = parseInt(getDisplayQuantity(row), 10) || 1;
+                const received = parseInt(recv.receivedQty, 10) || 0;
+                const discrepancy = received - ordered;
+                const status = received === 0 ? "pending" : received < ordered ? "partial" : "received";
+                return (
+                  <tr key={recv.id}>
+                    <td>{row.partNumber}</td>
+                    <td>{row.description}</td>
+                    <td style={{ textAlign: "center" }}>{ordered}</td>
+                    <td style={{ textAlign: "center" }}>{ordered}</td>
+                    <td>
+                      <input
+                        className="legacy-parts-receive-qty-input"
+                        max={ordered}
+                        min={0}
+                        onChange={(event) => {
+                          const next = event.target.value;
+                          setReceivingRows((prev) =>
+                            prev.map((r) => r.id === recv.id ? { ...r, receivedQty: next, status } : r)
+                          );
+                        }}
+                        type="number"
+                        value={recv.receivedQty}
+                      />
+                    </td>
+                    <td>
+                      <span className={discrepancy === 0 ? "" : "legacy-receive-discrepancy"}>
+                        {discrepancy === 0 ? "—" : discrepancy > 0 ? `+${discrepancy}` : `${discrepancy}`}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`legacy-parts-receive-status is-${status}`}>{status}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div className="legacy-parts-receive-actions">
+            {receivingRows.length > 0 && receivingRows.every((r) => {
+              const row = rows.find((x) => x.id === r.id);
+              if (!row) return false;
+              return parseInt(r.receivedQty, 10) >= (parseInt(getDisplayQuantity(row), 10) || 1);
+            }) && (
+              <span className="legacy-receive-fully-received">✅ Fully Received</span>
+            )}
+            <button
+              className="legacy-parts-composer-action"
+              onClick={() => {
+                setPartsActionNotice(`PO reconciled — ${receivingRows.length} line(s) receipt confirmed.`);
+                setIsReceivingOpen(false);
+              }}
+              type="button"
+            >
+              Reconcile PO
+            </button>
+            <button
+              className="legacy-parts-composer-action"
+              onClick={() => {
+                setPartsActionNotice(`${receivingRows.length} line(s) receipt confirmed.`);
+                setIsReceivingOpen(false);
+              }}
+              type="button"
+            >
+              Confirm Receipt
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -10659,6 +18267,166 @@ function readOpenWindowOrderPreference(userId: string) {
   } catch {
     return [];
   }
+}
+
+function readHiddenQuickLaunchSlots(userId: string) {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const raw = window.sessionStorage.getItem(`${QUICK_LAUNCH_HIDDEN_STORAGE_PREFIX}:${userId}`);
+
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return normalizeHiddenQuickLaunchSlots(parsed.filter((value): value is string => typeof value === "string"));
+  } catch {
+    return [];
+  }
+}
+
+function getDefaultQuickLaunchRouteMetadata(): Record<string, QuickLaunchRouteMetadata> {
+  return {
+    "2": {
+      groupLabel: "Service",
+      item: "Estimates & Repair Orders",
+      label: "Estimates & Repair Orders"
+    }
+  };
+}
+
+function normalizeQuickLaunchRouteMetadataPreference(value: unknown) {
+  const defaults = getDefaultQuickLaunchRouteMetadata();
+
+  if (!value || typeof value !== "object") {
+    return defaults;
+  }
+
+  const allowedSlots = new Set(quickLaunchButtons.filter((button) => Boolean(button.workspaceId)).map((button) => button.slot));
+  const normalized: Record<string, QuickLaunchRouteMetadata> = { ...defaults };
+
+  for (const [slot, metadata] of Object.entries(value as Record<string, unknown>)) {
+    if (!allowedSlots.has(slot)) {
+      continue;
+    }
+
+    if (!metadata || typeof metadata !== "object") {
+      continue;
+    }
+
+    const groupLabel = (metadata as { groupLabel?: unknown }).groupLabel;
+    const item = (metadata as { item?: unknown }).item;
+    const label = (metadata as { label?: unknown }).label;
+
+    if (typeof groupLabel !== "string" || typeof item !== "string") {
+      continue;
+    }
+
+    normalized[slot] = {
+      groupLabel,
+      item,
+      label: typeof label === "string" && label.trim() ? label : item
+    };
+  }
+
+  return normalized;
+}
+
+function readQuickLaunchRouteMetadataPreference(userId: string) {
+  if (typeof window === "undefined") {
+    return getDefaultQuickLaunchRouteMetadata();
+  }
+
+  const raw = window.sessionStorage.getItem(`${QUICK_LAUNCH_ROUTE_STORAGE_PREFIX}:${userId}`);
+
+  if (!raw) {
+    return getDefaultQuickLaunchRouteMetadata();
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return normalizeQuickLaunchRouteMetadataPreference(parsed);
+  } catch {
+    return getDefaultQuickLaunchRouteMetadata();
+  }
+}
+
+function readQuickLaunchOrderPreference(userId: string) {
+  if (typeof window === "undefined") {
+    return quickLaunchButtons.map((button) => button.slot);
+  }
+
+  const raw = window.sessionStorage.getItem(`${QUICK_LAUNCH_ORDER_STORAGE_PREFIX}:${userId}`);
+
+  if (!raw) {
+    return quickLaunchButtons.map((button) => button.slot);
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+
+    if (!Array.isArray(parsed)) {
+      return quickLaunchButtons.map((button) => button.slot);
+    }
+
+    return normalizeQuickLaunchOrderPreference(parsed.filter((value): value is string => typeof value === "string"));
+  } catch {
+    return quickLaunchButtons.map((button) => button.slot);
+  }
+}
+
+function normalizeQuickLaunchOrderPreference(slots: string[]) {
+  const allowedSlots = new Set(quickLaunchButtons.map((button) => button.slot));
+  const uniqueSlots = slots.filter((slot, index) => allowedSlots.has(slot) && slots.indexOf(slot) === index);
+  const missingSlots = quickLaunchButtons.map((button) => button.slot).filter((slot) => !uniqueSlots.includes(slot));
+
+  return [...uniqueSlots, ...missingSlots];
+}
+
+function sortQuickLaunchButtonsByOrder(buttons: QuickLaunchButton[], orderedSlots: string[]) {
+  const normalizedOrder = normalizeQuickLaunchOrderPreference(orderedSlots);
+  const orderIndexBySlot = new Map(normalizedOrder.map((slot, index) => [slot, index]));
+
+  return [...buttons].sort((left, right) => {
+    const leftIndex = orderIndexBySlot.get(left.slot) ?? Number.MAX_SAFE_INTEGER;
+    const rightIndex = orderIndexBySlot.get(right.slot) ?? Number.MAX_SAFE_INTEGER;
+
+    return leftIndex - rightIndex;
+  });
+}
+
+function reorderQuickLaunchOrderPreference(current: string[], sourceSlot: string, targetSlot: string, position: "before" | "after") {
+  const normalized = normalizeQuickLaunchOrderPreference(current);
+  const sourceIndex = normalized.indexOf(sourceSlot);
+  const targetIndex = normalized.indexOf(targetSlot);
+
+  if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) {
+    return normalized;
+  }
+
+  const next = [...normalized];
+  next.splice(sourceIndex, 1);
+
+  const targetIndexAfterRemoval = next.indexOf(targetSlot);
+  const insertionIndex = position === "after" ? targetIndexAfterRemoval + 1 : targetIndexAfterRemoval;
+  next.splice(insertionIndex, 0, sourceSlot);
+
+  return normalizeQuickLaunchOrderPreference(next);
+}
+
+function normalizeHiddenQuickLaunchSlots(slots: string[]) {
+  const allowedSlots = new Set(quickLaunchButtons.map((button) => button.slot));
+  const uniqueSlots = new Set(slots.filter((slot) => allowedSlots.has(slot)));
+
+  return quickLaunchButtons.filter((button) => uniqueSlots.has(button.slot)).map((button) => button.slot);
 }
 
 function readServiceNotificationRailCollapsedPreference(userId: string) {
@@ -11308,6 +19076,2109 @@ function buildDesktopDonutGradient(segments: Array<{ color: string; end: number;
   return `conic-gradient(${segments.map((segment) => `${segment.color} ${segment.start}% ${segment.end}%`).join(", ")})`;
 }
 
+// ─── Sales Deal Workbench ──────────────────────────────────────────────────────
+
+type SalesDealTab =
+  | "general"
+  | "customer"
+  | "communications"
+  | "lienIns"
+  | "trades"
+  | "deposits"
+  | "partsLabor"
+  | "options"
+  | "dealRecap"
+  | "attach"
+  | "eSignature"
+  | "fi"
+  | "desk";
+
+const salesDealTabs: Array<{ id: SalesDealTab; label: string }> = [
+  { id: "general", label: "General" },
+  { id: "customer", label: "Customer" },
+  { id: "fi", label: "F&I" },
+  { id: "desk", label: "Desking" },
+  { id: "communications", label: "Communications..." },
+  { id: "lienIns", label: "Lien / Ins" },
+  { id: "trades", label: "Trades" },
+  { id: "deposits", label: "Deposits" },
+  { id: "partsLabor", label: "Parts / Labor" },
+  { id: "options", label: "Options" },
+  { id: "dealRecap", label: "Deal Recap" },
+  { id: "attach", label: "Attach." },
+  { id: "eSignature", label: "eSignature" }
+];
+
+const salesDepositCashierOptions = ["Miles May", "Roger Harrison", "Mason May"];
+const salesDepositMethodOptions = [
+  "Cash",
+  "Check",
+  "Ck Recvd at Corporate Office",
+  "Community Bank",
+  "Credit Card - InStore",
+  "Credit Card - Kenect",
+  "Temp Hold Deposit",
+  "ZACCT - Internal Coupons"
+];
+
+// ─── Vendor/Supplier Management Panel ─────────────────────────────────────────
+const stubVendors = [
+  { id: "v1", name: "Mercury Marine Parts", contact: "John Wells", phone: "800-555-0191", email: "jwells@mercurymarine.com", terms: "Net 30", leadDays: 5, notes: "Primary engine parts supplier" },
+  { id: "v2", name: "Sea Ray Distribution", contact: "Lisa Park", phone: "800-555-0284", email: "lpark@searay.com", terms: "Net 15", leadDays: 7, notes: "Hull and deck components" },
+  { id: "v3", name: "West Marine Wholesale", contact: "Tom Rivera", phone: "800-555-0372", email: "trivera@westmarine.com", terms: "COD", leadDays: 2, notes: "Accessories and hardware" },
+  { id: "v4", name: "BRP Marine Parts", contact: "Sarah Chen", phone: "800-555-0445", email: "schen@brp.com", terms: "Net 30", leadDays: 10, notes: "Evinrude/Can-Am parts" },
+];
+
+function VendorManagementPanel() {
+  const [vendors, setVendors] = useState(stubVendors);
+  const [selectedVendorId, setSelectedVendorId] = useState<string | null>(stubVendors[0].id);
+  const [editingVendorId, setEditingVendorId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<typeof stubVendors[0] | null>(null);
+  const selectedVendor = vendors.find(v => v.id === selectedVendorId) ?? null;
+
+  function startEdit(v: typeof stubVendors[0]) {
+    setEditingVendorId(v.id);
+    setEditDraft({ ...v });
+  }
+
+  function cancelEdit() {
+    setEditingVendorId(null);
+    setEditDraft(null);
+  }
+
+  function saveEdit() {
+    if (!editDraft) return;
+    setVendors(current => current.map(v => v.id === editDraft.id ? editDraft : v));
+    setEditingVendorId(null);
+    setEditDraft(null);
+  }
+
+  return (
+    <div className="legacy-vendor-layout">
+      <div className="legacy-vendor-list">
+        {vendors.map(v => (
+          <button
+            className={`legacy-vendor-list-item${selectedVendorId === v.id ? " is-active" : ""}`}
+            key={v.id}
+            onClick={() => setSelectedVendorId(v.id)}
+            type="button"
+          >
+            <strong>{v.name}</strong>
+            <span>{v.terms}</span>
+          </button>
+        ))}
+      </div>
+      <div className="legacy-vendor-detail">
+        {selectedVendor ? (
+          <>
+            <div className="legacy-vendor-detail-header">{selectedVendor.name}</div>
+            <div className="legacy-vendor-meta-grid">
+              <div className="legacy-vendor-meta-item"><label>Contact</label><span>{selectedVendor.contact}</span></div>
+              <div className="legacy-vendor-meta-item"><label>Phone</label><span>{selectedVendor.phone}</span></div>
+              <div className="legacy-vendor-meta-item"><label>Email</label><span>{selectedVendor.email}</span></div>
+              <div className="legacy-vendor-meta-item"><label>Terms</label><span><span className="legacy-pricing-markup-chip">{selectedVendor.terms}</span></span></div>
+              <div className="legacy-vendor-meta-item"><label>Lead Days</label><span>{selectedVendor.leadDays} days</span></div>
+            </div>
+            <div className="legacy-vendor-notes">{selectedVendor.notes}</div>
+            {editingVendorId === selectedVendor.id && editDraft ? (
+              <div className="legacy-vendor-edit-form">
+                {(["name", "contact", "phone", "email", "terms", "notes"] as const).map(field => (
+                  <label className="legacy-pricing-edit-field" key={field}>
+                    <span style={{ textTransform: "capitalize" }}>{field}</span>
+                    {field === "notes" ? (
+                      <textarea
+                        onChange={e => setEditDraft(d => d ? { ...d, [field]: e.target.value } : d)}
+                        rows={2}
+                        style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 5, color: "inherit", fontSize: "0.82rem", padding: "4px 8px", resize: "vertical", width: "100%" }}
+                        value={editDraft[field] as string}
+                      />
+                    ) : (
+                      <input
+                        onChange={e => setEditDraft(d => d ? { ...d, [field]: e.target.value } : d)}
+                        style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 5, color: "inherit", fontSize: "0.82rem", padding: "4px 7px", width: "100%" }}
+                        type="text"
+                        value={editDraft[field] as string}
+                      />
+                    )}
+                  </label>
+                ))}
+                <label className="legacy-pricing-edit-field">
+                  <span>Lead Days</span>
+                  <input
+                    min={0}
+                    onChange={e => setEditDraft(d => d ? { ...d, leadDays: parseInt(e.target.value, 10) || 0 } : d)}
+                    style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 5, color: "inherit", fontSize: "0.82rem", padding: "4px 7px", width: "100%" }}
+                    type="number"
+                    value={editDraft.leadDays}
+                  />
+                </label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="legacy-task-status-button" onClick={saveEdit} type="button">Save</button>
+                  <button className="legacy-task-status-button" onClick={cancelEdit} type="button">Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button className="legacy-task-status-button" onClick={() => startEdit(selectedVendor)} type="button">Edit Vendor</button>
+            )}
+          </>
+        ) : (
+          <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.88rem", marginTop: 24, textAlign: "center" }}>Select a vendor.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Parts Pricing Matrix Panel ────────────────────────────────────────────────
+const stubPricingMatrix = [
+  { id: "pm1", category: "Engine Parts", costMin: 0, costMax: 50, markupPct: 40, retailMethod: "Cost + Markup", minMarginPct: 25 },
+  { id: "pm2", category: "Engine Parts", costMin: 50, costMax: 200, markupPct: 32, retailMethod: "Cost + Markup", minMarginPct: 22 },
+  { id: "pm3", category: "Engine Parts", costMin: 200, costMax: 9999, markupPct: 25, retailMethod: "Cost + Markup", minMarginPct: 18 },
+  { id: "pm4", category: "Accessories", costMin: 0, costMax: 100, markupPct: 50, retailMethod: "Cost + Markup", minMarginPct: 30 },
+  { id: "pm5", category: "Accessories", costMin: 100, costMax: 9999, markupPct: 38, retailMethod: "Cost + Markup", minMarginPct: 25 },
+  { id: "pm6", category: "OEM Hull Parts", costMin: 0, costMax: 9999, markupPct: 20, retailMethod: "MSRP", minMarginPct: 15 },
+  { id: "pm7", category: "Electronics", costMin: 0, costMax: 9999, markupPct: 28, retailMethod: "Cost + Markup", minMarginPct: 20 },
+];
+
+function PricingMatrixPanel() {
+  const [rules, setRules] = useState(stubPricingMatrix);
+  const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
+  const [draftRule, setDraftRule] = useState<typeof stubPricingMatrix[0] | null>(null);
+  const [pricingNotice, setPricingNotice] = useState("");
+
+  function selectRule(rule: typeof stubPricingMatrix[0]) {
+    setSelectedRuleId(rule.id);
+    setDraftRule({ ...rule });
+  }
+
+  function saveRule() {
+    if (!draftRule) return;
+    setRules(current => current.map(r => r.id === draftRule.id ? draftRule : r));
+    setPricingNotice("Rule saved.");
+    setTimeout(() => setPricingNotice(""), 2000);
+  }
+
+  function deleteRule() {
+    if (!selectedRuleId) return;
+    setRules(current => current.filter(r => r.id !== selectedRuleId));
+    setSelectedRuleId(null);
+    setDraftRule(null);
+    setPricingNotice("Rule deleted.");
+    setTimeout(() => setPricingNotice(""), 2000);
+  }
+
+  function addRule() {
+    const newId = `pm${Date.now()}`;
+    const newRule = { id: newId, category: "New Category", costMin: 0, costMax: 9999, markupPct: 30, retailMethod: "Cost + Markup", minMarginPct: 20 };
+    setRules(current => [...current, newRule]);
+    selectRule(newRule);
+  }
+
+  return (
+    <div style={{ padding: 16, overflow: "auto" }}>
+      {pricingNotice && <div className="legacy-workbench-notice" style={{ marginBottom: 8 }}>{pricingNotice}</div>}
+      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <button className="legacy-task-status-button" onClick={addRule} type="button">+ Add Rule</button>
+        <button className="legacy-task-status-button" disabled={!selectedRuleId} onClick={deleteRule} type="button">Delete Rule</button>
+      </div>
+      <table className="legacy-pricing-matrix-table">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Cost Range</th>
+            <th>Markup %</th>
+            <th>Method</th>
+            <th>Min Margin %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rules.map(r => (
+            <tr className={selectedRuleId === r.id ? "is-selected" : ""} key={r.id} onClick={() => selectRule(r)}>
+              <td>{r.category}</td>
+              <td>${r.costMin}–${r.costMax === 9999 ? "∞" : r.costMax}</td>
+              <td><span className="legacy-pricing-markup-chip">{r.markupPct}%</span></td>
+              <td>{r.retailMethod}</td>
+              <td>{r.minMarginPct}%</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {draftRule && (
+        <div className="legacy-pricing-edit-form">
+          <div className="legacy-pricing-edit-field">
+            <span>Category</span>
+            <input onChange={e => setDraftRule(d => d ? { ...d, category: e.target.value } : d)} type="text" value={draftRule.category} />
+          </div>
+          <div className="legacy-pricing-edit-field">
+            <span>Cost Min ($)</span>
+            <input onChange={e => setDraftRule(d => d ? { ...d, costMin: parseFloat(e.target.value) || 0 } : d)} type="number" value={draftRule.costMin} />
+          </div>
+          <div className="legacy-pricing-edit-field">
+            <span>Cost Max ($)</span>
+            <input onChange={e => setDraftRule(d => d ? { ...d, costMax: parseFloat(e.target.value) || 0 } : d)} type="number" value={draftRule.costMax} />
+          </div>
+          <div className="legacy-pricing-edit-field">
+            <span>Markup %</span>
+            <input onChange={e => setDraftRule(d => d ? { ...d, markupPct: parseFloat(e.target.value) || 0 } : d)} type="number" value={draftRule.markupPct} />
+          </div>
+          <div className="legacy-pricing-edit-field">
+            <span>Retail Method</span>
+            <select onChange={e => setDraftRule(d => d ? { ...d, retailMethod: e.target.value } : d)} value={draftRule.retailMethod}>
+              <option>Cost + Markup</option>
+              <option>MSRP</option>
+              <option>Matrix</option>
+            </select>
+          </div>
+          <div className="legacy-pricing-edit-field">
+            <span>Min Margin %</span>
+            <input onChange={e => setDraftRule(d => d ? { ...d, minMarginPct: parseFloat(e.target.value) || 0 } : d)} type="number" value={draftRule.minMarginPct} />
+          </div>
+          <div style={{ display: "flex", gap: 8, gridColumn: "1 / -1" }}>
+            <button className="legacy-task-status-button" onClick={saveRule} type="button">Save Rule</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Service Reminder Campaign Panel ──────────────────────────────────────────
+const campaignTypes = ["Winterization", "Annual Service", "Oil Change", "Spring Launch"];
+
+function generateCampaignRows(type: string): Array<{ id: string; name: string; unit: string; lastService: string; contact: string; type: string }> {
+  const base = [
+    { name: "James Holloway", unit: "2021 Sea Ray 230 SLX", lastService: "2023-11-12", contact: "james@email.com" },
+    { name: "Maria Santos", unit: "2019 Bayliner VR5", lastService: "2023-10-28", contact: "msantos@email.com" },
+    { name: "Robert Keen", unit: "2022 Yamaha FSH210", lastService: "2024-01-05", contact: "rkeen@email.com" },
+    { name: "Linda Park", unit: "2020 MasterCraft X22", lastService: "2023-12-01", contact: "lpark@email.com" },
+    { name: "Tom Walsh", unit: "2018 Chaparral 21 H2O", lastService: "2023-09-17", contact: "twalsh@email.com" },
+    { name: "Cynthia Moore", unit: "2023 Cobalt R7", lastService: "2024-02-14", contact: "cmoore@email.com" },
+    { name: "Derek Han", unit: "2017 Four Winns H240", lastService: "2023-08-30", contact: "dhan@email.com" },
+  ];
+  return base.map((row, i) => ({ id: `cr${i}`, ...row, type }));
+}
+
+function CampaignPanel() {
+  const [campaignType, setCampaignType] = useState<string>("Winterization");
+  const [campaignRows, setCampaignRows] = useState<Array<{ id: string; name: string; unit: string; lastService: string; contact: string; type: string }>>([]);
+  const [campaignNotice, setCampaignNotice] = useState("");
+
+  function generateList() {
+    const rows = generateCampaignRows(campaignType);
+    setCampaignRows(rows);
+    setCampaignNotice(`${rows.length} customers identified for ${campaignType} campaign.`);
+  }
+
+  function exportCsv() {
+    if (campaignRows.length === 0) return;
+    const header = "Customer Name,Unit,Last Service,Contact,Reminder Type\n";
+    const body = campaignRows.map(r => `"${r.name}","${r.unit}","${r.lastService}","${r.contact}","${r.type}"`).join("\n");
+    const blob = new Blob([header + body], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${campaignType.replace(/\s+/g, "-").toLowerCase()}-campaign.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div style={{ padding: 16 }}>
+      <div className="legacy-campaign-type-row">
+        {campaignTypes.map(t => (
+          <button
+            className={`legacy-campaign-type-btn${campaignType === t ? " is-active" : ""}`}
+            key={t}
+            onClick={() => setCampaignType(t)}
+            type="button"
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+      <div style={{ alignItems: "center", display: "flex", gap: 10, marginBottom: 12 }}>
+        <button className="legacy-task-status-button" onClick={generateList} type="button">Generate List</button>
+        <button className="legacy-task-status-button" disabled={campaignRows.length === 0} onClick={exportCsv} type="button">Export CSV</button>
+        {campaignRows.length > 0 && <span className="legacy-campaign-count-badge">{campaignRows.length} customers</span>}
+      </div>
+      {campaignNotice && <div className="legacy-workbench-notice" style={{ marginBottom: 10 }}>{campaignNotice}</div>}
+      {campaignRows.length > 0 && (
+        <table className="legacy-campaign-table">
+          <thead>
+            <tr>
+              <th>Customer Name</th>
+              <th>Unit</th>
+              <th>Last Service</th>
+              <th>Contact</th>
+              <th>Reminder Type</th>
+            </tr>
+          </thead>
+          <tbody>
+            {campaignRows.map(r => (
+              <tr key={r.id}>
+                <td>{r.name}</td>
+                <td>{r.unit}</td>
+                <td>{r.lastService}</td>
+                <td>{r.contact}</td>
+                <td>{r.type}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+type ApprovalStatus = "Pending" | "Approved" | "Rejected";
+type ApprovalRequestType = "Void Invoice" | "Discount Override" | "Warranty Authorization" | "Parts Adjustment" | "Deal Funding";
+interface ApprovalRequest {
+  id: string;
+  type: ApprovalRequestType;
+  reference: string;
+  requestedBy: string;
+  impact: string;
+  status: ApprovalStatus;
+  age: string;
+  reason: string;
+}
+
+const initialApprovalRequests: ApprovalRequest[] = [
+  { id: "ap1", type: "Void Invoice", reference: "RO 104582", requestedBy: "M. Torres", impact: "$2,418.33", status: "Pending", age: "12m", reason: "Customer disputed duplicate charge" },
+  { id: "ap2", type: "Discount Override", reference: "Deal WKS-22014", requestedBy: "A. Jensen", impact: "7.5% discount", status: "Pending", age: "34m", reason: "Boat show promo match" },
+  { id: "ap3", type: "Warranty Authorization", reference: "Claim WTY-9012", requestedBy: "S. Lee", impact: "$684.50", status: "Approved", age: "1h", reason: "Manufacturer pre-auth received" },
+  { id: "ap4", type: "Parts Adjustment", reference: "Part 8M0123456", requestedBy: "P. Walsh", impact: "-2 qty", status: "Pending", age: "2h", reason: "Cycle count variance" },
+  { id: "ap5", type: "Deal Funding", reference: "Deal WKS-22009", requestedBy: "R. Chan", impact: "$48,910.00", status: "Rejected", age: "4h", reason: "Missing lender confirmation" }
+];
+
+type DocumentType = "RO Invoice" | "Estimate" | "Signed Form" | "Deal Jacket" | "Warranty Doc" | "PO PDF";
+type DocumentStatus = "Draft" | "Ready" | "Sent" | "Signed" | "Archived";
+interface DocumentRecord {
+  id: string;
+  type: DocumentType;
+  reference: string;
+  party: string;
+  status: DocumentStatus;
+  lastUpdated: string;
+}
+
+const documentTypeOptions: Array<"All" | DocumentType> = ["All", "RO Invoice", "Estimate", "Signed Form", "Deal Jacket", "Warranty Doc", "PO PDF"];
+const initialDocuments: DocumentRecord[] = [
+  { id: "doc1", type: "RO Invoice", reference: "RO 104582", party: "James Holloway", status: "Ready", lastUpdated: "Today 9:42 AM" },
+  { id: "doc2", type: "Estimate", reference: "EST 7713", party: "Maria Santos", status: "Sent", lastUpdated: "Today 8:18 AM" },
+  { id: "doc3", type: "Signed Form", reference: "SIG 33091", party: "Robert Keen", status: "Signed", lastUpdated: "Yesterday 4:20 PM" },
+  { id: "doc4", type: "Deal Jacket", reference: "Deal WKS-22014", party: "Aqua Finance", status: "Draft", lastUpdated: "Yesterday 1:05 PM" },
+  { id: "doc5", type: "Warranty Doc", reference: "Claim WTY-9012", party: "Mercury Marine", status: "Ready", lastUpdated: "Mon 11:33 AM" },
+  { id: "doc6", type: "PO PDF", reference: "PO 60218", party: "West Marine Wholesale", status: "Archived", lastUpdated: "Fri 3:45 PM" }
+];
+
+type InternalTaskStatus = "Open" | "In Progress" | "Done";
+type InternalTaskPriority = "Low" | "Normal" | "High" | "Urgent";
+interface InternalTask {
+  id: string;
+  title: string;
+  reference: string;
+  assignee: string;
+  dueDate: string;
+  priority: InternalTaskPriority;
+  status: InternalTaskStatus;
+}
+
+type InternalTaskDraft = Omit<InternalTask, "id" | "status">;
+const taskStatusColumns: InternalTaskStatus[] = ["Open", "In Progress", "Done"];
+const taskPriorityOptions: InternalTaskPriority[] = ["Low", "Normal", "High", "Urgent"];
+const initialInternalTasks: InternalTask[] = [
+  { id: "task1", title: "Call customer for approval", reference: "RO 104582", assignee: "M. Torres", dueDate: "Today", priority: "High", status: "Open" },
+  { id: "task2", title: "Order backordered part", reference: "Part 8M0123456", assignee: "P. Walsh", dueDate: "Tomorrow", priority: "Urgent", status: "In Progress" },
+  { id: "task3", title: "Follow up warranty claim", reference: "Claim WTY-9012", assignee: "S. Lee", dueDate: "Fri", priority: "Normal", status: "Open" },
+  { id: "task4", title: "Collect payment", reference: "Invoice INV-4418", assignee: "A. Jensen", dueDate: "Today", priority: "High", status: "Done" }
+];
+
+interface ExceptionItem {
+  id: string;
+  type: "Unpaid Finalized Invoices" | "Past Promised ROs" | "Negative Inventory" | "Open Warranty Claims" | "Unsent Signatures" | "Sync Errors";
+  reference: string;
+  severity: "Low" | "Medium" | "High" | "Critical";
+  owner: string;
+  isAcknowledged: boolean;
+}
+
+const initialExceptions: ExceptionItem[] = [
+  { id: "ex1", type: "Unpaid Finalized Invoices", reference: "INV-4418", severity: "High", owner: "Receivables", isAcknowledged: false },
+  { id: "ex2", type: "Past Promised ROs", reference: "RO 104211", severity: "Medium", owner: "Service", isAcknowledged: false },
+  { id: "ex3", type: "Negative Inventory", reference: "Part 8M0123456", severity: "Critical", owner: "Parts", isAcknowledged: false },
+  { id: "ex4", type: "Open Warranty Claims", reference: "WTY-9012", severity: "Medium", owner: "Warranty", isAcknowledged: true },
+  { id: "ex5", type: "Unsent Signatures", reference: "Deal WKS-22014", severity: "Low", owner: "Sales", isAcknowledged: false },
+  { id: "ex6", type: "Sync Errors", reference: "Lightspeed DMS", severity: "High", owner: "Admin", isAcknowledged: false }
+];
+
+interface DataToolDefinition {
+  id: "customers" | "units" | "parts" | "vendors" | "service-history";
+  label: string;
+  description: string;
+  sampleRows: string[][];
+  templateHeaders: string[];
+}
+
+const dataToolDefinitions: DataToolDefinition[] = [
+  { id: "customers", label: "Customers", description: "Customer contacts, consent flags, and account owners.", templateHeaders: ["Customer Name", "Email", "Phone", "Preferred Store"], sampleRows: [["James Holloway", "james@email.com", "555-0108", "Clearwater"], ["Maria Santos", "msantos@email.com", "555-0142", "Tampa"]] },
+  { id: "units", label: "Units", description: "Boat inventory, HIN/VIN, year, make, and model.", templateHeaders: ["Stock", "Year", "Make", "Model", "Status"], sampleRows: [["STK-7782", "2023", "Sea Ray", "230 SLX", "Available"], ["STK-8801", "2024", "Yamaha", "252XE", "Reserved"]] },
+  { id: "parts", label: "Parts", description: "On-hand counts, bin locations, and reorder points.", templateHeaders: ["Part Number", "Description", "On Hand", "Bin", "Reorder Point"], sampleRows: [["8M0123456", "Fuel filter", "14", "A-12", "6"], ["33-8M0097854", "Spark plug", "48", "B-04", "20"]] },
+  { id: "vendors", label: "Vendors", description: "Supplier contacts, terms, lead times, and notes.", templateHeaders: ["Vendor", "Contact", "Email", "Terms", "Lead Days"], sampleRows: [["Mercury Marine Parts", "John Wells", "jwells@mercurymarine.com", "Net 30", "5"], ["West Marine Wholesale", "Tom Rivera", "trivera@westmarine.com", "COD", "2"]] },
+  { id: "service-history", label: "Service History", description: "Historical ROs, labor lines, parts, and completion dates.", templateHeaders: ["RO Number", "Customer", "Unit", "Closed Date", "Total"], sampleRows: [["RO 104582", "James Holloway", "2021 Sea Ray 230 SLX", "2026-02-11", "2418.33"], ["RO 104211", "Maria Santos", "2019 Bayliner VR5", "2026-02-09", "684.50"]] }
+];
+
+type NotificationAlertKey = "serviceDue" | "paymentReceived" | "approvalNeeded" | "lowInventory" | "syncErrors" | "warrantyUpdates";
+type NotificationChannel = "inApp" | "email" | "sms";
+interface NotificationPreferences {
+  alerts: Record<NotificationAlertKey, boolean>;
+  channels: Record<NotificationChannel, boolean>;
+  quietStart: string;
+  quietEnd: string;
+}
+
+const notificationAlertOptions: Array<{ key: NotificationAlertKey; label: string }> = [
+  { key: "serviceDue", label: "Service Due" },
+  { key: "paymentReceived", label: "Payment Received" },
+  { key: "approvalNeeded", label: "Approval Needed" },
+  { key: "lowInventory", label: "Low Inventory" },
+  { key: "syncErrors", label: "Sync Errors" },
+  { key: "warrantyUpdates", label: "Warranty Updates" }
+];
+const notificationChannelOptions: Array<{ key: NotificationChannel; label: string }> = [
+  { key: "inApp", label: "In-App" },
+  { key: "email", label: "Email" },
+  { key: "sms", label: "SMS" }
+];
+
+interface HealthService {
+  id: string;
+  label: string;
+  status: "Operational" | "Degraded" | "Down";
+  latency: string;
+  detail: string;
+  lastCheck: string;
+}
+
+interface FailedJob {
+  id: string;
+  job: string;
+  workspace: string;
+  lastError: string;
+  retries: number;
+  dismissed: boolean;
+}
+
+const initialHealthServices: HealthService[] = [
+  { id: "api", label: "API", status: "Operational", latency: "82 ms", detail: "Gateway responding normally", lastCheck: "Just now" },
+  { id: "db", label: "Database", status: "Operational", latency: "41 ms", detail: "Primary pool healthy", lastCheck: "Just now" },
+  { id: "sync", label: "Sync Engine", status: "Degraded", latency: "214 ms", detail: "One dealer feed retrying", lastCheck: "2m ago" },
+  { id: "backup", label: "Backup", status: "Operational", latency: "Last 01:15 AM", detail: "Nightly backup verified", lastCheck: "1h ago" },
+  { id: "jobs", label: "Job Queue", status: "Degraded", latency: "3 retries", detail: "Invoice sync retry pending", lastCheck: "5m ago" },
+  { id: "storage", label: "Storage", status: "Operational", latency: "68% used", detail: "Document bucket within limits", lastCheck: "Just now" }
+];
+const initialFailedJobs: FailedJob[] = [
+  { id: "job1", job: "Invoice export", workspace: "Receivables", lastError: "Gateway timeout from accounting bridge", retries: 2, dismissed: false },
+  { id: "job2", job: "Signature packet send", workspace: "Sales", lastError: "Customer email bounced", retries: 1, dismissed: false },
+  { id: "job3", job: "Inventory sync", workspace: "Parts", lastError: "Negative quantity rejected", retries: 3, dismissed: false }
+];
+
+function reportStatusClass(status: string) {
+  return status.toLowerCase().replace(/\s+/g, "-");
+}
+
+function ReportSectionShell({ children, eyebrow, title }: { children: ReactNode; eyebrow: string; title: string }) {
+  return (
+    <div className="legacy-report-section-shell">
+      <div className="legacy-command-log-header legacy-report-section-header">
+        <div>
+          <span>{eyebrow}</span>
+          <h3>{title}</h3>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function ApprovalWorkflowCenter() {
+  const [requests, setRequests] = useState<ApprovalRequest[]>(initialApprovalRequests);
+  const [notice, setNotice] = useState("Approval queue ready.");
+
+  function updateApprovalStatus(id: string, status: ApprovalStatus) {
+    const request = requests.find(r => r.id === id);
+    setRequests(current => current.map(r => r.id === id ? { ...r, status } : r));
+    setNotice(request ? `${request.reference} marked ${status}.` : `Request marked ${status}.`);
+  }
+
+  function viewRequest(request: ApprovalRequest) {
+    setNotice(`${request.reference}: ${request.reason}`);
+  }
+
+  return (
+    <ReportSectionShell eyebrow="Manager controls" title="Approval Workflow Center">
+      {notice && <div className="legacy-workbench-notice">{notice}</div>}
+      <div className="legacy-approval-table-wrap">
+        <table className="legacy-approval-table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Reference</th>
+              <th>Requested By</th>
+              <th>Amount/Impact</th>
+              <th>Status</th>
+              <th>Age</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {requests.map(request => (
+              <tr key={request.id}>
+                <td><strong>{request.type}</strong><span>{request.reason}</span></td>
+                <td>{request.reference}</td>
+                <td>{request.requestedBy}</td>
+                <td>{request.impact}</td>
+                <td><span className={`legacy-chip legacy-approval-status-${reportStatusClass(request.status)}`}>{request.status}</span></td>
+                <td>{request.age}</td>
+                <td>
+                  <div className="legacy-approval-actions">
+                    <button className="legacy-task-status-button" disabled={request.status === "Approved"} onClick={() => updateApprovalStatus(request.id, "Approved")} type="button">Approve</button>
+                    <button className="legacy-task-status-button" disabled={request.status === "Rejected"} onClick={() => updateApprovalStatus(request.id, "Rejected")} type="button">Reject</button>
+                    <button className="legacy-task-status-button" onClick={() => viewRequest(request)} type="button">View</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </ReportSectionShell>
+  );
+}
+
+function DocumentCenter() {
+  const [documents, setDocuments] = useState<DocumentRecord[]>(initialDocuments);
+  const [typeFilter, setTypeFilter] = useState<"All" | DocumentType>("All");
+  const [searchText, setSearchText] = useState("");
+  const [notice, setNotice] = useState("Document center ready.");
+  const normalizedSearch = searchText.trim().toLowerCase();
+  const filteredDocuments = documents.filter(doc => {
+    const matchesType = typeFilter === "All" || doc.type === typeFilter;
+    const matchesSearch = !normalizedSearch || [doc.type, doc.reference, doc.party, doc.status].some(value => value.toLowerCase().includes(normalizedSearch));
+    return matchesType && matchesSearch;
+  });
+
+  function handleDocumentAction(documentRecord: DocumentRecord, action: "Preview" | "Download" | "Send") {
+    if (action === "Send") {
+      setDocuments(current => current.map(doc => doc.id === documentRecord.id ? { ...doc, status: "Sent", lastUpdated: "Just now" } : doc));
+    }
+    setNotice(`${action} queued for ${documentRecord.reference}.`);
+  }
+
+  return (
+    <ReportSectionShell eyebrow="Document hub" title="Document Center">
+      <div className="legacy-document-toolbar">
+        <select onChange={e => setTypeFilter(e.target.value as "All" | DocumentType)} value={typeFilter}>
+          {documentTypeOptions.map(type => <option key={type}>{type}</option>)}
+        </select>
+        <input onChange={e => setSearchText(e.target.value)} placeholder="Search reference, customer, vendor, status…" type="search" value={searchText} />
+        <span>{filteredDocuments.length} docs</span>
+      </div>
+      {notice && <div className="legacy-workbench-notice">{notice}</div>}
+      <div className="legacy-document-table-wrap">
+        <table className="legacy-document-table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Reference</th>
+              <th>Customer/Vendor</th>
+              <th>Status</th>
+              <th>Last Updated</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredDocuments.map(doc => (
+              <tr key={doc.id}>
+                <td>{doc.type}</td>
+                <td><strong>{doc.reference}</strong></td>
+                <td>{doc.party}</td>
+                <td><span className={`legacy-chip legacy-document-status-${reportStatusClass(doc.status)}`}>{doc.status}</span></td>
+                <td>{doc.lastUpdated}</td>
+                <td>
+                  <div className="legacy-document-actions">
+                    {(["Preview", "Download", "Send"] as const).map(action => (
+                      <button className="legacy-task-status-button" key={action} onClick={() => handleDocumentAction(doc, action)} type="button">{action}</button>
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </ReportSectionShell>
+  );
+}
+
+function InternalTaskQueuePanel() {
+  const [tasks, setTasks] = useState<InternalTask[]>(initialInternalTasks);
+  const [draft, setDraft] = useState<InternalTaskDraft>({ title: "", assignee: "", dueDate: "", priority: "Normal", reference: "" });
+  const [notice, setNotice] = useState("Internal task queue ready.");
+
+  function moveTask(taskId: string, direction: "forward" | "back") {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const currentIndex = taskStatusColumns.indexOf(task.status);
+    const nextIndex = direction === "forward" ? Math.min(currentIndex + 1, taskStatusColumns.length - 1) : Math.max(currentIndex - 1, 0);
+    const nextStatus = taskStatusColumns[nextIndex];
+    setTasks(current => current.map(t => t.id === taskId ? { ...t, status: nextStatus } : t));
+    setNotice(`${task.title} moved to ${nextStatus}.`);
+  }
+
+  function addTask() {
+    const title = draft.title.trim();
+    if (!title) {
+      setNotice("Task title is required.");
+      return;
+    }
+    const newTask: InternalTask = {
+      id: `task-${Date.now()}`,
+      title,
+      assignee: draft.assignee.trim() || "Unassigned",
+      dueDate: draft.dueDate.trim() || "No due date",
+      priority: draft.priority,
+      reference: draft.reference.trim() || "General",
+      status: "Open"
+    };
+    setTasks(current => [newTask, ...current]);
+    setDraft({ title: "", assignee: "", dueDate: "", priority: "Normal", reference: "" });
+    setNotice(`${newTask.title} added to Open.`);
+  }
+
+  return (
+    <ReportSectionShell eyebrow="Internal work" title="Tasks / To-Do Queue">
+      {notice && <div className="legacy-workbench-notice">{notice}</div>}
+      <div className="legacy-task-board-quick-add">
+        <input onChange={e => setDraft(current => ({ ...current, title: e.target.value }))} placeholder="Task title" type="text" value={draft.title} />
+        <input onChange={e => setDraft(current => ({ ...current, reference: e.target.value }))} placeholder="Reference" type="text" value={draft.reference} />
+        <input onChange={e => setDraft(current => ({ ...current, assignee: e.target.value }))} placeholder="Assignee" type="text" value={draft.assignee} />
+        <input onChange={e => setDraft(current => ({ ...current, dueDate: e.target.value }))} placeholder="Due date" type="text" value={draft.dueDate} />
+        <select onChange={e => setDraft(current => ({ ...current, priority: e.target.value as InternalTaskPriority }))} value={draft.priority}>
+          {taskPriorityOptions.map(priority => <option key={priority}>{priority}</option>)}
+        </select>
+        <button className="legacy-task-status-button" onClick={addTask} type="button">+ Add Task</button>
+      </div>
+      <div className="legacy-task-board-grid">
+        {taskStatusColumns.map(status => (
+          <div className="legacy-task-board-column" key={status}>
+            <div className="legacy-task-board-column-header"><span>{status}</span><strong>{tasks.filter(task => task.status === status).length}</strong></div>
+            {tasks.filter(task => task.status === status).map(task => (
+              <div className="legacy-task-board-card" key={task.id}>
+                <div className="legacy-task-board-card-title">{task.title}</div>
+                <div className="legacy-task-board-card-meta"><span>{task.reference}</span><span>{task.assignee}</span><span>{task.dueDate}</span></div>
+                <div className="legacy-task-board-card-actions">
+                  <span className={`legacy-chip legacy-task-board-priority-${reportStatusClass(task.priority)}`}>{task.priority}</span>
+                  <button className="legacy-task-status-button" disabled={task.status === "Open"} onClick={() => moveTask(task.id, "back")} type="button">Back</button>
+                  <button className="legacy-task-status-button" disabled={task.status === "Done"} onClick={() => moveTask(task.id, "forward")} type="button">Next</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </ReportSectionShell>
+  );
+}
+
+function ExceptionDashboard() {
+  const [exceptions, setExceptions] = useState<ExceptionItem[]>(initialExceptions);
+  const [notice, setNotice] = useState("Exception dashboard monitoring active.");
+  const types = Array.from(new Set(exceptions.map(item => item.type)));
+  const openExceptions = exceptions.filter(item => !item.isAcknowledged);
+
+  function acknowledgeException(item: ExceptionItem) {
+    setExceptions(current => current.map(exception => exception.id === item.id ? { ...exception, isAcknowledged: true } : exception));
+    setNotice(`${item.reference} acknowledged for ${item.owner}.`);
+  }
+
+  return (
+    <ReportSectionShell eyebrow="Operational controls" title="Exception Dashboard">
+      <div className="legacy-exception-summary-grid">
+        {types.map(type => (
+          <div className="legacy-exception-summary-tile" key={type}>
+            <span>{type}</span>
+            <strong>{exceptions.filter(item => item.type === type && !item.isAcknowledged).length}</strong>
+          </div>
+        ))}
+      </div>
+      {notice && <div className="legacy-workbench-notice">{notice}</div>}
+      <div className="legacy-exception-group-stack">
+        {types.map(type => (
+          <div className="legacy-exception-group" key={type}>
+            <div className="legacy-exception-group-header"><span>{type}</span><strong>{exceptions.filter(item => item.type === type && !item.isAcknowledged).length} open</strong></div>
+            {exceptions.filter(item => item.type === type).map(item => (
+              <div className={`legacy-exception-row${item.isAcknowledged ? " is-acknowledged" : ""}`} key={item.id}>
+                <span>{item.type}</span>
+                <strong>{item.reference}</strong>
+                <span className={`legacy-chip legacy-exception-severity-${reportStatusClass(item.severity)}`}>{item.severity}</span>
+                <span>{item.owner}</span>
+                <button className="legacy-task-status-button" disabled={item.isAcknowledged} onClick={() => acknowledgeException(item)} type="button">{item.isAcknowledged ? "Acknowledged" : "Acknowledge"}</button>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="legacy-exception-footer">{openExceptions.length} actionable exceptions remain.</div>
+    </ReportSectionShell>
+  );
+}
+
+function DataToolsPanel() {
+  const [notice, setNotice] = useState("Choose an import/export tool.");
+
+  function downloadDataToolCsv(tool: DataToolDefinition, mode: "export" | "template") {
+    const headers = tool.templateHeaders;
+    const rows = mode === "export" ? tool.sampleRows : [];
+    const csv = buildCsvExport([headers], rows);
+    downloadTextFile(`${tool.id}-${mode}.csv`, csv, "text/csv;charset=utf-8");
+    setNotice(`${tool.label} ${mode === "export" ? "export" : "template"} downloaded.`);
+  }
+
+  function handleImport(tool: DataToolDefinition, fileName?: string) {
+    setNotice(fileName ? `${tool.label} import staged from ${fileName}.` : `${tool.label} import opened.`);
+  }
+
+  return (
+    <ReportSectionShell eyebrow="Admin utilities" title="Data Import / Export Tools">
+      {notice && <div className="legacy-workbench-notice">{notice}</div>}
+      <div className="legacy-data-tools-grid">
+        {dataToolDefinitions.map(tool => (
+          <div className="legacy-data-tools-card" key={tool.id}>
+            <div>
+              <strong>{tool.label}</strong>
+              <p>{tool.description}</p>
+            </div>
+            <div className="legacy-data-tools-actions">
+              <button className="legacy-task-status-button" onClick={() => downloadDataToolCsv(tool, "export")} type="button">Export CSV</button>
+              <label className="legacy-data-tools-file-button">
+                Import CSV
+                <input accept=".csv,text/csv" onChange={e => handleImport(tool, e.target.files?.[0]?.name)} type="file" />
+              </label>
+              <button className="legacy-task-status-button" onClick={() => downloadDataToolCsv(tool, "template")} type="button">Template</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </ReportSectionShell>
+  );
+}
+
+function NotificationPreferencesPanel() {
+  const [preferences, setPreferences] = useState<NotificationPreferences>({
+    alerts: { serviceDue: true, paymentReceived: true, approvalNeeded: true, lowInventory: true, syncErrors: true, warrantyUpdates: false },
+    channels: { inApp: true, email: true, sms: false },
+    quietStart: "18:00",
+    quietEnd: "07:00"
+  });
+  const [notice, setNotice] = useState("Preferences loaded for current user.");
+
+  function toggleAlert(key: NotificationAlertKey) {
+    setPreferences(current => ({ ...current, alerts: { ...current.alerts, [key]: !current.alerts[key] } }));
+  }
+
+  function toggleChannel(key: NotificationChannel) {
+    setPreferences(current => ({ ...current, channels: { ...current.channels, [key]: !current.channels[key] } }));
+  }
+
+  return (
+    <ReportSectionShell eyebrow="User settings" title="Notification Preferences">
+      {notice && <div className="legacy-workbench-notice">{notice}</div>}
+      <div className="legacy-preferences-grid">
+        <div className="legacy-preferences-card">
+          <h4>Alert Settings</h4>
+          <div className="legacy-preferences-option-grid">
+            {notificationAlertOptions.map(option => (
+              <label className="legacy-preferences-check" key={option.key}>
+                <input checked={preferences.alerts[option.key]} onChange={() => toggleAlert(option.key)} type="checkbox" />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="legacy-preferences-card">
+          <h4>Delivery Channels</h4>
+          <div className="legacy-preferences-option-grid is-compact">
+            {notificationChannelOptions.map(option => (
+              <label className="legacy-preferences-check" key={option.key}>
+                <input checked={preferences.channels[option.key]} onChange={() => toggleChannel(option.key)} type="checkbox" />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+          <div className="legacy-preferences-quiet-row">
+            <label><span>Quiet Start</span><input onChange={e => setPreferences(current => ({ ...current, quietStart: e.target.value }))} type="time" value={preferences.quietStart} /></label>
+            <label><span>Quiet End</span><input onChange={e => setPreferences(current => ({ ...current, quietEnd: e.target.value }))} type="time" value={preferences.quietEnd} /></label>
+          </div>
+          <button className="legacy-task-status-button" onClick={() => setNotice("Notification preferences saved.")} type="button">Save Preferences</button>
+        </div>
+      </div>
+    </ReportSectionShell>
+  );
+}
+
+function SystemHealthPanel() {
+  const [services, setServices] = useState<HealthService[]>(initialHealthServices);
+  const [jobs, setJobs] = useState<FailedJob[]>(initialFailedJobs);
+  const [notice, setNotice] = useState("System health snapshot loaded.");
+  const visibleJobs = jobs.filter(job => !job.dismissed);
+
+  function refreshHealth() {
+    const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    setServices(current => current.map((service, index) => ({
+      ...service,
+      lastCheck: now,
+      latency: service.id === "backup" ? service.latency : `${65 + ((Date.now() + index * 17) % 180)} ms`
+    })));
+    setNotice(`Health refreshed at ${now}.`);
+  }
+
+  function handleJobAction(job: FailedJob, action: "Retry" | "Dismiss") {
+    if (action === "Retry") {
+      setJobs(current => current.map(currentJob => currentJob.id === job.id ? { ...currentJob, retries: currentJob.retries + 1 } : currentJob));
+      setNotice(`${job.job} retry queued.`);
+      return;
+    }
+    setJobs(current => current.map(currentJob => currentJob.id === job.id ? { ...currentJob, dismissed: true } : currentJob));
+    setNotice(`${job.job} dismissed from failed jobs.`);
+  }
+
+  return (
+    <ReportSectionShell eyebrow="Admin console" title="System Health">
+      <div className="legacy-health-toolbar">
+        <button className="legacy-task-status-button" onClick={refreshHealth} type="button">Refresh Health</button>
+        {notice && <span>{notice}</span>}
+      </div>
+      <div className="legacy-health-card-grid">
+        {services.map(service => (
+          <div className="legacy-health-card" key={service.id}>
+            <div className="legacy-health-card-header"><strong>{service.label}</strong><span className={`legacy-chip legacy-health-status-${reportStatusClass(service.status)}`}>{service.status}</span></div>
+            <div className="legacy-health-latency">{service.latency}</div>
+            <p>{service.detail}</p>
+            <span>{service.lastCheck}</span>
+          </div>
+        ))}
+      </div>
+      <div className="legacy-health-admin-grid">
+        <div className="legacy-health-failed-jobs">
+          <div className="legacy-health-subheader">Failed Jobs</div>
+          <table className="legacy-health-table">
+            <thead><tr><th>Job</th><th>Workspace</th><th>Last Error</th><th>Retries</th><th>Actions</th></tr></thead>
+            <tbody>
+              {visibleJobs.map(job => (
+                <tr key={job.id}>
+                  <td>{job.job}</td>
+                  <td>{job.workspace}</td>
+                  <td>{job.lastError}</td>
+                  <td>{job.retries}</td>
+                  <td><div className="legacy-health-actions"><button className="legacy-task-status-button" onClick={() => handleJobAction(job, "Retry")} type="button">Retry</button><button className="legacy-task-status-button" onClick={() => handleJobAction(job, "Dismiss")} type="button">Dismiss</button></div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="legacy-health-env-grid">
+          <div><span>App Version</span><strong>0.1.0</strong></div>
+          <div><span>Branch</span><strong>copilot/workspace-tools-purpose</strong></div>
+          <div><span>Mode</span><strong>Production Preview</strong></div>
+          <div><span>Last Deploy</span><strong>Today 08:30</strong></div>
+        </div>
+      </div>
+    </ReportSectionShell>
+  );
+}
+// ─── Report Center Workspace ───────────────────────────────────────────────────
+type ReportCenterSection = "reports" | "vendors" | "pricing" | "campaigns" | "audit" | "approvals" | "documents" | "tasks" | "exceptions" | "data-tools" | "preferences" | "system-health";
+
+function ReportCenterWorkspace({ auditLog }: { auditLog: CommandLogEntry[] }) {
+  const reports = [
+    { id: "service-revenue", label: "Service Revenue", category: "Service" },
+    { id: "parts-movement", label: "Parts Movement", category: "Parts" },
+    { id: "sales-pipeline", label: "Sales Pipeline", category: "Sales" },
+    { id: "tech-hours", label: "Technician Hours", category: "Service" },
+    { id: "inventory-aging", label: "Inventory Aging", category: "Inventory" },
+    { id: "deal-gross", label: "Deal Gross Report", category: "Sales" },
+  ];
+  const [activeSection, setActiveSection] = useState<ReportCenterSection>("reports");
+  const [activeReport, setActiveReport] = useState<string | null>(null);
+  const [auditFilter, setAuditFilter] = useState("");
+  const selected = reports.find(r => r.id === activeReport);
+  const filteredAudit = auditFilter.trim()
+    ? auditLog.filter(e => e.label.toLowerCase().includes(auditFilter.toLowerCase()) || (e.detail ?? "").toLowerCase().includes(auditFilter.toLowerCase()))
+    : auditLog;
+
+  const sidebarSections: Array<{ id: ReportCenterSection; label: string; group?: string }> = [
+    { id: "reports", label: "Reports", group: "Reporting" },
+    { id: "vendors", label: "Vendors" },
+    { id: "pricing", label: "Pricing Matrix" },
+    { id: "campaigns", label: "Campaigns" },
+    { id: "audit", label: "Audit Trail" },
+    { id: "approvals", label: "Approvals", group: "Workflow" },
+    { id: "documents", label: "Documents" },
+    { id: "tasks", label: "Tasks" },
+    { id: "exceptions", label: "Exceptions" },
+    { id: "data-tools", label: "Data Tools", group: "Admin" },
+    { id: "preferences", label: "Preferences" },
+    { id: "system-health", label: "System Health" },
+  ];
+
+  return (
+    <div className="legacy-report-workspace">
+      <div className="legacy-report-sidebar">
+        {sidebarSections.map(s => (
+          <div key={s.id}>
+            {s.group && <div className="legacy-report-sidebar-group">{s.group}</div>}
+            <button
+              className={`legacy-report-sidebar-item${activeSection === s.id ? " is-active" : ""}`}
+              onClick={() => setActiveSection(s.id)}
+              type="button"
+            >
+              <span className="legacy-report-sidebar-category">{s.label}</span>
+            </button>
+            {s.id === "reports" && activeSection === "reports" && reports.map(r => (
+              <button
+                className={`legacy-report-sidebar-item${activeReport === r.id ? " is-active" : ""}`}
+                key={r.id}
+                onClick={() => setActiveReport(r.id)}
+                style={{ paddingLeft: 20 }}
+                type="button"
+              >
+                <span className="legacy-report-sidebar-category">{r.category}</span>
+                <span>{r.label}</span>
+              </button>
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="legacy-report-main" style={{ overflow: "hidden", padding: 0 }}>
+        {activeSection === "reports" && (
+          selected ? (
+            <div style={{ padding: 16 }}>
+              <div className="legacy-report-main-header">{selected.label}</div>
+              <p style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.85rem", marginTop: 16 }}>
+                Report data is loading… (stub — connect to API in a future sprint)
+              </p>
+            </div>
+          ) : (
+            <div style={{ color: "rgba(255,255,255,0.45)", fontSize: "0.9rem", marginTop: 32, textAlign: "center" }}>
+              Select a report from the sidebar to get started.
+            </div>
+          )
+        )}
+        {activeSection === "vendors" && <VendorManagementPanel />}
+        {activeSection === "pricing" && <PricingMatrixPanel />}
+        {activeSection === "campaigns" && <CampaignPanel />}
+        {activeSection === "approvals" && <ApprovalWorkflowCenter />}
+        {activeSection === "documents" && <DocumentCenter />}
+        {activeSection === "tasks" && <InternalTaskQueuePanel />}
+        {activeSection === "exceptions" && <ExceptionDashboard />}
+        {activeSection === "data-tools" && <DataToolsPanel />}
+        {activeSection === "preferences" && <NotificationPreferencesPanel />}
+        {activeSection === "system-health" && <SystemHealthPanel />}
+        {activeSection === "audit" && (
+          <div style={{ padding: 16, overflow: "auto" }}>
+            <div style={{ alignItems: "center", display: "flex", gap: 10, marginBottom: 12 }}>
+              <input
+                onChange={e => setAuditFilter(e.target.value)}
+                placeholder="Filter by action or detail…"
+                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, color: "inherit", flex: 1, fontSize: "0.82rem", padding: "5px 10px" }}
+                type="text"
+                value={auditFilter}
+              />
+              <span style={{ color: "rgba(255,255,255,0.45)", fontSize: "0.78rem" }}>{filteredAudit.length} entries</span>
+            </div>
+            {filteredAudit.length === 0 ? (
+              <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.88rem", marginTop: 24, textAlign: "center" }}>No audit entries yet.</div>
+            ) : (
+              <table className="legacy-audit-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Action</th>
+                    <th>Detail</th>
+                    <th>Actor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAudit.map(entry => (
+                    <tr className={`legacy-audit-row-${entry.tone ?? "neutral"}`} key={entry.id}>
+                      <td className="legacy-audit-time">{entry.timeLabel}</td>
+                      <td>{entry.label}</td>
+                      <td>{entry.detail ?? "—"}</td>
+                      <td className="legacy-audit-actor">{entry.actorName ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+function SalesDealWorkbench({
+  actorUserId,
+  dealWindow,
+  dealRow,
+  storeId
+}: {
+  actorUserId: string;
+  dealWindow: SalesDealDetailWindow;
+  dealRow: SalesWorkspaceRow | null;
+  storeId: string;
+}) {
+  const [activeTab, setActiveTab] = useState<SalesDealTab>("general");
+  const [dealStage, setDealStage] = useState<"Lead" | "Desk" | "Finance" | "Closed" | "Delivered">("Desk");
+  const [dealNotice, setDealNotice] = useState<string | null>(null);
+  const [stageBlockMessage, setStageBlockMessage] = useState<string | null>(null);
+  const [lender, setLender] = useState("First National Bank");
+  const [loanAmount, setLoanAmount] = useState(35000);
+  const [interestRate, setInterestRate] = useState(6.9);
+  const [termMonths, setTermMonths] = useState(60);
+  const [downPayment, setDownPayment] = useState(5000);
+  const [tradeInValue, setTradeInValue] = useState(0);
+  const [tradeInDesc, setTradeInDesc] = useState("");
+  const [isTakeDepositModalOpen, setIsTakeDepositModalOpen] = useState(false);
+  const [isReprintModalOpen, setIsReprintModalOpen] = useState(false);
+  const [isDepositsLoading, setIsDepositsLoading] = useState(false);
+  const [isSubmittingDeposit, setIsSubmittingDeposit] = useState(false);
+  const [depositLoadError, setDepositLoadError] = useState<string | null>(null);
+  const [takeDepositError, setTakeDepositError] = useState<string | null>(null);
+  const [depositSnapshot, setDepositSnapshot] = useState<SalesDealDepositsResponse | null>(null);
+  const [selectedDepositEntryId, setSelectedDepositEntryId] = useState<string>("");
+  const [deskScenarios, setDeskScenarios] = useState([
+    { id: "s1", label: "Scenario A", down: 5000, term: 60, rate: 6.9 },
+    { id: "s2", label: "Scenario B", down: 8000, term: 72, rate: 5.9 },
+    { id: "s3", label: "Scenario C", down: 10000, term: 84, rate: 4.9 },
+  ]);
+  const [activeDeskScenarioId, setActiveDeskScenarioId] = useState("s1");
+
+  const price = dealRow ? parseFloat(dealRow.cashPrice.replace(/[$,]/g, "")) || 0 : 42049;
+  const freight = 738;
+  const dealerPrep = 1095;
+  const fees = 603.94;
+  const unitSubtotal = price + freight + dealerPrep;
+  const beforeTaxTotal = unitSubtotal + fees;
+  const totalTax = beforeTaxTotal * 0.0615;
+  const cashPrice = beforeTaxTotal + totalTax;
+  const prevDeposits = 2500;
+  const adjustCost = cashPrice * 0.49;
+  const margin = cashPrice - adjustCost;
+  const marginPct = cashPrice > 0 ? (margin / cashPrice) * 100 : 0;
+
+  const customer = dealRow?.customer ?? dealWindow.customer;
+  const worksheet = dealRow?.worksheet ?? dealWindow.worksheet;
+  const stock = dealRow?.stock ?? "—";
+  const make = dealRow?.make ?? "—";
+  const model = dealRow?.model ?? "—";
+  const year = dealRow?.year ?? "—";
+  const vin = dealRow?.vin ?? "—";
+  const stage = dealRow?.finalized ?? "QUOTE - INITIAL";
+  const date = dealRow?.date ?? "—";
+  const dealNumber = dealRow?.worksheet ?? dealWindow.worksheet;
+  const signatureDocs: Array<{ status: string }> = [];
+
+  function fmt(n: number) {
+    return n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
+  }
+
+  function toDateInputValue(sourceDate = new Date()) {
+    const month = `${sourceDate.getMonth() + 1}`.padStart(2, "0");
+    const day = `${sourceDate.getDate()}`.padStart(2, "0");
+    const yearLabel = `${sourceDate.getFullYear()}`;
+
+    return `${month}/${day}/${yearLabel}`;
+  }
+
+  function parseCurrencyInput(value: string) {
+    const normalized = value.replace(/[^0-9.-]/g, "");
+    const parsed = Number.parseFloat(normalized);
+
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function resolveDepositArName(method: string) {
+    if (method.startsWith("Credit Card")) {
+      return "Credit Card AR";
+    }
+
+    if (method.includes("Check") || method.includes("Bank")) {
+      return "Clearing Account";
+    }
+
+    if (method === "Temp Hold Deposit") {
+      return "Temp Hold Liability";
+    }
+
+    if (method === "ZACCT - Internal Coupons") {
+      return "Internal Coupon Ledger";
+    }
+
+    return "Cash Drawer";
+  }
+
+  const depositReference = `DEP-${worksheet}`;
+  const depositTarget = depositSnapshot?.targetAmount ?? Math.max(5000, Math.round(cashPrice * 0.1));
+  const depositCaptured = depositSnapshot?.capturedAmount ?? 0;
+  const depositRemaining = depositSnapshot?.remainingAmount ?? Math.max(depositTarget - depositCaptured, 0);
+  const depositStatus = depositSnapshot?.status ?? (depositRemaining > 0 ? "Pending" : "Posted");
+  const depositLedger = depositSnapshot?.ledger ?? [];
+  const depositActivity = depositSnapshot?.activity ?? [];
+  const selectedDepositEntry = depositLedger.find((entry) => entry.id === selectedDepositEntryId) ?? null;
+  const displayedPrevDeposits = depositSnapshot ? depositCaptured : prevDeposits;
+  const balToFinance = cashPrice - displayedPrevDeposits;
+  const [takeDepositForm, setTakeDepositForm] = useState({
+    amount: "",
+    arAccount: resolveDepositArName(salesDepositMethodOptions[0]),
+    cashier: salesDepositCashierOptions[0],
+    date: toDateInputValue(),
+    description: "",
+    method: salesDepositMethodOptions[0],
+    notes: "",
+    password: ""
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setIsDepositsLoading(true);
+    setDepositLoadError(null);
+    setDepositSnapshot(null);
+    setSelectedDepositEntryId("");
+    setIsTakeDepositModalOpen(false);
+    setIsReprintModalOpen(false);
+    setTakeDepositError(null);
+    setTakeDepositForm({
+      amount: "",
+      arAccount: resolveDepositArName(salesDepositMethodOptions[0]),
+      cashier: salesDepositCashierOptions[0],
+      date: toDateInputValue(),
+      description: "",
+      method: salesDepositMethodOptions[0],
+      notes: "",
+      password: ""
+    });
+    void getSalesDealDeposits(storeId, dealWindow.dealId)
+      .then((snapshot) => {
+        if (cancelled) {
+          return;
+        }
+
+        setDepositSnapshot(snapshot);
+        setSelectedDepositEntryId(snapshot.ledger[0]?.id ?? "");
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+
+        setDepositLoadError(error instanceof Error ? error.message : "Unable to load deposit history.");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsDepositsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dealWindow.dealId, storeId]);
+
+  function openTakeDepositModal() {
+    setTakeDepositError(null);
+    setTakeDepositForm((current) => ({
+      ...current,
+      amount: fmt(depositRemaining > 0 ? depositRemaining : 0),
+      arAccount: resolveDepositArName(current.method),
+      date: toDateInputValue()
+    }));
+    setIsTakeDepositModalOpen(true);
+  }
+
+  function handleTakeDepositFieldChange(field: "amount" | "cashier" | "date" | "description" | "method" | "notes" | "password", value: string) {
+    setTakeDepositForm((current) => {
+      if (field === "method") {
+        return {
+          ...current,
+          method: value,
+          arAccount: resolveDepositArName(value)
+        };
+      }
+
+      return {
+        ...current,
+        [field]: value
+      };
+    });
+  }
+
+  function handleUseCardOnFile() {
+    const cardMethod = "Credit Card - Kenect";
+
+    setTakeDepositForm((current) => ({
+      ...current,
+      method: cardMethod,
+      arAccount: resolveDepositArName(cardMethod),
+      description: current.description || "Card on file approved"
+    }));
+  }
+
+  function handleSubmitTakeDeposit() {
+    const amount = parseCurrencyInput(takeDepositForm.amount);
+
+    if (amount <= 0) {
+      setTakeDepositError("Amount must be greater than $0.00.");
+      return;
+    }
+
+    setIsSubmittingDeposit(true);
+    setTakeDepositError(null);
+    void createSalesDealDeposit(storeId, dealWindow.dealId, {
+      actorUserId,
+      amount,
+      arAccount: takeDepositForm.arAccount,
+      cashier: takeDepositForm.cashier,
+      date: takeDepositForm.date,
+      description: takeDepositForm.description || "Deposit payment",
+      method: takeDepositForm.method,
+      notes: takeDepositForm.notes,
+      password: takeDepositForm.password
+    })
+      .then((snapshot) => {
+        setDepositSnapshot(snapshot);
+        setSelectedDepositEntryId(snapshot.ledger[0]?.id ?? "");
+        setIsTakeDepositModalOpen(false);
+      })
+      .catch((error: unknown) => {
+        setTakeDepositError(error instanceof Error ? error.message : "Unable to post deposit.");
+      })
+      .finally(() => {
+        setIsSubmittingDeposit(false);
+      });
+  }
+
+  function handleSendReceipt() {
+    const entry = selectedDepositEntry ?? depositLedger[depositLedger.length - 1] ?? null;
+
+    if (!entry) {
+      return;
+    }
+
+    void createSalesDealDepositActivity(storeId, dealWindow.dealId, entry.id, {
+      actorUserId,
+      mode: "sendReceipt"
+    })
+      .then((snapshot) => {
+        setDepositSnapshot(snapshot);
+        setSelectedDepositEntryId(entry.id);
+      })
+      .catch((error: unknown) => {
+        setDepositLoadError(error instanceof Error ? error.message : "Unable to send receipt.");
+      });
+  }
+
+  function openReprintModal() {
+    if (!selectedDepositEntry && depositLedger.length === 0) {
+      return;
+    }
+
+    const entry = selectedDepositEntry ?? depositLedger[depositLedger.length - 1] ?? null;
+
+    if (!entry) {
+      return;
+    }
+
+    setSelectedDepositEntryId(entry.id);
+    void createSalesDealDepositActivity(storeId, dealWindow.dealId, entry.id, {
+      actorUserId,
+      mode: "reprint"
+    })
+      .then((snapshot) => {
+        setDepositSnapshot(snapshot);
+        setSelectedDepositEntryId(entry.id);
+      })
+      .catch((error: unknown) => {
+        setDepositLoadError(error instanceof Error ? error.message : "Unable to log reprint activity.");
+      });
+
+    setIsReprintModalOpen(true);
+  }
+
+  return (
+    <div className="sales-deal-workbench">
+      {/* Deal Stage Progress Bar */}
+      <div className="legacy-deal-stage-bar">
+        {(["Lead", "Desk", "Finance", "Closed", "Delivered"] as const).map((s, i, arr) => {
+          const activeIdx = arr.indexOf(dealStage);
+          const isActive = s === dealStage;
+          const isDone = i < activeIdx;
+          return (
+            <Fragment key={s}>
+              <button
+                className={`legacy-deal-stage-step${isActive ? " is-active" : isDone ? " is-done" : ""}`}
+                onClick={() => {
+                  const currentIdx = arr.indexOf(dealStage);
+                  const nextIdx = arr.indexOf(s);
+                  if (nextIdx <= currentIdx) { setDealStage(s); setStageBlockMessage(null); return; }
+                  if (nextIdx === currentIdx + 1) {
+                    if (s === "Desk" && !dealRow) { setStageBlockMessage("A unit must be attached before advancing to Desk."); setTimeout(() => setStageBlockMessage(null), 4000); return; }
+                    if (s === "Finance" && !(cashPrice > 0)) { setStageBlockMessage("A cash price must be set before advancing to Finance."); setTimeout(() => setStageBlockMessage(null), 4000); return; }
+                    if (s === "Closed" && signatureDocs.length === 0) { setStageBlockMessage("At least one signature document is required before Closing."); setTimeout(() => setStageBlockMessage(null), 4000); return; }
+                  }
+                  setDealStage(s);
+                  setStageBlockMessage(null);
+                }}
+                type="button"
+              >
+                <span className="legacy-deal-stage-dot">{isDone ? "✓" : i + 1}</span>
+                <span>{s}</span>
+              </button>
+              {i < arr.length - 1 && <div className={`legacy-deal-stage-connector${isDone ? " is-done" : ""}`} />}
+            </Fragment>
+          );
+        })}
+      </div>
+      {stageBlockMessage && <div className="legacy-deal-stage-block">{stageBlockMessage}</div>}
+      {/* Tab bar */}
+      <div className="sales-deal-tabs">
+        {salesDealTabs.map((tab) => (
+          <button
+            className={`sales-deal-tab${activeTab === tab.id ? " active" : ""}`}
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            type="button"
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "general" ? (
+        <div className="sales-deal-general">
+          {/* Customer + Sales section */}
+          <div className="sales-deal-header-grid">
+            <div className="sales-deal-section">
+              <div className="sales-deal-section-title">Customer</div>
+              <div className="sales-deal-field-row">
+                <label className="sales-deal-label">Buyer Name</label>
+                <input className="sales-deal-input" readOnly type="text" value={customer} />
+              </div>
+              <div className="sales-deal-field-row">
+                <label className="sales-deal-label">Co-Buyer Name</label>
+                <input className="sales-deal-input" readOnly type="text" value="" />
+              </div>
+              <div className="sales-deal-field-row">
+                <label className="sales-deal-label">Deal Description</label>
+                <input className="sales-deal-input" readOnly type="text" value={`${year} ${make} ${model}`} />
+              </div>
+              <div className="sales-deal-field-row">
+                <label className="sales-deal-label">Source</label>
+                <input className="sales-deal-input is-short" readOnly type="text" value="Walk-In" />
+                <label className="sales-deal-label">Type</label>
+                <input className="sales-deal-input is-short" readOnly type="text" value="Walk-In" />
+              </div>
+            </div>
+
+            <div className="sales-deal-section">
+              <div className="sales-deal-section-title">Sales</div>
+              <div className="sales-deal-field-row">
+                <label className="sales-deal-label">Worksheet #</label>
+                <input className="sales-deal-input is-short" readOnly type="text" value={worksheet} />
+              </div>
+              <div className="sales-deal-field-row">
+                <label className="sales-deal-label">Stage</label>
+                <span className="sales-deal-stage-badge">{stage}</span>
+              </div>
+              <div className="sales-deal-field-row">
+                <label className="sales-deal-label">Front End 1</label>
+                <input className="sales-deal-input" readOnly type="text" value="—" />
+                <span className="sales-deal-pct">100%</span>
+              </div>
+              <div className="sales-deal-field-row">
+                <label className="sales-deal-label">F&amp;I 1</label>
+                <input className="sales-deal-input" readOnly type="text" value="—" />
+              </div>
+              <div className="sales-deal-field-row">
+                <label className="sales-deal-label">F&amp;I 2</label>
+                <input className="sales-deal-input" readOnly type="text" value="—" />
+              </div>
+            </div>
+
+            <div className="sales-deal-section">
+              <div className="sales-deal-section-title">Dates</div>
+              <div className="sales-deal-field-row">
+                <label className="sales-deal-label">Date</label>
+                <input className="sales-deal-input" readOnly type="text" value={date} />
+              </div>
+              <div className="sales-deal-field-row">
+                <label className="sales-deal-label">Contract Date</label>
+                <input className="sales-deal-input" readOnly type="text" value="" />
+              </div>
+              <div className="sales-deal-field-row">
+                <label className="sales-deal-label">Delivery Date</label>
+                <input className="sales-deal-input" readOnly type="text" value="" />
+              </div>
+              <div className="sales-deal-field-row">
+                <label className="sales-deal-label">First Pmt Due</label>
+                <input className="sales-deal-input" readOnly type="text" value="" />
+              </div>
+              <div className="sales-deal-field-row">
+                <label className="sales-deal-label">Finalized Date</label>
+                <input className="sales-deal-input" readOnly type="text" value="" />
+              </div>
+            </div>
+          </div>
+
+          {/* Unit table */}
+          <div className="sales-deal-unit-toolbar">
+            <span className="sales-deal-unit-toolbar-label">Stock #</span>
+            <input className="sales-deal-input is-short" readOnly type="text" value={stock} />
+            <button className="sales-deal-toolbar-btn" type="button">Select Stock</button>
+            <button className="sales-deal-toolbar-btn" type="button">Build-a-Unit ▾</button>
+            <button className="sales-deal-toolbar-btn" type="button">Edit ▾</button>
+            <button className="sales-deal-toolbar-btn" type="button">Remove</button>
+            <button className="sales-deal-toolbar-btn" type="button">Benchmarks</button>
+          </div>
+          <div className="sales-deal-unit-table-wrap">
+            <table className="sales-deal-unit-table">
+              <thead>
+                <tr>
+                  <th>Unit Type</th>
+                  <th>Stock #</th>
+                  <th>N/U</th>
+                  <th>Year</th>
+                  <th>Make</th>
+                  <th>Model</th>
+                  <th>VIN/HIN</th>
+                  <th>Age</th>
+                  <th>Cls</th>
+                  <th className="align-right">MSRP</th>
+                  <th className="align-right">DSRP</th>
+                  <th className="align-right">Price</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dealRow ? (
+                  <tr>
+                    <td>Pontoon</td>
+                    <td>{stock}</td>
+                    <td>New</td>
+                    <td>{year}</td>
+                    <td>{make}</td>
+                    <td>{model}</td>
+                    <td>{vin}</td>
+                    <td>—</td>
+                    <td>P</td>
+                    <td className="align-right">{fmt(price * 1.26)}</td>
+                    <td className="align-right">{fmt(price * 1.0)}</td>
+                    <td className="align-right">{fmt(price)}</td>
+                  </tr>
+                ) : (
+                  <tr>
+                    <td colSpan={12} className="sales-deal-unit-empty">No unit selected</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Deal pricing + Trade + Costs footer */}
+          <div className="sales-deal-pricing-grid">
+            {/* Deal Pricing */}
+            <div className="sales-deal-pricing-section">
+              <div className="sales-deal-pricing-title">Deal Pricing</div>
+              <div className="sales-deal-pricing-row"><span>Price</span><span>{fmt(price)}</span></div>
+              <div className="sales-deal-pricing-row"><span>Freight</span><span>{fmt(freight)}</span></div>
+              <div className="sales-deal-pricing-row"><span>Options</span><span>{fmt(0)}</span></div>
+              <div className="sales-deal-pricing-row"><span>Dealer Prep</span><span>{fmt(dealerPrep)}</span></div>
+              <div className="sales-deal-pricing-row is-subtotal"><span>Unit Subtotal</span><span>{fmt(unitSubtotal)}</span></div>
+              <div className="sales-deal-pricing-row"><span>Fees</span><span>{fmt(fees)}</span></div>
+              <div className="sales-deal-pricing-row"><span>Extras</span><span>{fmt(0)}</span></div>
+              <div className="sales-deal-pricing-row is-subtotal"><span>Before Tax Total</span><span>{fmt(beforeTaxTotal)}</span></div>
+              <div className="sales-deal-pricing-row"><span>Total Tax</span><span>{fmt(totalTax)}</span></div>
+              <div className="sales-deal-pricing-row is-total"><span>Cash Price</span><span>{fmt(cashPrice)}</span></div>
+            </div>
+
+            {/* Finance / Trade section */}
+            <div className="sales-deal-pricing-section">
+              <div className="sales-deal-pricing-title">Finance</div>
+              <div className="sales-deal-pricing-row"><span>Trade Equity</span><span>{fmt(0)}</span></div>
+              <div className="sales-deal-pricing-row"><span>Prev Deposits</span><span>{fmt(displayedPrevDeposits)}</span></div>
+              <div className="sales-deal-pricing-row"><span>Addtl Deposits</span><span>{fmt(0)}</span></div>
+              <div className="sales-deal-pricing-row"><span>Customer Rebate</span><span>{fmt(0)}</span></div>
+              <div className="sales-deal-pricing-row is-subtotal"><span>Bal To Finance</span><span>{fmt(balToFinance)}</span></div>
+              <div className="sales-deal-pricing-row"><span>Insurance Total</span><span>{fmt(0)}</span></div>
+              <div className="sales-deal-pricing-row is-subtotal"><span>Amount Financed</span><span>{fmt(balToFinance)}</span></div>
+              <div className="sales-deal-pricing-row"><span>Term</span><span>1</span></div>
+              <div className="sales-deal-pricing-row"><span>Rate</span><span>0%</span></div>
+              <div className="sales-deal-pricing-row"><span>Days To First</span><span>30</span></div>
+              <div className="sales-deal-pricing-row is-total"><span>Payment</span><span>{fmt(balToFinance)}</span></div>
+            </div>
+
+            {/* Trade Details */}
+            <div className="sales-deal-pricing-section">
+              <div className="sales-deal-pricing-title">Trade Details</div>
+              <div className="sales-deal-pricing-row"><span>Trade Allow.</span><span>{fmt(0)}</span></div>
+              <div className="sales-deal-pricing-row"><span>Trade Payoff</span><span>{fmt(0)}</span></div>
+              <div className="sales-deal-pricing-row"><span>Price Diff.</span><span>{fmt(0)}</span></div>
+              <div className="sales-deal-pricing-row"><span>Subtotal Off.</span><span>{fmt(0)}</span></div>
+              <div className="sales-deal-pricing-row is-subtotal"><span>Trade ACV</span><span>{fmt(0)}</span></div>
+              <div className="sales-deal-pricing-title" style={{ marginTop: "12px" }}>Deal Costs</div>
+              <div className="sales-deal-pricing-row"><span>Adjust Cost</span><span>{fmt(adjustCost)}</span></div>
+              <div className="sales-deal-pricing-row"><span>Total Cost</span><span>{fmt(adjustCost)}</span></div>
+              <div className="sales-deal-pricing-row"><span>Margin</span><span>{fmt(margin)}</span></div>
+              <div className="sales-deal-pricing-row is-total"><span>Margin %</span><span>{marginPct.toFixed(2)}%</span></div>
+            </div>
+          </div>
+          <div className="legacy-deal-summary-card">
+            <div className="legacy-deal-summary-card-header">Deal Summary</div>
+            {dealNotice && <div className="legacy-workbench-notice" onClick={() => setDealNotice(null)}>{dealNotice}</div>}
+            <div className="legacy-deal-summary-card-body">
+              <div className="legacy-deal-summary-card-row"><span>Stage</span><span>{dealStage}</span></div>
+              <div className="legacy-deal-summary-card-row"><span>Deal Total</span><span>{fmt(cashPrice)}</span></div>
+              <div className="legacy-deal-summary-card-row"><span>Margin</span><span>{marginPct.toFixed(2)}%</span></div>
+            </div>
+            <div className="legacy-deal-summary-card-actions">
+              <button
+                className="legacy-task-status-button"
+                disabled={dealStage === "Delivered"}
+                onClick={() => { setDealStage("Delivered"); setDealNotice("Deal funded and marked Delivered. 🎉"); }}
+                type="button"
+              >
+                💰 Fund Deal
+              </button>
+              <button
+                className="legacy-task-status-button"
+                onClick={() => { setDealStage("Closed"); setDealNotice("Deal archived."); }}
+                type="button"
+              >
+                📁 Archive Deal
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : activeTab === "deposits" ? (
+        <div className="sales-deal-deposits">
+          <section className="sales-deal-deposits-hero">
+            <div className="sales-deal-deposits-hero-copy">
+              <div className="sales-deal-deposits-title-row">
+                <div>
+                  <div className="sales-deal-deposits-kicker">Deposits</div>
+                  <h4>Payment Center</h4>
+                </div>
+                <span className={`sales-deal-deposits-status is-${depositRemaining > 0 ? "pending" : "posted"}`}>{depositStatus}</span>
+              </div>
+              <p>Capture customer funds against the active deal while keeping worksheet context visible.</p>
+            </div>
+            <div className="sales-deal-deposits-summary-grid">
+              <div className="sales-deal-deposits-summary-card">
+                <span>Requested</span>
+                <strong>{fmt(depositTarget)}</strong>
+              </div>
+              <div className="sales-deal-deposits-summary-card">
+                <span>Captured</span>
+                <strong>{fmt(depositCaptured)}</strong>
+              </div>
+              <div className="sales-deal-deposits-summary-card">
+                <span>Remaining</span>
+                <strong>{fmt(depositRemaining)}</strong>
+              </div>
+            </div>
+          </section>
+
+          {isDepositsLoading ? <p className="sales-deal-deposits-loading">Loading deposit history...</p> : null}
+          {depositLoadError ? <p className="sales-deposit-modal-error">{depositLoadError}</p> : null}
+
+          <div className="sales-deal-deposits-layout">
+            <section className="sales-deal-deposits-ledger">
+              <div className="sales-deal-deposits-panel-header">
+                <h4>Deposit Ledger</h4>
+                <span>{depositLedger.length} records</span>
+              </div>
+              <div className="sales-deal-deposits-table-wrap">
+                <table className="sales-deal-deposits-table">
+                  <thead>
+                    <tr>
+                      <th>Invoice</th>
+                      <th>Date</th>
+                      <th>Cashier</th>
+                      <th>Method</th>
+                      <th>A/R Name</th>
+                      <th className="align-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {depositLedger.length > 0 ? (
+                      depositLedger.map((entry) => (
+                        <tr
+                          className={`sales-deal-deposits-row${selectedDepositEntryId === entry.id ? " is-selected" : ""}`}
+                          key={entry.id}
+                          onClick={() => setSelectedDepositEntryId(entry.id)}
+                        >
+                          <td>{entry.invoice}</td>
+                          <td>{entry.date}</td>
+                          <td>{entry.cashier}</td>
+                          <td>{entry.method}</td>
+                          <td>{entry.arName}</td>
+                          <td className="align-right">{fmt(entry.amount)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td className="sales-deal-unit-empty" colSpan={6}>No deposit records posted yet.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="sales-deal-deposits-ledger-actions">
+                <button className="sales-deal-toolbar-btn" onClick={openTakeDepositModal} type="button">Take Deposit</button>
+                <button className="sales-deal-toolbar-btn" onClick={openReprintModal} type="button">Reprint Deposit</button>
+                <button className="sales-deal-toolbar-btn" onClick={openReprintModal} type="button">Print Statement</button>
+                <button className="sales-deal-toolbar-btn" onClick={handleSendReceipt} type="button">Send Receipt</button>
+              </div>
+            </section>
+
+            <aside className="sales-deal-deposits-rail">
+              <section className="sales-deal-deposits-card">
+                <div className="sales-deal-deposits-panel-header">
+                  <h4>Quick Capture</h4>
+                  <span>{worksheet}</span>
+                </div>
+                <div className="sales-deal-deposits-form-grid">
+                  <label>
+                    Amount
+                    <input className="sales-deal-input" readOnly type="text" value={selectedDepositEntry ? fmt(selectedDepositEntry.amount) : fmt(depositRemaining > 0 ? depositRemaining : depositTarget)} />
+                  </label>
+                  <label>
+                    Method
+                    <input className="sales-deal-input" readOnly type="text" value={selectedDepositEntry?.method ?? "Cash"} />
+                  </label>
+                  <label>
+                    Reference
+                    <input className="sales-deal-input" readOnly type="text" value={selectedDepositEntry?.reference ?? depositReference} />
+                  </label>
+                </div>
+                <div className="sales-deal-deposits-actions">
+                  <button className="sales-deal-toolbar-btn" onClick={openTakeDepositModal} type="button">Take Deposit</button>
+                  <button className="sales-deal-toolbar-btn" onClick={openReprintModal} type="button">Reprint</button>
+                </div>
+              </section>
+
+              <section className="sales-deal-deposits-card">
+                <div className="sales-deal-deposits-panel-header">
+                  <h4>Deposit Activity</h4>
+                  <span>{depositActivity.length} items</span>
+                </div>
+                <div className="sales-deal-deposits-activity-list">
+                  {depositActivity.map((activity) => (
+                    <article className="sales-deal-deposits-activity-item" key={activity.id}>
+                      <div className="sales-deal-deposits-activity-copy">
+                        <strong>{activity.title}</strong>
+                        <p>{activity.detail}</p>
+                      </div>
+                      <span>{activity.meta}</span>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            </aside>
+          </div>
+        </div>
+      ) : activeTab === "desk" ? (() => {
+        function deskCalc(scenario: { down: number; term: number; rate: number }) {
+          const P = Math.max(0, cashPrice - scenario.down);
+          const r = scenario.rate / 100 / 12;
+          const n = scenario.term;
+          const monthly = r > 0 && n > 0 ? P * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1) : P / (n || 1);
+          const totalCost = monthly * n;
+          const totalInterest = totalCost - P;
+          return { loanAmount: P, monthly, totalCost, totalInterest };
+        }
+        return (
+          <div style={{ padding: 16, overflow: "auto" }}>
+            <div style={{ alignItems: "center", display: "flex", gap: 10, justifyContent: "space-between", marginBottom: 12 }}>
+              <strong style={{ fontSize: "0.9rem" }}>Pencil — Side-by-Side Scenarios</strong>
+              <button
+                className="legacy-task-status-button"
+                disabled={deskScenarios.length >= 3}
+                onClick={() => setDeskScenarios(ds => ds.length < 3 ? [...ds, { id: `s${Date.now()}`, label: `Scenario ${String.fromCharCode(65 + ds.length)}`, down: 5000, term: 60, rate: 6.9 }] : ds)}
+                type="button"
+              >
+                + Add Scenario
+              </button>
+            </div>
+            {dealNotice && <div className="legacy-workbench-notice" style={{ marginBottom: 10 }}>{dealNotice}</div>}
+            <div className="legacy-desk-grid">
+              {deskScenarios.map(sc => {
+                const calc = deskCalc(sc);
+                const isActive = activeDeskScenarioId === sc.id;
+                return (
+                  <div className={`legacy-desk-scenario-card${isActive ? " is-active" : ""}`} key={sc.id}>
+                    <div className="legacy-desk-scenario-label">
+                      <span>{sc.label}</span>
+                      {isActive && <span className="legacy-pricing-markup-chip">Selected</span>}
+                    </div>
+                    <div className="legacy-desk-field">
+                      <span>Down Payment ($)</span>
+                      <input
+                        onChange={e => setDeskScenarios(ds => ds.map(d => d.id === sc.id ? { ...d, down: parseFloat(e.target.value) || 0 } : d))}
+                        type="number"
+                        value={sc.down}
+                      />
+                    </div>
+                    <div className="legacy-desk-field">
+                      <span>Term (months)</span>
+                      <input
+                        onChange={e => setDeskScenarios(ds => ds.map(d => d.id === sc.id ? { ...d, term: parseInt(e.target.value, 10) || 60 } : d))}
+                        type="number"
+                        value={sc.term}
+                      />
+                    </div>
+                    <div className="legacy-desk-field">
+                      <span>Rate (%)</span>
+                      <input
+                        onChange={e => setDeskScenarios(ds => ds.map(d => d.id === sc.id ? { ...d, rate: parseFloat(e.target.value) || 0 } : d))}
+                        step="0.1"
+                        type="number"
+                        value={sc.rate}
+                      />
+                    </div>
+                    <div className="legacy-desk-computed">
+                      <div className="legacy-desk-computed-row"><span>Loan Amount</span><span>{calc.loanAmount.toLocaleString("en-US", { style: "currency", currency: "USD" })}</span></div>
+                      <div className="legacy-desk-computed-row is-highlight"><span>Monthly Payment</span><span>{calc.monthly.toLocaleString("en-US", { style: "currency", currency: "USD" })}/mo</span></div>
+                      <div className="legacy-desk-computed-row"><span>Total Cost</span><span>{calc.totalCost.toLocaleString("en-US", { style: "currency", currency: "USD" })}</span></div>
+                      <div className="legacy-desk-computed-row"><span>Total Interest</span><span>{calc.totalInterest.toLocaleString("en-US", { style: "currency", currency: "USD" })}</span></div>
+                    </div>
+                    <button
+                      className="legacy-task-status-button"
+                      onClick={() => {
+                        setDownPayment(sc.down);
+                        setTermMonths(sc.term);
+                        setInterestRate(sc.rate);
+                        setActiveDeskScenarioId(sc.id);
+                        setDealNotice(`${sc.label} selected.`);
+                        setTimeout(() => setDealNotice(null), 3000);
+                      }}
+                      type="button"
+                    >
+                      Select
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })() : activeTab === "fi" ? (() => {
+        const rate = interestRate / 100;
+        const financed = Math.max(0, loanAmount - downPayment - tradeInValue);
+        const monthlyPayment = rate > 0 && termMonths > 0
+          ? financed * (rate / 12) / (1 - Math.pow(1 + rate / 12, -termMonths))
+          : financed / (termMonths || 1);
+        const totalCost = monthlyPayment * termMonths;
+        const totalInterest = totalCost - financed;
+        return (
+          <div className="legacy-fi-panel">
+            <div className="legacy-fi-section">
+              <h4 className="legacy-fi-section-title">Financing Calculator</h4>
+              <div className="legacy-fi-grid">
+                <label className="legacy-fi-field">
+                  <span>Lender</span>
+                  <input onChange={(e) => setLender(e.target.value)} type="text" value={lender} />
+                </label>
+                <label className="legacy-fi-field">
+                  <span>Loan Amount ($)</span>
+                  <input
+                    min={0}
+                    onChange={(e) => setLoanAmount(parseFloat(e.target.value) || 0)}
+                    type="number"
+                    value={loanAmount}
+                  />
+                </label>
+                <label className="legacy-fi-field">
+                  <span>Down Payment ($)</span>
+                  <input
+                    min={0}
+                    onChange={(e) => setDownPayment(parseFloat(e.target.value) || 0)}
+                    type="number"
+                    value={downPayment}
+                  />
+                </label>
+                <label className="legacy-fi-field">
+                  <span>Interest Rate (%)</span>
+                  <input
+                    min={0}
+                    onChange={(e) => setInterestRate(parseFloat(e.target.value) || 0)}
+                    step={0.1}
+                    type="number"
+                    value={interestRate}
+                  />
+                </label>
+                <label className="legacy-fi-field">
+                  <span>Term (months)</span>
+                  <input
+                    min={1}
+                    onChange={(e) => setTermMonths(parseInt(e.target.value, 10) || 12)}
+                    type="number"
+                    value={termMonths}
+                  />
+                </label>
+                <label className="legacy-fi-field">
+                  <span>Trade-In Value ($)</span>
+                  <input
+                    min={0}
+                    onChange={(e) => setTradeInValue(parseFloat(e.target.value) || 0)}
+                    type="number"
+                    value={tradeInValue}
+                  />
+                </label>
+                <label className="legacy-fi-field" style={{ gridColumn: "1 / -1" }}>
+                  <span>Trade-In Description</span>
+                  <input onChange={(e) => setTradeInDesc(e.target.value)} type="text" value={tradeInDesc} />
+                </label>
+              </div>
+            </div>
+            <div className="legacy-fi-results">
+              <div className="legacy-fi-result-row">
+                <span>Amount Financed</span>
+                <strong>{financed.toLocaleString("en-US", { style: "currency", currency: "USD" })}</strong>
+              </div>
+              <div className="legacy-fi-result-row legacy-fi-highlight">
+                <span>Est. Monthly Payment</span>
+                <strong>{monthlyPayment.toLocaleString("en-US", { style: "currency", currency: "USD" })}/mo</strong>
+              </div>
+              <div className="legacy-fi-result-row">
+                <span>Total Interest</span>
+                <strong>{totalInterest.toLocaleString("en-US", { style: "currency", currency: "USD" })}</strong>
+              </div>
+              <div className="legacy-fi-result-row">
+                <span>Total Cost</span>
+                <strong>{totalCost.toLocaleString("en-US", { style: "currency", currency: "USD" })}</strong>
+              </div>
+            </div>
+          </div>
+        );
+      })() : (
+        <div className="sales-deal-tab-placeholder">
+          <p>{salesDealTabs.find((t) => t.id === activeTab)?.label ?? "Tab"} — Coming soon.</p>
+        </div>
+      )}
+
+      {isTakeDepositModalOpen ? (
+        <div className="sales-deposit-modal-backdrop" role="presentation">
+          <section aria-label="Take Deposit" className="sales-deposit-modal" role="dialog">
+            <header className="sales-deposit-modal-titlebar">
+              <h4>Take Deposit</h4>
+              <button
+                aria-label="Close take deposit dialog"
+                className="sales-deposit-modal-close"
+                onClick={() => setIsTakeDepositModalOpen(false)}
+                type="button"
+              >
+                x
+              </button>
+            </header>
+
+            <section className="sales-deposit-modal-section">
+              <div className="sales-deposit-modal-section-title">Deal Information</div>
+              <div className="sales-deposit-modal-deal-row">
+                <strong>{customer}</strong>
+                <span>Deal # {dealNumber}</span>
+              </div>
+            </section>
+
+            <section className="sales-deposit-modal-section">
+              <div className="sales-deposit-modal-section-title">Payment Information</div>
+              <div className="sales-deposit-modal-grid">
+                <label>
+                  <span>Cashier</span>
+                  <select
+                    className="sales-deposit-modal-input"
+                    onChange={(event) => handleTakeDepositFieldChange("cashier", event.target.value)}
+                    value={takeDepositForm.cashier}
+                  >
+                    {salesDepositCashierOptions.map((cashierOption) => (
+                      <option key={cashierOption} value={cashierOption}>
+                        {cashierOption}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Password</span>
+                  <input
+                    className="sales-deposit-modal-input"
+                    onChange={(event) => handleTakeDepositFieldChange("password", event.target.value)}
+                    type="password"
+                    value={takeDepositForm.password}
+                  />
+                </label>
+
+                <label>
+                  <span>Date</span>
+                  <input
+                    className="sales-deposit-modal-input"
+                    onChange={(event) => handleTakeDepositFieldChange("date", event.target.value)}
+                    type="text"
+                    value={takeDepositForm.date}
+                  />
+                </label>
+
+                <label>
+                  <span>Description</span>
+                  <input
+                    className="sales-deposit-modal-input"
+                    onChange={(event) => handleTakeDepositFieldChange("description", event.target.value)}
+                    type="text"
+                    value={takeDepositForm.description}
+                  />
+                </label>
+
+                <label>
+                  <span>Method of Pmt</span>
+                  <select
+                    className="sales-deposit-modal-input"
+                    onChange={(event) => handleTakeDepositFieldChange("method", event.target.value)}
+                    value={takeDepositForm.method}
+                  >
+                    {salesDepositMethodOptions.map((methodOption) => (
+                      <option key={methodOption} value={methodOption}>
+                        {methodOption}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Amount</span>
+                  <input
+                    className="sales-deposit-modal-input is-amount"
+                    onChange={(event) => handleTakeDepositFieldChange("amount", event.target.value)}
+                    type="text"
+                    value={takeDepositForm.amount}
+                  />
+                </label>
+
+                <div className="sales-deposit-modal-inline-action">
+                  <span>Card on File</span>
+                  <button className="sales-deposit-modal-secondary" onClick={handleUseCardOnFile} type="button">
+                    Get Permission to Use
+                  </button>
+                </div>
+
+                <label>
+                  <span>A/R Account</span>
+                  <input className="sales-deposit-modal-input" readOnly type="text" value={takeDepositForm.arAccount} />
+                </label>
+              </div>
+            </section>
+
+            <section className="sales-deposit-modal-section">
+              <div className="sales-deposit-modal-section-title">Notes</div>
+              <textarea
+                className="sales-deposit-modal-notes"
+                onChange={(event) => handleTakeDepositFieldChange("notes", event.target.value)}
+                value={takeDepositForm.notes}
+              />
+            </section>
+
+            {takeDepositError ? <p className="sales-deposit-modal-error">{takeDepositError}</p> : null}
+
+            <footer className="sales-deposit-modal-actions">
+              <button className="sales-deposit-modal-primary" disabled={isSubmittingDeposit} onClick={handleSubmitTakeDeposit} type="button">
+                {isSubmittingDeposit ? "Posting..." : "Cashier"}
+              </button>
+              <button className="sales-deposit-modal-secondary" onClick={() => setIsTakeDepositModalOpen(false)} type="button">
+                Cancel
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
+
+      {isReprintModalOpen && selectedDepositEntry ? (
+        <div className="sales-deposit-modal-backdrop" role="presentation">
+          <section aria-label="Deal Deposit Reprint" className="sales-deposit-reprint-modal" role="dialog">
+            <header className="sales-deposit-modal-titlebar">
+              <h4>Deal Deposit Reprint</h4>
+              <button
+                aria-label="Close deal deposit reprint dialog"
+                className="sales-deposit-modal-close"
+                onClick={() => setIsReprintModalOpen(false)}
+                type="button"
+              >
+                x
+              </button>
+            </header>
+
+            <div className="sales-deposit-reprint-toolbar">
+              <span>Copies: 1</span>
+              <span>{selectedDepositEntry.reference}</span>
+            </div>
+
+            <article className="sales-deposit-reprint-page">
+              <h5>Sales Deal Deposit Receipt</h5>
+              <div className="sales-deposit-reprint-meta-grid">
+                <div>
+                  <span>Deal Number</span>
+                  <strong>{dealNumber}</strong>
+                </div>
+                <div>
+                  <span>Invoice</span>
+                  <strong>{selectedDepositEntry.invoice}</strong>
+                </div>
+                <div>
+                  <span>Cashier</span>
+                  <strong>{selectedDepositEntry.cashier}</strong>
+                </div>
+                <div>
+                  <span>Date</span>
+                  <strong>{selectedDepositEntry.date}</strong>
+                </div>
+                <div>
+                  <span>Method</span>
+                  <strong>{selectedDepositEntry.method}</strong>
+                </div>
+                <div>
+                  <span>Amount</span>
+                  <strong>{fmt(selectedDepositEntry.amount)}</strong>
+                </div>
+              </div>
+
+              <div className="sales-deposit-reprint-notes">
+                <span>Description</span>
+                <p>{selectedDepositEntry.description || "Deposit payment"}</p>
+                <span>Notes</span>
+                <p>{selectedDepositEntry.notes || "None"}</p>
+              </div>
+            </article>
+
+            <footer className="sales-deposit-modal-actions">
+              <button className="sales-deposit-modal-primary" onClick={() => setIsReprintModalOpen(false)} type="button">
+                Close
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function normalizeOpenWorkspacePreference(workspaceIds: WorkspaceId[]) {
   const seen = new Set<WorkspaceId>();
 
@@ -11329,10 +21200,26 @@ function buildOpenWindowDetailKey(windowEntry: Pick<ServiceDetailWindow, "roNumb
   return `detail:${windowEntry.storeId}:${windowEntry.roNumber}`;
 }
 
-function normalizeOpenWindowOrderPreference(orderKeys: string[], workspaceIds: WorkspaceId[], windows: ServiceDetailWindow[]) {
+function buildOpenWindowPartsInventoryDetailKey(windowEntry: Pick<PartsInventoryDetailWindow, "partNumber" | "storeId">) {
+  return `parts-detail:${windowEntry.storeId}:${windowEntry.partNumber}`;
+}
+
+function buildOpenWindowSalesDealKey(windowEntry: Pick<SalesDealDetailWindow, "dealId" | "storeId">) {
+  return `sales-deal:${windowEntry.storeId}:${windowEntry.dealId}`;
+}
+
+function normalizeOpenWindowOrderPreference(
+  orderKeys: string[],
+  workspaceIds: WorkspaceId[],
+  serviceWindows: ServiceDetailWindow[],
+  partsInventoryWindows: PartsInventoryDetailWindow[],
+  salesDealWindows: SalesDealDetailWindow[] = []
+) {
   const candidateKeys = [
     ...workspaceIds.map((workspaceId) => buildOpenWindowWorkspaceKey(workspaceId)),
-    ...windows.map((windowEntry) => buildOpenWindowDetailKey(windowEntry))
+    ...serviceWindows.map((windowEntry) => buildOpenWindowDetailKey(windowEntry)),
+    ...partsInventoryWindows.map((windowEntry) => buildOpenWindowPartsInventoryDetailKey(windowEntry)),
+    ...salesDealWindows.map((windowEntry) => buildOpenWindowSalesDealKey(windowEntry))
   ];
   const candidateKeySet = new Set(candidateKeys);
   const normalized: string[] = [];
@@ -11384,6 +21271,20 @@ function sortServiceDetailWindowsByOpenWindowOrder(windows: ServiceDetailWindow[
   ).map((item) => item.windowEntry);
 }
 
+function sortPartsInventoryDetailWindowsByOpenWindowOrder(windows: PartsInventoryDetailWindow[], orderKeys: string[]) {
+  return sortOpenWindowRailItems(
+    windows.map((windowEntry) => ({ key: buildOpenWindowPartsInventoryDetailKey(windowEntry), windowEntry })),
+    orderKeys
+  ).map((item) => item.windowEntry);
+}
+
+function sortSalesDealDetailWindowsByOpenWindowOrder(windows: SalesDealDetailWindow[], orderKeys: string[]) {
+  return sortOpenWindowRailItems(
+    windows.map((windowEntry) => ({ key: buildOpenWindowSalesDealKey(windowEntry), windowEntry })),
+    orderKeys
+  ).map((item) => item.windowEntry);
+}
+
 function readOpenServiceDetailWindowPreference(userId: string) {
   if (typeof window === "undefined") {
     return [];
@@ -11413,6 +21314,42 @@ function readOpenServiceDetailWindowPreference(userId: string) {
         const storeId = "storeId" in entry && typeof entry.storeId === "string" ? entry.storeId : "";
 
         return roNumber && storeId ? [{ customerName, roNumber, storeId }] : [];
+      })
+    );
+  } catch {
+    return [];
+  }
+}
+
+function readOpenPartsInventoryDetailWindowPreference(userId: string) {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const raw = window.sessionStorage.getItem(`${OPEN_PARTS_INVENTORY_DETAIL_WINDOWS_STORAGE_PREFIX}:${userId}`);
+
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return normalizePartsInventoryDetailWindows(
+      parsed.flatMap((entry) => {
+        if (!entry || typeof entry !== "object") {
+          return [];
+        }
+
+        const description = "description" in entry && typeof entry.description === "string" ? entry.description : "";
+        const partNumber = "partNumber" in entry && typeof entry.partNumber === "string" ? entry.partNumber : "";
+        const storeId = "storeId" in entry && typeof entry.storeId === "string" ? entry.storeId : "";
+
+        return partNumber && storeId ? [{ description, partNumber, storeId }] : [];
       })
     );
   } catch {
@@ -11453,6 +21390,39 @@ function normalizeServiceDetailWindows(windows: ServiceDetailWindow[]) {
   return normalized;
 }
 
+function normalizePartsInventoryDetailWindows(windows: PartsInventoryDetailWindow[]) {
+  const seen = new Set<string>();
+  const normalized: PartsInventoryDetailWindow[] = [];
+
+  for (const windowEntry of windows) {
+    const storeId = windowEntry.storeId.trim();
+    const partNumber = windowEntry.partNumber.trim();
+
+    if (!storeId || !partNumber) {
+      continue;
+    }
+
+    const key = `${storeId}:${partNumber}`;
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    normalized.push({
+      description: windowEntry.description.trim(),
+      partNumber,
+      storeId
+    });
+
+    if (normalized.length >= 8) {
+      break;
+    }
+  }
+
+  return normalized;
+}
+
 function upsertServiceDetailWindow(current: ServiceDetailWindow[], nextWindow: ServiceDetailWindow) {
   const existingWindow = current.find(
     (windowEntry) => windowEntry.storeId === nextWindow.storeId && windowEntry.roNumber === nextWindow.roNumber
@@ -11469,6 +21439,110 @@ function upsertServiceDetailWindow(current: ServiceDetailWindow[], nextWindow: S
   ]);
 }
 
+function upsertPartsInventoryDetailWindow(current: PartsInventoryDetailWindow[], nextWindow: PartsInventoryDetailWindow) {
+  const existingWindow = current.find(
+    (windowEntry) => windowEntry.storeId === nextWindow.storeId && windowEntry.partNumber === nextWindow.partNumber
+  );
+
+  return normalizePartsInventoryDetailWindows([
+    {
+      ...nextWindow,
+      description: nextWindow.description || existingWindow?.description || ""
+    },
+    ...current.filter(
+      (windowEntry) => !(windowEntry.storeId === nextWindow.storeId && windowEntry.partNumber === nextWindow.partNumber)
+    )
+  ]);
+}
+
+function normalizeSalesDealDetailWindows(windows: SalesDealDetailWindow[]) {
+  const seen = new Set<string>();
+  const normalized: SalesDealDetailWindow[] = [];
+
+  for (const windowEntry of windows) {
+    const storeId = windowEntry.storeId.trim();
+    const dealId = windowEntry.dealId.trim();
+
+    if (!storeId || !dealId) {
+      continue;
+    }
+
+    const key = `${storeId}:${dealId}`;
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    normalized.push({
+      customer: windowEntry.customer.trim(),
+      worksheet: windowEntry.worksheet.trim(),
+      dealId,
+      storeId
+    });
+
+    if (normalized.length >= 8) {
+      break;
+    }
+  }
+
+  return normalized;
+}
+
+function upsertSalesDealDetailWindow(current: SalesDealDetailWindow[], nextWindow: SalesDealDetailWindow) {
+  const existingWindow = current.find(
+    (windowEntry) => windowEntry.storeId === nextWindow.storeId && windowEntry.dealId === nextWindow.dealId
+  );
+
+  return normalizeSalesDealDetailWindows([
+    {
+      ...nextWindow,
+      customer: nextWindow.customer || existingWindow?.customer || "",
+      worksheet: nextWindow.worksheet || existingWindow?.worksheet || ""
+    },
+    ...current.filter(
+      (windowEntry) => !(windowEntry.storeId === nextWindow.storeId && windowEntry.dealId === nextWindow.dealId)
+    )
+  ]);
+}
+
+function readOpenSalesDealDetailWindowPreference(userId: string) {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const raw = window.sessionStorage.getItem(`${OPEN_SALES_DEAL_DETAIL_WINDOWS_STORAGE_PREFIX}:${userId}`);
+
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return normalizeSalesDealDetailWindows(
+      parsed.flatMap((entry) => {
+        if (!entry || typeof entry !== "object") {
+          return [];
+        }
+
+        const customer = "customer" in entry && typeof entry.customer === "string" ? entry.customer : "";
+        const worksheet = "worksheet" in entry && typeof entry.worksheet === "string" ? entry.worksheet : "";
+        const dealId = "dealId" in entry && typeof entry.dealId === "string" ? entry.dealId : "";
+        const storeId = "storeId" in entry && typeof entry.storeId === "string" ? entry.storeId : "";
+
+        return dealId && storeId ? [{ customer, worksheet, dealId, storeId }] : [];
+      })
+    );
+  } catch {
+    return [];
+  }
+}
+
 function reorderOpenWindowOrderPreference(
   currentOrderKeys: string[],
   visibleKeys: string[],
@@ -11476,9 +21550,11 @@ function reorderOpenWindowOrderPreference(
   targetKey: string,
   dropPosition: OpenWindowDropState["position"],
   workspaceIds: WorkspaceId[],
-  windows: ServiceDetailWindow[]
+  serviceWindows: ServiceDetailWindow[],
+  partsInventoryWindows: PartsInventoryDetailWindow[],
+  salesDealWindows: SalesDealDetailWindow[] = []
 ) {
-  const normalizedOrder = normalizeOpenWindowOrderPreference(currentOrderKeys, workspaceIds, windows);
+  const normalizedOrder = normalizeOpenWindowOrderPreference(currentOrderKeys, workspaceIds, serviceWindows, partsInventoryWindows, salesDealWindows);
   const sourceIndex = visibleKeys.indexOf(sourceKey);
   const targetIndex = visibleKeys.indexOf(targetKey);
 
@@ -11511,6 +21587,15 @@ function reorderOpenWindowOrderPreference(
 
 function formatServiceDetailWindowTitle(windowEntry: ServiceDetailWindow) {
   return windowEntry.customerName ? `RO ${windowEntry.roNumber} - ${windowEntry.customerName}` : `RO ${windowEntry.roNumber}`;
+}
+
+function formatPartsInventoryDetailWindowTitle(windowEntry: PartsInventoryDetailWindow) {
+  return `Parts Inventory - ${windowEntry.partNumber}`;
+}
+
+function formatSalesDealWindowTitle(windowEntry: SalesDealDetailWindow) {
+  const dealLabel = windowEntry.worksheet ? `Deal - ${windowEntry.worksheet}` : "Deal";
+  return windowEntry.customer ? `${dealLabel} For ${windowEntry.customer}` : dealLabel;
 }
 
 function normalizeServiceQueueDraftValue(field: EditableServiceQueueField, value: string) {
@@ -11594,6 +21679,10 @@ function matchesServiceQueueView(row: ServiceWorkspaceRow, queueView: ServiceQue
     return row.category === "Parts Hold";
   }
 
+  if (queueView === "Workload") {
+    return true;
+  }
+
   return true;
 }
 
@@ -11611,6 +21700,16 @@ function matchesWorkspaceSearch(values: string[], searchTerm: string) {
   return values.some((value) => value.toLowerCase().includes(normalizedSearch));
 }
 
+function isTextEntryTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  const tagName = target.tagName.toLowerCase();
+
+  return target.isContentEditable || tagName === "input" || tagName === "select" || tagName === "textarea";
+}
+
 function filterPartsLookupRows(rows: PartsWorkspaceRow[], searchTerm: string, searchField: PartsLookupSearchField) {
   return rows.filter((row) => matchesPartsLookupSearch(row, searchTerm, searchField));
 }
@@ -11626,6 +21725,1565 @@ function matchesPartsLookupSearch(row: PartsWorkspaceRow, searchTerm: string, se
     searchField === "partNumber" ? [row.partNumber] : searchField === "secondary" ? [row.secondary] : [row.description, row.category, row.source];
 
   return searchValues.some((value) => value.toLowerCase().includes(normalizedSearch));
+}
+
+const partsInventorySeedRows: Array<Omit<PartsInventoryRow, "id" | "tone">> = [
+  {
+    active: true,
+    bin: "001",
+    category: "PXX",
+    cost: "$74.40",
+    description: "CONVERSION KIT Remote Control Cover",
+    onHand: 0,
+    partNumber: "8M0061334",
+    price: "$152.99",
+    secondaryNumber: "",
+    supersededTo: "",
+    supplier: "MM",
+    upc: "745061893061"
+  },
+  {
+    active: true,
+    bin: "001",
+    category: "PXX",
+    cost: "$63.00",
+    description: "FENDER, ALUM SGL 15, SMOOTH .080",
+    onHand: 0,
+    partNumber: "PI1811-S",
+    price: "$96.95",
+    secondaryNumber: "PI1811-S FENDER, ALUM SG...",
+    supersededTo: "",
+    supplier: "MT",
+    upc: ""
+  },
+  {
+    active: true,
+    bin: "001",
+    category: "PXX",
+    cost: "$3.16",
+    description: "MCCLAIN FENDER CAP",
+    onHand: 0,
+    partNumber: "MCCLAIN FENDER CAP",
+    price: "$4.51",
+    secondaryNumber: "",
+    supersededTo: "",
+    supplier: "MCT",
+    upc: ""
+  },
+  {
+    active: true,
+    bin: "001",
+    category: "PXX",
+    cost: "$0.00",
+    description: "NOTE: STARBOARD BOW STORAGE BACKREST",
+    onHand: 0,
+    partNumber: "018113",
+    price: "$692.86",
+    secondaryNumber: "",
+    supersededTo: "",
+    supplier: "BEN",
+    upc: ""
+  },
+  {
+    active: true,
+    bin: "001",
+    category: "PXX",
+    cost: "$38.51",
+    description: "16-14 HS BUTT CONNECTOR BLUE PKG",
+    onHand: 0,
+    partNumber: "0271578",
+    price: "$63.99",
+    secondaryNumber: "",
+    supersededTo: "",
+    supplier: "MP",
+    upc: ""
+  },
+  {
+    active: true,
+    bin: "S/O",
+    category: "PXX",
+    cost: "$552.15",
+    description: "BOTTOM SEAT CUSHION LEFT HAND SIDE",
+    onHand: 0,
+    partNumber: "327513",
+    price: "$788.79",
+    secondaryNumber: "CUSHION",
+    supersededTo: "",
+    supplier: "WRMG",
+    upc: ""
+  },
+  {
+    active: true,
+    bin: "001",
+    category: "PXX",
+    cost: "$222.36",
+    description: "FENDER 14 (64 X 9 X 15H) TANDEM",
+    onHand: 0,
+    partNumber: "206-00067-AL",
+    price: "$277.95",
+    secondaryNumber: "",
+    supersededTo: "",
+    supplier: "MP",
+    upc: ""
+  },
+  {
+    active: true,
+    bin: "001",
+    category: "PXX",
+    cost: "$59.95",
+    description: "Flush Mount LED Deck Light with Trim Bezel",
+    onHand: 0,
+    partNumber: "LED LIGHT",
+    price: "$85.00",
+    secondaryNumber: "DL-OEM-04-CW",
+    supersededTo: "",
+    supplier: "MP",
+    upc: ""
+  },
+  {
+    active: true,
+    bin: "PROP WALL",
+    category: "PXX",
+    cost: "$634.28",
+    description: "POWER TECH PROPELLER",
+    onHand: 0,
+    partNumber: "OFX4R21MS275",
+    price: "$961.04",
+    secondaryNumber: "",
+    supersededTo: "",
+    supplier: "PT",
+    upc: ""
+  },
+  {
+    active: true,
+    bin: "091-E",
+    category: "PYW",
+    cost: "$6.60",
+    description: "BOLT, 1/4-20 X 3/4",
+    onHand: 1,
+    partNumber: "6H1-JD005-73-00",
+    price: "$6.49",
+    secondaryNumber: "",
+    supersededTo: "",
+    supplier: "YA",
+    upc: "6H1JD0057300"
+  },
+  {
+    active: true,
+    bin: "124-B",
+    category: "PYW",
+    cost: "$46.50",
+    description: "FUEL METER, CB-CS SILVER",
+    onHand: 0,
+    partNumber: "N80-85750-50-00",
+    price: "$92.49",
+    secondaryNumber: "",
+    supersededTo: "",
+    supplier: "YA",
+    upc: "N80857505000"
+  },
+  {
+    active: true,
+    bin: "165",
+    category: "PYW",
+    cost: "$94.25",
+    description: "GASKET, CYLINDER HEAD 1",
+    onHand: 0,
+    partNumber: "60V-11181-00-00",
+    price: "$105.99",
+    secondaryNumber: "",
+    supersededTo: "63P-11351-01-00",
+    supplier: "YA",
+    upc: "60V111810000"
+  }
+];
+
+function buildPartsInventoryRows(rows: PartsWorkspaceRow[]) {
+  const convertedRows = rows.map((row, index): PartsInventoryRow => {
+    const cost = parsePartsCurrency(row.orderCost);
+    const price = cost * 1.38 + (index % 5) * 2.5;
+
+    return {
+      active: true,
+      bin: index % 3 === 0 ? "S/O" : `${(index * 17 + 1).toString().padStart(3, "0")}`,
+      category: row.category || "PXX",
+      cost: row.orderCost,
+      description: row.description,
+      id: `order-${row.id}`,
+      onHand: Math.max(0, Math.round(parsePartsQuantity(row.quantity) - 1)),
+      partNumber: row.partNumber,
+      price: formatWorkbenchCurrency(price),
+      secondaryNumber: row.secondary,
+      supersededTo: "",
+      supplier: row.supplier,
+      tone: row.tone,
+      upc: buildPartsInventoryUpc(row.partNumber, index)
+    };
+  });
+  const seedRows = partsInventorySeedRows.map((row, index): PartsInventoryRow => ({
+    ...row,
+    id: `seed-${index}`,
+    tone: index % 2 === 0 ? "teal" : "lime"
+  }));
+  const targetCount = 4982;
+  const generatedCount = Math.max(0, targetCount - seedRows.length - convertedRows.length);
+  const generatedRows = Array.from({ length: generatedCount }, (_, index) => buildGeneratedPartsInventoryRow(index));
+
+  return [...seedRows, ...convertedRows, ...generatedRows];
+}
+
+function buildGeneratedPartsInventoryRow(index: number): PartsInventoryRow {
+  const suppliers = ["YA", "MM", "MP", "MCT", "MT", "DM", "PT", "NAU", "BEN", "AVB", "XP", "JLM"];
+  const categories = ["PXX", "PYW", "PDO", "PYA", "OEM", "ACC"];
+  const bins = ["001", "060-B", "091-E", "105", "124-B", "157", "166", "SHOP", "PROP WALL", "GASKET BIN"];
+  const descriptions = [
+    "BOLT, WITH WASHER",
+    "ELEMENT ASSY, OIL",
+    "FUEL FILTER, WATER SEPARATOR",
+    "GASKET, EXHAUST MANIFOLD",
+    "TRIM RELAY HARNESS",
+    "DECK PLATE TWIST WHITE",
+    "U-BOLT SEAT 2.75",
+    "TABLE BASE",
+    "PONTOON COVER SNAP KIT",
+    "THROTTLE BUTTON ASSY",
+    "FENDER BRACKET WELDMENT",
+    "WASHER FLAT 1/2"
+  ];
+  const supplier = suppliers[index % suppliers.length];
+  const category = categories[index % categories.length];
+  const onHand = index % 11 === 0 ? (index % 7) + 1 : index % 43 === 0 ? 20 : 0;
+  const cost = ((index % 9000) / 7 + 0.28).toFixed(2);
+  const price = (Number(cost) * (1.35 + (index % 4) * 0.08)).toFixed(2);
+  const baseNumber = `${(index * 37 + 100000).toString().padStart(6, "0")}`;
+  const yamahaPart = `${(index % 90).toString().padStart(2, "0")}${supplier}-${baseNumber.slice(0, 4)}-${(index % 100).toString().padStart(2, "0")}-00`;
+
+  return {
+    active: true,
+    bin: bins[index % bins.length],
+    category,
+    cost: `$${cost}`,
+    description: descriptions[index % descriptions.length],
+    id: `generated-${index}`,
+    onHand,
+    partNumber: supplier === "YA" ? yamahaPart : `${baseNumber}-${supplier}`,
+    price: `$${price}`,
+    secondaryNumber: index % 5 === 0 ? descriptions[(index + 3) % descriptions.length] : "",
+    supersededTo: index % 41 === 0 ? `${baseNumber}-${(index % 9) + 1}` : "",
+    supplier,
+    tone: index % 2 === 0 ? "teal" : "lime",
+    upc: index % 3 === 0 ? `${700000000000 + index * 91}` : ""
+  };
+}
+
+function buildPartsInventoryDetailFallbackRow(partNumber: string): PartsInventoryRow {
+  const seed = partNumber.split("").reduce((total, character) => total + character.charCodeAt(0), 0);
+  const fallbackRow = buildGeneratedPartsInventoryRow(seed % 4000);
+
+  return {
+    ...fallbackRow,
+    description: fallbackRow.description || "Parts inventory item",
+    id: `detail-${partNumber}`,
+    partNumber
+  };
+}
+
+function buildPartsInventoryUpc(partNumber: string, index: number) {
+  return `${partNumber.replace(/\D/g, "").slice(0, 10)}${index}`.slice(0, 12);
+}
+
+function parsePartsInventorySearch(searchTerm: string): PartsInventoryParsedSearch {
+  const parsedSearch: PartsInventoryParsedSearch = {
+    active: null,
+    fieldTerms: [],
+    hasStructuredTerms: false,
+    noBin: false,
+    onHandComparison: null,
+    plainTerms: [],
+    raw: searchTerm,
+    superseded: null,
+    wildcard: searchTerm === "%"
+  };
+  const fieldAliases: Record<string, PartsInventorySearchField> = {
+    bin: "bin",
+    cat: "category",
+    category: "category",
+    desc: "description",
+    description: "description",
+    part: "partNumber",
+    partnumber: "partNumber",
+    pn: "partNumber",
+    secondary: "secondary",
+    sec: "secondary",
+    sup: "supplier",
+    supplier: "supplier",
+    upc: "upc"
+  };
+  const tokens = searchTerm.match(/"[^"]+"|\S+/g) ?? [];
+
+  for (const rawToken of tokens) {
+    const token = rawToken.replace(/^"|"$/g, "").trim();
+    const lowerToken = token.toLowerCase();
+
+    if (!token || token === "%") {
+      parsedSearch.wildcard = true;
+      continue;
+    }
+
+    const onHandMatch = lowerToken.match(/^onhand(>=|<=|>|<|=)(-?\d+)$/);
+
+    if (onHandMatch) {
+      parsedSearch.onHandComparison = {
+        operator: onHandMatch[1] as ">" | ">=" | "<" | "<=" | "=",
+        value: Number.parseInt(onHandMatch[2], 10)
+      };
+      parsedSearch.hasStructuredTerms = true;
+      continue;
+    }
+
+    const separatorIndex = token.indexOf(":");
+
+    if (separatorIndex > -1) {
+      const key = token.slice(0, separatorIndex).toLowerCase();
+      const value = token.slice(separatorIndex + 1).trim();
+      const lowerValue = value.toLowerCase();
+
+      if (key === "active") {
+        parsedSearch.active = parsePartsInventoryBoolean(lowerValue);
+        parsedSearch.hasStructuredTerms = true;
+        continue;
+      }
+
+      if (key === "superseded") {
+        parsedSearch.superseded = parsePartsInventoryBoolean(lowerValue);
+        parsedSearch.hasStructuredTerms = true;
+        continue;
+      }
+
+      if (key === "nobin") {
+        parsedSearch.noBin = parsePartsInventoryBoolean(lowerValue) ?? true;
+        parsedSearch.hasStructuredTerms = true;
+        continue;
+      }
+
+      const field = fieldAliases[key];
+
+      if (field && value) {
+        parsedSearch.fieldTerms.push({ field, value: lowerValue });
+        parsedSearch.hasStructuredTerms = true;
+        continue;
+      }
+    }
+
+    parsedSearch.plainTerms.push(lowerToken);
+  }
+
+  return parsedSearch;
+}
+
+function parsePartsInventoryBoolean(value: string) {
+  if (["1", "true", "yes", "y"].includes(value)) {
+    return true;
+  }
+
+  if (["0", "false", "no", "n"].includes(value)) {
+    return false;
+  }
+
+  return null;
+}
+
+function matchesPartsInventoryParsedSearch(row: PartsInventoryRow, parsedSearch: PartsInventoryParsedSearch, searchField: PartsInventorySearchField) {
+  if (!parsedSearch.raw) {
+    return true;
+  }
+
+  if (parsedSearch.active !== null && row.active !== parsedSearch.active) {
+    return false;
+  }
+
+  if (parsedSearch.superseded !== null && Boolean(row.supersededTo) !== parsedSearch.superseded) {
+    return false;
+  }
+
+  if (parsedSearch.noBin && !isPartsInventoryNoBin(row)) {
+    return false;
+  }
+
+  if (parsedSearch.onHandComparison && !comparePartsInventoryQuantity(row.onHand, parsedSearch.onHandComparison)) {
+    return false;
+  }
+
+  if (
+    parsedSearch.fieldTerms.some(
+      (term) => !getPartsInventorySearchValue(row, term.field).toLowerCase().includes(term.value)
+    )
+  ) {
+    return false;
+  }
+
+  if (parsedSearch.plainTerms.length === 0) {
+    return parsedSearch.wildcard || parsedSearch.hasStructuredTerms;
+  }
+
+  const values =
+    searchField === "all"
+      ? [row.partNumber, row.secondaryNumber, row.upc, row.description, row.supplier, row.category, row.bin, row.supersededTo]
+      : [getPartsInventorySearchValue(row, searchField)];
+
+  return parsedSearch.plainTerms.every((term) => values.some((value) => value.toLowerCase().includes(term)));
+}
+
+function comparePartsInventoryQuantity(
+  value: number,
+  comparison: NonNullable<PartsInventoryParsedSearch["onHandComparison"]>
+) {
+  switch (comparison.operator) {
+    case ">":
+      return value > comparison.value;
+    case ">=":
+      return value >= comparison.value;
+    case "<":
+      return value < comparison.value;
+    case "<=":
+      return value <= comparison.value;
+    case "=":
+      return value === comparison.value;
+  }
+}
+
+function getPartsInventorySearchValue(row: PartsInventoryRow, searchField: PartsInventorySearchField) {
+  switch (searchField) {
+    case "partNumber":
+      return row.partNumber;
+    case "secondary":
+      return row.secondaryNumber;
+    case "upc":
+      return row.upc;
+    case "description":
+      return row.description;
+    case "supplier":
+      return row.supplier;
+    case "category":
+      return row.category;
+    case "bin":
+      return row.bin;
+    case "all":
+      return "";
+  }
+}
+
+function matchesPartsInventoryActiveFilter(
+  row: PartsInventoryRow,
+  activePartsOnly: boolean,
+  inactivePartsOnly: boolean,
+  activeOverride: boolean | null = null
+) {
+  if (activeOverride !== null) {
+    return row.active === activeOverride;
+  }
+
+  if (activePartsOnly && !inactivePartsOnly) {
+    return row.active;
+  }
+
+  if (!activePartsOnly && inactivePartsOnly) {
+    return !row.active;
+  }
+
+  return true;
+}
+
+function matchesPartsInventorySavedView(row: PartsInventoryRow, savedView: PartsInventorySavedView | "") {
+  switch (savedView) {
+    case "":
+    case "active":
+      return true;
+    case "onHand":
+      return row.onHand > 0;
+    case "yamaha":
+      return row.supplier.toUpperCase() === "YA";
+    case "noBin":
+      return isPartsInventoryNoBin(row);
+    case "superseded":
+      return Boolean(row.supersededTo);
+    case "highValue":
+      return parsePartsCurrency(row.price) > 500 || parsePartsCurrency(row.cost) > 500;
+  }
+}
+
+function isPartsInventoryNoBin(row: PartsInventoryRow) {
+  const bin = row.bin.trim().toLowerCase();
+
+  return !bin || bin === "s/o" || bin === "no bin";
+}
+
+function buildPartsInventoryConfidenceLabels({
+  activePartsOnly,
+  actionNotice,
+  exactMatch,
+  hasInventorySearch,
+  inactivePartsOnly,
+  isCapped,
+  onHandPartsOnly,
+  parsedSearch,
+  savedView
+}: {
+  activePartsOnly: boolean;
+  actionNotice: string;
+  exactMatch: boolean;
+  hasInventorySearch: boolean;
+  inactivePartsOnly: boolean;
+  isCapped: boolean;
+  onHandPartsOnly: boolean;
+  parsedSearch: PartsInventoryParsedSearch;
+  savedView: PartsInventorySavedView | "";
+}) {
+  const labels: string[] = [];
+  const savedViewLabel = partsInventorySavedViews.find((view) => view.value === savedView)?.label;
+
+  if (actionNotice) {
+    labels.push(actionNotice);
+  }
+
+  if (!hasInventorySearch) {
+    labels.push("Awaiting search");
+  }
+
+  if (parsedSearch.wildcard) {
+    labels.push("Wildcard");
+  }
+
+  if (exactMatch) {
+    labels.push("Exact match");
+  }
+
+  if (parsedSearch.hasStructuredTerms) {
+    labels.push("Smart filter");
+  }
+
+  if (isCapped) {
+    labels.push("Capped at 2,500");
+  }
+
+  if (activePartsOnly && !inactivePartsOnly) {
+    labels.push("Active only");
+  }
+
+  if (!activePartsOnly && inactivePartsOnly) {
+    labels.push("Inactive only");
+  }
+
+  if (onHandPartsOnly) {
+    labels.push("On hand");
+  }
+
+  if (savedViewLabel) {
+    labels.push(savedViewLabel);
+  }
+
+  return Array.from(new Set(labels)).slice(0, 6);
+}
+
+function getPartsInventoryInspectorKind(key: PartsInventoryColumnKey): PartsInventoryInspectorKind | null {
+  switch (key) {
+    case "supplier":
+      return "supplier";
+    case "bin":
+      return "bin";
+    case "price":
+    case "cost":
+      return "price";
+    case "supersededTo":
+      return "supersession";
+    default:
+      return null;
+  }
+}
+
+function buildPartsInventoryInspectorTitle(row: PartsInventoryRow, kind: PartsInventoryInspectorKind) {
+  switch (kind) {
+    case "supplier":
+      return `Supplier ${row.supplier || "-"}`;
+    case "bin":
+      return `Bin ${row.bin || "-"}`;
+    case "price":
+      return "Inventory Pricing";
+    case "supersession":
+      return "Supersession";
+  }
+}
+
+function buildPartsInventoryInspectorLines(row: PartsInventoryRow, kind: PartsInventoryInspectorKind) {
+  const price = parsePartsCurrency(row.price);
+  const cost = parsePartsCurrency(row.cost);
+  const margin = price - cost;
+  const marginPercent = price > 0 ? `${((margin / price) * 100).toFixed(1)}%` : "0.0%";
+
+  switch (kind) {
+    case "supplier":
+      return [`Category ${row.category}`, `Last received ${buildPartsInventoryLastReceived(row)}`, `Cost ${row.cost}`];
+    case "bin":
+      return [`On hand ${row.onHand}`, `Last sold ${buildPartsInventoryLastSold(row)}`, `Status ${isPartsInventoryNoBin(row) ? "Needs bin" : "Located"}`];
+    case "price":
+      return [`Price ${row.price}`, `Cost ${row.cost}`, `Margin ${formatWorkbenchCurrency(margin)} (${marginPercent})`];
+    case "supersession":
+      return row.supersededTo ? [`Superseded to ${row.supersededTo}`, "Eligible for substitute lookup"] : ["No supersession on file"];
+  }
+}
+
+function buildPartsInventoryLastSold(row: PartsInventoryRow) {
+  const seed = buildPartsInventoryDateSeed(row);
+  const month = ((seed + 2) % 12) + 1;
+  const day = ((seed + 11) % 27) + 1;
+
+  return formatPartsInventoryDate(2026, month, day);
+}
+
+function buildPartsInventoryLastReceived(row: PartsInventoryRow) {
+  const seed = buildPartsInventoryDateSeed(row);
+  const month = ((seed + 8) % 12) + 1;
+  const day = ((seed + 5) % 27) + 1;
+
+  return formatPartsInventoryDate(2026, month, day);
+}
+
+function buildPartsInventoryScheduleInputDate(offsetDays: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
+
+  return date.toISOString().slice(0, 10);
+}
+
+function formatPartsInventoryScheduleDateTime(dateValue: string, timeValue: string) {
+  if (!dateValue) {
+    return "selected date";
+  }
+
+  const [year = 2026, month = 1, day = 1] = dateValue.split("-").map((value) => Number(value));
+  const [hour = 8, minute = 0] = timeValue.split(":").map((value) => Number(value));
+  const date = new Date(year, month - 1, day, hour, minute);
+
+  return new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  }).format(date);
+}
+
+function buildPartsInventoryDetailDraft(row: PartsInventoryRow): PartsInventoryDetailDraft {
+  return {
+    bin1: row.bin || "",
+    bin2: "",
+    bin3: "",
+    cost: row.cost,
+    description: row.description,
+    mapPrice: "$0.00",
+    marginPercent: formatPartsInventoryMarginPercentFromValues(row.price, row.cost),
+    movementCode: buildPartsInventoryMovementCode(row),
+    partNumber: row.partNumber,
+    price: row.price,
+    salePrice: "$0.00",
+    secondaryNumber: row.secondaryNumber,
+    special1Price: "$0.00",
+    special2Price: "$0.00",
+    special3Price: "$0.00",
+    upc: row.upc || row.partNumber.replace(/[^a-z0-9]/gi, "")
+  };
+}
+
+function buildPartsInventoryEditableRow(row: PartsInventoryRow, draft: PartsInventoryDetailDraft): PartsInventoryRow {
+  return {
+    ...row,
+    bin: draft.bin1,
+    cost: draft.cost,
+    description: draft.description,
+    partNumber: draft.partNumber,
+    price: draft.price,
+    secondaryNumber: draft.secondaryNumber,
+    upc: draft.upc
+  };
+}
+
+function arePartsInventoryDetailDraftsEqual(left: PartsInventoryDetailDraft, right: PartsInventoryDetailDraft) {
+  const keys = Object.keys(left) as Array<keyof PartsInventoryDetailDraft>;
+
+  return keys.every((key) => left[key] === right[key]);
+}
+
+function buildPartsInventoryDetailMetrics(row: PartsInventoryRow, marginPercentOverride?: string) {
+  const seed = buildPartsInventoryDateSeed(row);
+  const price = parsePartsCurrency(row.price);
+  const cost = parsePartsCurrency(row.cost);
+  const margin = Math.max(0, price - cost);
+  const marginPercent = marginPercentOverride || formatPartsInventoryMarginPercentFromValues(row.price, row.cost);
+  const onHand = Math.max(0, row.onHand);
+  const daysSinceSold = `${(seed % 26) + 1}`;
+
+  return {
+    available: onHand > 0 ? `${onHand}` : "0",
+    daysSinceSold,
+    lastCountDate: formatPartsInventoryDate(2025, ((seed + 3) % 12) + 1, ((seed + 16) % 27) + 1),
+    marginPercent,
+    onOrder: `${seed % 5 === 0 ? 1 : 0}`,
+    partMargin: formatWorkbenchCurrency(margin),
+    partValue: formatWorkbenchCurrency(price * Math.max(onHand, 1)),
+    setupDate: formatPartsInventoryDate(2014 + (seed % 8), ((seed + 1) % 12) + 1, ((seed + 9) % 27) + 1)
+  };
+}
+
+function formatPartsInventoryMarginPercentFromValues(priceValue: string, costValue: string) {
+  const price = parsePartsCurrency(priceValue);
+  const cost = parsePartsCurrency(costValue);
+  const margin = Math.max(0, price - cost);
+
+  return price > 0 ? `${((margin / price) * 100).toFixed(1)}%` : "0.0%";
+}
+
+function formatPartsInventoryMarginPercentInput(value: string) {
+  const trimmedValue = value.trim();
+  const numericText = trimmedValue.replace(/%/g, "").trim();
+  const parsedValue = Number.parseFloat(numericText);
+
+  if (!Number.isFinite(parsedValue)) {
+    return "";
+  }
+
+  return `${numericText || parsedValue.toString()}%`;
+}
+
+function buildPartsInventoryActivityTimeline(
+  row: PartsInventoryRow,
+  metrics: ReturnType<typeof buildPartsInventoryDetailMetrics>,
+  smartOrdering: ReturnType<typeof buildPartsInventorySmartOrderingSummary>
+) {
+  const setupYear = Number(metrics.setupDate.split("/")[2] ?? new Date().getFullYear());
+  const currentYear = new Date().getFullYear();
+  const lastReceived = buildPartsInventoryLastReceived(row);
+  const lastSold = buildPartsInventoryLastSold(row);
+
+  return [
+    {
+      date: metrics.setupDate,
+      label: "Setup",
+      status: `${Math.max(1, currentYear - setupYear)} yr`,
+      tone: "neutral" as const
+    },
+    {
+      date: metrics.lastCountDate,
+      label: "Last Count",
+      ...buildPartsInventoryActivityDateStatus(metrics.lastCountDate, 60, 180)
+    },
+    {
+      date: lastReceived,
+      label: "Last Received",
+      ...buildPartsInventoryActivityDateStatus(lastReceived, 45, 150)
+    },
+    {
+      date: lastSold,
+      label: "Last Sold",
+      ...buildPartsInventoryActivityDateStatus(lastSold, 45, 180)
+    },
+    {
+      date: formatPartsInventoryScheduleDisplayDate(smartOrdering.nextReview),
+      label: "Next Review",
+      status: smartOrdering.orderQuantity === "0" ? "Planned" : "Order",
+      tone: smartOrdering.orderQuantity === "0" ? ("stable" as const) : ("attention" as const)
+    }
+  ];
+}
+
+function buildPartsInventoryActivityDateStatus(dateValue: string, freshDays: number, dueDays: number) {
+  const date = parsePartsInventoryDisplayDate(dateValue);
+
+  if (!date) {
+    return { status: "Review", tone: "neutral" as const };
+  }
+
+  const today = new Date();
+  const days = Math.floor((today.getTime() - date.getTime()) / 86400000);
+
+  if (days < 0) {
+    return { status: "Future", tone: "neutral" as const };
+  }
+
+  if (days <= freshDays) {
+    return { status: "Fresh", tone: "stable" as const };
+  }
+
+  if (days <= dueDays) {
+    return { status: `${days}d`, tone: "neutral" as const };
+  }
+
+  return { status: "Due", tone: "attention" as const };
+}
+
+function parsePartsInventoryDisplayDate(value: string) {
+  const [month, day, year] = value.split("/").map((part) => Number(part));
+
+  if (!month || !day || !year) {
+    return null;
+  }
+
+  return new Date(year, month - 1, day);
+}
+
+function formatPartsInventoryScheduleDisplayDate(value: string) {
+  const [year, month, day] = value.split("-").map((part) => Number(part));
+
+  if (!year || !month || !day) {
+    return "";
+  }
+
+  return formatPartsInventoryDate(year, month, day);
+}
+
+function buildPartsInventoryDetailBadges(row: PartsInventoryRow) {
+  const badges: Array<{ label: string; tone: "attention" | "neutral" | "stable" }> = [];
+  const price = parsePartsCurrency(row.price);
+  const cost = parsePartsCurrency(row.cost);
+  const marginPercent = price > 0 ? ((price - cost) / price) * 100 : 0;
+
+  if (row.onHand <= 0) {
+    badges.push({ label: "Low Stock", tone: "attention" });
+  }
+
+  if (isPartsInventoryNoBin(row)) {
+    badges.push({ label: "No Bin", tone: "attention" });
+  }
+
+  if (marginPercent >= 35) {
+    badges.push({ label: "High Margin", tone: "stable" });
+  }
+
+  if (row.supersededTo) {
+    badges.push({ label: "Superseded", tone: "neutral" });
+  }
+
+  if (buildPartsInventoryDateSeed(row) % 5 === 0) {
+    badges.push({ label: "Pending PO", tone: "neutral" });
+  }
+
+  if (badges.length === 0) {
+    badges.push({ label: "Active Part", tone: "stable" });
+  }
+
+  return badges.slice(0, 5);
+}
+
+function buildPartsInventorySerialNumberRows(row: PartsInventoryRow): Array<Record<string, string>> {
+  if (!row.partNumber.toLowerCase().includes("motor") && row.category !== "OEM") {
+    return [];
+  }
+
+  const seed = buildPartsInventoryDateSeed(row);
+
+  return [
+    {
+      customer: "",
+      notes: "Available",
+      received: buildPartsInventoryLastReceived(row),
+      serialNumber: `${row.partNumber.replace(/[^a-z0-9]/gi, "").slice(0, 8)}-${(seed % 999).toString().padStart(3, "0")}`,
+      sold: "",
+      status: "In Stock"
+    }
+  ];
+}
+
+function buildPartsInventorySimilarPartRows(row: PartsInventoryRow): Array<Record<string, string>> {
+  if (!row.supersededTo && buildPartsInventoryDateSeed(row) % 4 !== 0) {
+    return [];
+  }
+
+  const seed = buildPartsInventoryDateSeed(row);
+  const alternatePartNumber = row.supersededTo || `${row.partNumber.replace(/-?00$/, "")}-${(seed % 9) + 1}`;
+  const alternatePrice = formatWorkbenchCurrency(parsePartsCurrency(row.price) * 1.04);
+
+  return [
+    {
+      avail: `${Math.max(0, row.onHand + (seed % 3))}`,
+      description: row.description,
+      partNumber: alternatePartNumber,
+      price: alternatePrice,
+      similarType: row.supersededTo ? "Supersession" : "Alternate",
+      supplier: row.supplier
+    }
+  ];
+}
+
+function buildPartsInventoryDetailSalesHistory(row: PartsInventoryRow) {
+  const seed = buildPartsInventoryDateSeed(row);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const thisYearValues = months.map((_, index) => formatPartsInventoryHistoryQuantity((seed + index * 5) % 6 === 0 ? index % 3 : (seed + index) % 4 === 0 ? 1.5 : 0));
+  const lastYearValues = months.map((_, index) => formatPartsInventoryHistoryQuantity((seed + index * 3) % 5 === 0 ? (index % 4) + 0.5 : (seed + index) % 7 === 0 ? 1 : 0));
+  const thisYearTotal = thisYearValues.reduce((total, value) => total + Number(value), 0);
+  const lastYearTotal = lastYearValues.reduce((total, value) => total + Number(value), 0);
+  const reversedThisYearValues = [...thisYearValues].reverse();
+  const noSalesIndex = reversedThisYearValues.findIndex((value) => Number(value) > 0);
+  const noSalesMonths = noSalesIndex === -1 ? `${thisYearValues.length}` : `${noSalesIndex}`;
+
+  return {
+    columns: [
+      { key: "label", label: "" },
+      ...months.map((month) => ({ align: "right" as const, key: month, label: month })),
+      { align: "right" as const, key: "total", label: "Total" }
+    ],
+    noSalesMonths,
+    previousTwelveMonths: formatPartsInventoryHistoryQuantity(thisYearTotal + lastYearTotal),
+    rows: [
+      buildPartsInventorySalesHistoryDisplayRow("This Year", months, thisYearValues),
+      buildPartsInventorySalesHistoryDisplayRow("Last Year", months, lastYearValues)
+    ],
+    totals: [
+      { label: "+ Adjustments", mtd: "0", ytd: "0" },
+      { label: "- Adjustments", mtd: "0", ytd: "0" },
+      { label: "Lost Sales", mtd: "0", ytd: "0" },
+      { label: "Special Order", mtd: row.onHand > 0 ? "1" : "0", ytd: row.onHand > 0 ? "1" : "0" }
+    ]
+  };
+}
+
+function buildPartsInventoryCurrentSalesCalendarYear() {
+  return new Date().getFullYear();
+}
+
+function buildPartsInventorySalesCalendarYearOptions(selectedYear: number) {
+  const currentYear = buildPartsInventoryCurrentSalesCalendarYear();
+  const years = new Set<number>();
+
+  Array.from({ length: 9 }, (_, index) => currentYear - 6 + index).forEach((year) => years.add(year));
+  years.add(selectedYear);
+
+  return [...years].sort((first, second) => first - second);
+}
+
+function buildPartsInventorySalesCalendarRows(row: PartsInventoryRow, year = buildPartsInventoryCurrentSalesCalendarYear()) {
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const currentMonthIndex = currentDate.getMonth();
+
+  return months.map((month, monthIndex) => {
+    const isForecast = year > currentYear || (year === currentYear && monthIndex > currentMonthIndex);
+    const isCurrent = year === currentYear && monthIndex === currentMonthIndex;
+    const units = buildPartsInventorySalesCalendarMonthUnits(row, year, monthIndex, isForecast);
+    const saleDays = buildPartsInventorySalesCalendarDays(row, year, monthIndex, units, isForecast);
+
+    return {
+      days: saleDays,
+      isCurrent,
+      isForecast,
+      month,
+      tone: units >= 2 ? "stable" : units > 0 ? "neutral" : "attention",
+      units: formatPartsInventoryHistoryQuantity(units)
+    };
+  });
+}
+
+function buildPartsInventorySalesCalendarMonthUnits(row: PartsInventoryRow, year: number, monthIndex: number, isForecast: boolean) {
+  const seed = buildPartsInventoryDateSeed(row);
+  const currentYear = buildPartsInventoryCurrentSalesCalendarYear();
+  const yearOffset = year - currentYear;
+  const baseCycle = (seed + monthIndex * 11 + year * 3) % 12;
+  let units = baseCycle % 5 === 0 ? (monthIndex % 3) + 1 : baseCycle % 4 === 0 ? 1.5 : baseCycle % 7 === 0 ? 0.5 : 0;
+
+  if (year < currentYear) {
+    const ageDiscount = Math.max(0.52, 1 - Math.abs(yearOffset) * 0.08);
+    units = units * ageDiscount + ((seed + year + monthIndex) % 9 === 0 ? 0.5 : 0);
+  }
+
+  if (isForecast) {
+    const trend = 1 + Math.max(0, yearOffset) * 0.1;
+    const seasonality = [0.8, 0.85, 1.05, 1.15, 1.25, 1.3, 1.28, 1.18, 1, 0.88, 0.78, 0.72][monthIndex] ?? 1;
+    units = units * trend * seasonality + ((seed + year + monthIndex * 2) % 8 === 0 ? 0.5 : 0);
+  }
+
+  return Math.max(0, Number(formatPartsInventoryHistoryQuantity(units)));
+}
+
+function buildPartsInventorySalesCalendarDays(row: PartsInventoryRow, year: number, monthIndex: number, units: number, isForecast: boolean) {
+  const seed = buildPartsInventoryDateSeed(row);
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  const firstDay = new Date(year, monthIndex, 1).getDay();
+  const saleCount = Math.min(8, Math.ceil(units));
+  const salesByDay = new Map<number, { quantity: string; record: ReturnType<typeof buildPartsInventorySalesCalendarDayRecord> }>();
+  let remainingUnits = units;
+
+  Array.from({ length: saleCount }).forEach((_, index) => {
+    const day = ((seed + monthIndex * 7 + index * 11) % daysInMonth) + 1;
+    const remainingSlots = saleCount - index;
+    const quantity = remainingSlots === 1 ? remainingUnits : Math.min(1, remainingUnits - (remainingSlots - 1) * 0.5);
+    const formattedQuantity = formatPartsInventoryHistoryQuantity(Math.max(0.5, quantity));
+    remainingUnits = Math.max(0, remainingUnits - Number(formattedQuantity));
+    salesByDay.set(day, {
+      quantity: formattedQuantity,
+      record: buildPartsInventorySalesCalendarDayRecord(row, year, monthIndex, day, formattedQuantity, index, isForecast)
+    });
+  });
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const dayNumber = index - firstDay + 1;
+    const inMonth = dayNumber >= 1 && dayNumber <= daysInMonth;
+    const sale = inMonth ? salesByDay.get(dayNumber) : undefined;
+    const numericQuantity = Number(sale?.quantity ?? 0);
+
+    return {
+      day: inMonth ? `${dayNumber}` : "",
+      hasSale: Boolean(sale),
+      inMonth,
+      level: numericQuantity >= 1.5 ? "high" : numericQuantity > 0 ? "low" : "none",
+      quantity: sale?.quantity ?? "0",
+      record: sale?.record ?? null
+    };
+  });
+}
+
+function buildPartsInventorySalesCalendarDayRecord(
+  row: PartsInventoryRow,
+  year: number,
+  monthIndex: number,
+  day: number,
+  quantity: string,
+  eventIndex: number,
+  isForecast: boolean
+) {
+  const seed = buildPartsInventoryDateSeed(row);
+  const users = ["Patrick Earle", "Chad Bryant", "Dustin Hampton", "Parts Counter"];
+  const customers = [
+    "DARRELL SCOTT MARCUSE",
+    "DANIEL DELUNA",
+    "JOHN-MARK MATKIN",
+    "ROBERT CARLOS RAMIREZ",
+    "DAVID LAWSON",
+    "TRAVIS GARWOOD",
+    "JESSICA RUTH ROGERS",
+    "BRANDON RANEY"
+  ];
+  const channelIndex = (seed + monthIndex + day + eventIndex) % 3;
+  const channel = isForecast ? "Projected Demand" : ["Counter Sale", "R.O. Sale", "Web Order"][channelIndex];
+  const customer = isForecast
+    ? "Projected from seasonality"
+    : channelIndex === 1
+      ? `R.O. (${256000 + ((seed + day + monthIndex) % 120)}): ${customers[(seed + day) % customers.length]}`
+      : channelIndex === 2
+        ? "Website customer"
+        : customers[(seed + eventIndex + monthIndex) % customers.length];
+  const hour = ((seed + day + eventIndex * 3) % 10) + 8;
+  const minute = (seed + day * 7 + eventIndex * 11) % 60;
+  const time = isForecast ? "Forecast" : `${hour > 12 ? hour - 12 : hour}:${minute.toString().padStart(2, "0")} ${hour >= 12 ? "PM" : "AM"}`;
+  const document = isForecast ? `AI-FCST-${year}` : channelIndex === 1 ? `${6007000 + ((seed * 13 + day) % 900)}` : `INV-${year}${(monthIndex + 1).toString().padStart(2, "0")}${day.toString().padStart(2, "0")}`;
+
+  return {
+    channel,
+    customer,
+    document,
+    quantity,
+    soldBy: isForecast ? `Predicted qty ${quantity}` : users[(seed + day + eventIndex) % users.length],
+    time
+  };
+}
+
+function buildPartsInventorySmartOrderingSummary(row: PartsInventoryRow) {
+  const seed = buildPartsInventoryDateSeed(row);
+  const history = buildPartsInventoryDetailSalesHistory(row);
+  const thisYear = history.rows[0] as Record<string, string>;
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const soldUnits = months.reduce((total, month) => total + Number(thisYear[month] ?? 0), 0);
+  const activeMonths = months.filter((month) => Number(thisYear[month] ?? 0) > 0).length;
+  const monthlyAverageValue = soldUnits > 0 ? soldUnits / 12 : 0;
+  const demandBasis = Math.max(monthlyAverageValue, activeMonths > 0 ? soldUnits / activeMonths / 2 : 0.25);
+  const suggestedMinValue = Math.max(row.onHand <= 0 ? 1 : 0, Math.ceil(demandBasis * 1.5));
+  const suggestedMaxValue = Math.max(suggestedMinValue + 1, Math.ceil(demandBasis * 3));
+  const orderQuantityValue = Math.max(0, suggestedMaxValue - Math.max(0, row.onHand));
+  const coverageMonthsValue = monthlyAverageValue > 0 ? Math.max(0, row.onHand / monthlyAverageValue) : row.onHand > 0 ? 12 : 0;
+  const nextReviewOffset = orderQuantityValue > 0 ? 1 : coverageMonthsValue <= 2 ? 7 : 30;
+  const nextReview = buildPartsInventoryScheduleInputDate(nextReviewOffset);
+  const lastQuarterDemand = months.slice(0, 3).reduce((total, month) => total + Number(thisYear[month] ?? 0), 0);
+  const priorQuarterDemand = months.slice(3, 6).reduce((total, month) => total + Number(thisYear[month] ?? 0), 0);
+  const trendPercent = priorQuarterDemand > 0 ? Math.round(((lastQuarterDemand - priorQuarterDemand) / priorQuarterDemand) * 100) : 0;
+  const leadTimeLow = (seed % 4) + 3;
+  const leadTimeHigh = leadTimeLow + 4;
+  const confidenceValue = Math.min(
+    96,
+    Math.max(58, 62 + activeMonths * 4 + (soldUnits > 0 ? 8 : 0) - (orderQuantityValue > 0 ? 4 : 0))
+  );
+  const riskTone: "attention" | "neutral" | "stable" =
+    orderQuantityValue > 0 ? "attention" : coverageMonthsValue <= 2 ? "neutral" : "stable";
+  const riskLabel = orderQuantityValue > 0 ? "Order Now" : coverageMonthsValue <= 2 ? "Watch" : "Healthy";
+  const velocityLabel =
+    activeMonths >= 6
+      ? trendPercent > 10
+        ? "Rising"
+        : "Active"
+      : activeMonths >= 3
+        ? "Seasonal"
+        : soldUnits > 0
+          ? "Slow"
+          : "No Demand";
+  const recommendation =
+    orderQuantityValue > 0
+      ? `Order ${orderQuantityValue} to reach max ${suggestedMaxValue}`
+      : coverageMonthsValue <= 2
+        ? "Review before next order run"
+        : "Hold current stock level";
+  const assistantNote =
+    orderQuantityValue > 0
+      ? `Demand supports a min of ${suggestedMinValue} and max of ${suggestedMaxValue}. Send to Purchase Pad or schedule the order before stockout.`
+      : `Current on hand covers about ${formatPartsInventoryHistoryQuantity(coverageMonthsValue)} months. Keep min/max visible and review changes after the next sales cycle.`;
+
+  return {
+    assistantNote,
+    confidencePercent: `${confidenceValue}%`,
+    coverageMonths: formatPartsInventoryHistoryQuantity(coverageMonthsValue),
+    leadTime: `${leadTimeLow}-${leadTimeHigh}d`,
+    monthlyAverage: formatPartsInventoryHistoryQuantity(monthlyAverageValue),
+    nextReview,
+    orderQuantity: `${orderQuantityValue}`,
+    recommendation,
+    riskLabel,
+    riskTone,
+    suggestedMax: `${suggestedMaxValue}`,
+    suggestedMin: `${suggestedMinValue}`,
+    velocityLabel
+  };
+}
+
+function buildPartsInventorySalesHistoryDisplayRow(label: string, months: string[], values: string[]) {
+  return {
+    label,
+    ...months.reduce<Record<string, string>>((current, month, index) => {
+      current[month] = values[index] ?? "0";
+      return current;
+    }, {}),
+    total: formatPartsInventoryHistoryQuantity(values.reduce((total, value) => total + Number(value), 0))
+  };
+}
+
+function buildPartsInventoryPurchaseOrderRows(row: PartsInventoryRow): Array<Record<string, string>> {
+  const seed = buildPartsInventoryDateSeed(row);
+
+  if (seed % 5 !== 0) {
+    return [];
+  }
+
+  return [
+    {
+      backOrder: "0",
+      canceled: "0",
+      cost: row.cost,
+      date: buildPartsInventoryLastReceived(row),
+      notes: "Scheduled stock replenishment",
+      number: `${600000 + (seed % 9999)}`,
+      ordered: "1",
+      received: row.onHand > 0 ? "1" : "0"
+    }
+  ];
+}
+
+function buildPartsInventorySpecialOrderRows(row: PartsInventoryRow): Array<Record<string, string>> {
+  const seed = buildPartsInventoryDateSeed(row);
+
+  if (seed % 7 !== 0) {
+    return [];
+  }
+
+  return [
+    {
+      customer: "R.O. customer",
+      date: buildPartsInventoryLastSold(row),
+      notes: "Waiting pickup confirmation",
+      number: `${256000 + (seed % 999)}`,
+      ordered: "1",
+      pickedUp: "0",
+      priceOrdered: row.price,
+      pricePickedUp: "$0.00"
+    }
+  ];
+}
+
+function buildPartsInventoryDetailHistoryRows(row: PartsInventoryRow, editRows: Array<Record<string, string>> = []): Array<Record<string, string>> {
+  const seed = buildPartsInventoryDateSeed(row);
+  const users = ["Patrick Earle", "Chad Bryant", "Dustin Hampton"];
+  const customers = [
+    "DARRELL SCOTT MARCUSE",
+    "DANIEL DELUNA",
+    "JOHN-MARK MATKIN",
+    "ROBERT CARLOS RAMIREZ",
+    "DAVID LAWSON",
+    "TRAVIS GARWOOD",
+    "JESSICA RUTH ROGERS",
+    "BRANDON RANEY"
+  ];
+  let resultingOnHand = Math.max(row.onHand, 98 + (seed % 10));
+
+  const historyRows = Array.from({ length: 52 }, (_, index) => {
+    const isReceive = index === 46 || (index > 0 && index % 19 === 0);
+    const outgoing = isReceive ? 0 : [0.5, 1, 1.2, 1.5, 1.75][(seed + index) % 5];
+    const incoming = isReceive ? Math.max(1, (seed + index) % 12) : 0;
+    resultingOnHand = Math.max(0, resultingOnHand + incoming - outgoing);
+    const documentNumber = isReceive ? `${10100 + ((seed + index) % 90)}` : `${6007000 + ((seed * 17 + index * 13) % 1400)}`;
+    const date = formatPartsInventoryDate(2026, Math.max(1, 5 - Math.floor(index / 12)), Math.max(1, 22 - (index % 24)));
+    const customer = isReceive ? "" : `R.O. (${256000 + ((seed + index) % 120)}): for: ${customers[(seed + index) % customers.length]}`;
+
+    return {
+      customer,
+      date,
+      description: isReceive ? (index % 2 === 0 ? "Receive Part" : "Create Purchase Order") : index % 17 === 0 ? "Refund on Part Invoice" : "Sell on Part Invoice",
+      document: documentNumber,
+      incoming: formatPartsInventoryHistoryQuantity(incoming),
+      outgoing: formatPartsInventoryHistoryQuantity(outgoing),
+      resultingOnHand: formatPartsInventoryHistoryQuantity(resultingOnHand),
+      time: buildPartsInventoryHistoryTime(seed, index),
+      user: users[(seed + index) % users.length]
+    };
+  });
+
+  return [...editRows, ...historyRows];
+}
+
+function buildPartsInventoryDetailEditHistoryRows(
+  row: PartsInventoryRow,
+  beforeDraft: PartsInventoryDetailDraft,
+  afterDraft: PartsInventoryDetailDraft
+): Array<Record<string, string>> {
+  const rows: Array<Record<string, string>> = [];
+  const now = new Date();
+  const price = parsePartsCurrency(afterDraft.price);
+  const originalPrice = parsePartsCurrency(beforeDraft.price);
+  const cost = parsePartsCurrency(afterDraft.cost);
+  const originalCost = parsePartsCurrency(beforeDraft.cost);
+  const bin = afterDraft.bin1.trim();
+  const originalBin = beforeDraft.bin1.trim();
+  const originalMarginPercent = beforeDraft.marginPercent || formatPartsInventoryMarginPercentFromValues(beforeDraft.price, beforeDraft.cost);
+  const marginPercent = afterDraft.marginPercent || formatPartsInventoryMarginPercentFromValues(afterDraft.price, afterDraft.cost);
+
+  function addChangeRow(description: string, beforeValue: string, afterValue: string, offsetMinutes: number) {
+    rows.push({
+      customer: `${beforeValue || "-"} -> ${afterValue || "-"}`,
+      date: formatPartsInventoryDate(now.getFullYear(), now.getMonth() + 1, now.getDate()),
+      description,
+      document: "EDIT",
+      incoming: "",
+      outgoing: "",
+      resultingOnHand: `${row.onHand}`,
+      time: formatPartsInventoryHistoryDateTime(now, offsetMinutes),
+      user: "Mason May"
+    });
+  }
+
+  if (roundWorkbenchCurrency(price) !== roundWorkbenchCurrency(originalPrice)) {
+    addChangeRow("Part Price Changed", formatWorkbenchCurrency(originalPrice), formatWorkbenchCurrency(price), 0);
+  }
+
+  if (roundWorkbenchCurrency(cost) !== roundWorkbenchCurrency(originalCost)) {
+    addChangeRow("Part Cost Changed", formatWorkbenchCurrency(originalCost), formatWorkbenchCurrency(cost), 1);
+  }
+
+  if (bin !== originalBin) {
+    addChangeRow("Bin Location Changed", beforeDraft.bin1, afterDraft.bin1, 2);
+  }
+
+  if (marginPercent !== originalMarginPercent) {
+    addChangeRow("Margin % Changed", originalMarginPercent, marginPercent, 3);
+  }
+
+  return rows;
+}
+
+function formatPartsInventoryHistoryDateTime(date: Date, offsetMinutes: number) {
+  const adjusted = new Date(date);
+  adjusted.setMinutes(adjusted.getMinutes() - offsetMinutes);
+  let hour = adjusted.getHours();
+  const minute = adjusted.getMinutes();
+  const period = hour >= 12 ? "PM" : "AM";
+  hour = hour % 12 || 12;
+
+  return `${hour}:${minute.toString().padStart(2, "0")} ${period}`;
+}
+
+function buildPartsInventoryHistoryTime(seed: number, index: number) {
+  const hour = ((seed + index * 2) % 12) + 1;
+  const minute = (seed + index * 7) % 60;
+  const period = (seed + index) % 3 === 0 ? "AM" : "PM";
+
+  return `${hour}:${minute.toString().padStart(2, "0")} ${period}`;
+}
+
+function formatPartsInventoryHistoryQuantity(value: number) {
+  return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(2).replace(/0$/, "");
+}
+
+function formatPartsInventorySupplier(row: PartsInventoryRow) {
+  const supplierNames: Record<string, string> = {
+    AVB: "AVB - AVALON",
+    BEN: "BEN - BENNINGTON",
+    DM: "DM - DONOVAN MARINE",
+    JLM: "JLM - JL MARINE",
+    MCT: "MCT - MCCLAIN TRAILERS",
+    MM: "MM - MERCURY MARINE",
+    MP: "MP - MARINE PARTS",
+    MT: "MT - MARINE TECH",
+    NAU: "NAU - NAUTICSTAR",
+    PT: "PT - POWER TECH",
+    WRMG: "WRMG - WILLIAMS",
+    XP: "XP - XPRESS",
+    YA: "YA - YAMAHA"
+  };
+
+  return supplierNames[row.supplier] ?? row.supplier;
+}
+
+function formatPartsInventoryCategory(row: PartsInventoryRow) {
+  const categoryNames: Record<string, string> = {
+    ACC: "ACC - ACCESSORY",
+    OEM: "OEM - OEM PARTS",
+    PDO: "PDO - PARTS DEALER ORDER",
+    PXX: "PXX - PARTS",
+    PYA: "PYA - YAMAHA ACCESSORY",
+    PYW: "PYW - PARTS YAMAHA"
+  };
+
+  return categoryNames[row.category] ?? row.category;
+}
+
+function buildPartsInventoryMovementCode(row: PartsInventoryRow) {
+  if (row.onHand > 0) {
+    return "A";
+  }
+
+  if (row.supersededTo) {
+    return "S";
+  }
+
+  return "";
+}
+
+function buildPartsInventoryDateSeed(row: PartsInventoryRow) {
+  return row.partNumber.split("").reduce((total, character) => total + character.charCodeAt(0), 0);
+}
+
+function formatPartsInventoryDate(year: number, month: number, day: number) {
+  return `${month.toString().padStart(2, "0")}/${day.toString().padStart(2, "0")}/${year}`;
+}
+
+function buildPartsInventoryColumnWidthMap(): Record<PartsInventoryColumnKey, number> {
+  return {
+    activeMarker: 64,
+    bin: 92,
+    category: 92,
+    cost: 88,
+    description: 260,
+    onHand: 82,
+    partNumber: 112,
+    price: 92,
+    select: 54,
+    secondaryNumber: 132,
+    supersededTo: 132,
+    supplier: 92,
+    upc: 120
+  };
+}
+
+function clampPartsInventoryColumnWidth(width: number) {
+  return Math.min(520, Math.max(54, Math.round(width)));
+}
+
+function mergePurchasePadRows(baseRows: PartsWorkspaceRow[], purchasePadRows: PartsWorkspaceRow[]) {
+  if (purchasePadRows.length === 0) {
+    return baseRows;
+  }
+
+  const basePartNumbers = new Set(baseRows.map((row) => row.partNumber.toLowerCase()));
+  const stagedRows = purchasePadRows.filter((row) => !basePartNumbers.has(row.partNumber.toLowerCase()));
+
+  return [...stagedRows, ...baseRows];
+}
+
+function downloadPartsInventoryExport(row: PartsInventoryRow, kind: PartsInventoryExportKind, format: PartsInventoryExportFormat) {
+  const title = kind === "sales" ? "History Sales" : "Tracking History";
+  const exportRows = kind === "sales" ? buildPartsInventorySalesHistoryExportRows(row) : buildPartsInventoryTrackingExportRows(row);
+  const fileStem = `${row.partNumber.replace(/[^a-z0-9-]+/gi, "-")}-${kind}-history`.toLowerCase();
+
+  if (format === "csv") {
+    const csv = buildCsvExport([Object.keys(exportRows[0] ?? {})], exportRows.map((entry) => Object.values(entry).map(String)));
+    downloadTextFile(`${fileStem}.csv`, csv, "text/csv;charset=utf-8");
+    return;
+  }
+
+  downloadTextFile(`${fileStem}.pdf`, buildSimplePdfDocument(`${title} - ${row.partNumber}`, exportRows), "application/pdf");
+}
+
+function buildPartsInventorySalesHistoryExportRows(row: PartsInventoryRow) {
+  const seed = buildPartsInventoryDateSeed(row);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const price = parsePartsCurrency(row.price);
+  const cost = parsePartsCurrency(row.cost);
+
+  return months.map((month, index) => {
+    const units = (seed + index * 3) % 5 === 0 ? (index % 4) + row.onHand : (seed + index) % 3;
+    const sales = units * price;
+    const margin = units * Math.max(0, price - cost);
+
+    return {
+      Month: month,
+      Units: `${units}`,
+      Sales: formatWorkbenchCurrency(sales),
+      Margin: formatWorkbenchCurrency(margin)
+    };
+  });
+}
+
+function buildPartsInventoryTrackingExportRows(row: PartsInventoryRow) {
+  return [
+    {
+      Date: buildPartsInventoryLastReceived(row),
+      Event: "Received",
+      Qty: `${Math.max(1, row.onHand || 1)}`,
+      Bin: row.bin || "-",
+      Reference: `${row.supplier}-PO-${buildPartsInventoryDateSeed(row) % 9000}`
+    },
+    {
+      Date: buildPartsInventoryLastSold(row),
+      Event: "Sold",
+      Qty: `${row.onHand > 0 ? 1 : 0}`,
+      Bin: row.bin || "-",
+      Reference: `${row.category}-SO-${buildPartsInventoryDateSeed(row) % 7000}`
+    },
+    {
+      Date: formatPartsInventoryDate(2026, ((buildPartsInventoryDateSeed(row) + 4) % 12) + 1, ((buildPartsInventoryDateSeed(row) + 7) % 27) + 1),
+      Event: row.supersededTo ? "Superseded" : "Counted",
+      Qty: `${row.onHand}`,
+      Bin: row.bin || "-",
+      Reference: row.supersededTo || "Cycle count"
+    }
+  ];
+}
+
+function buildCsvExport(headers: string[][], rows: string[][]) {
+  return [...headers, ...rows].map((row) => row.map(escapeCsvCell).join(",")).join("\r\n");
+}
+
+function escapeCsvCell(value: string) {
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+function downloadTextFile(fileName: string, content: string, type: string) {
+  const blob = new Blob([content], { type });
+  const href = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.download = fileName;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(href);
+}
+
+function buildSimplePdfDocument(title: string, rows: Array<Record<string, string>>) {
+  const lines = [
+    title,
+    "",
+    ...rows.flatMap((row) => [Object.entries(row).map(([key, value]) => `${key}: ${value}`).join("   "), ""])
+  ].slice(0, 36);
+  const content = `BT /F1 11 Tf 36 760 Td ${lines.map((line, index) => `${index === 0 ? "" : "0 -16 Td "}${escapePdfText(line)} Tj`).join(" ")} ET`;
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+
+  objects.forEach((object, index) => {
+    offsets.push(pdf.length);
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.slice(1).forEach((offset) => {
+    pdf += `${offset.toString().padStart(10, "0")} 00000 n \n`;
+  });
+  pdf += `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+
+  return pdf;
+}
+
+function escapePdfText(value: string) {
+  return `(${value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)")})`;
+}
+
+function partsInventoryRowToWorkspaceRow(row: PartsInventoryRow): PartsWorkspaceRow {
+  return {
+    category: row.category,
+    description: row.description,
+    id: row.id,
+    orderCost: row.cost,
+    orderType: row.active ? "NORM" : "INACT",
+    partNumber: row.partNumber,
+    quantity: `${row.onHand}`,
+    secondary: row.secondaryNumber,
+    source: row.bin,
+    supplier: row.supplier,
+    tone: row.tone
+  };
+}
+
+function partsInventoryRowToPurchasePadRow(row: PartsInventoryRow): PartsWorkspaceRow {
+  return {
+    ...partsInventoryRowToWorkspaceRow(row),
+    id: `purchase-pad-${row.id}`,
+    orderType: "PAD",
+    quantity: "1",
+    source: "PurchasePad"
+  };
+}
+
+function matchesPartsQuickFilter(row: PartsWorkspaceRow, quickFilter: PartsQuickFilter, displayQuantity: string) {
+  if (quickFilter === "all") {
+    return true;
+  }
+
+  return buildPartsRowHealthSignals(row, displayQuantity).some((signal) => signal.key === quickFilter);
+}
+
+function shouldShowPartsColumn(label: string, preset: PartsColumnPreset) {
+  if (preset === "counter") {
+    return true;
+  }
+
+  const coreColumns = new Set(["Part Number", "Secondary", "Description", "Supplier", "Qty", "Order Cost", "SO Invoice Type"]);
+
+  if (coreColumns.has(label)) {
+    return true;
+  }
+
+  if (preset === "purchasing") {
+    return new Set(["Category", "Order Type", "Web Order"]).has(label);
+  }
+
+  if (preset === "inventory") {
+    return new Set(["Category", "Web Order"]).has(label);
+  }
+
+  return false;
+}
+
+function buildPartsSalesHistoryRows(selectedQuantity: number, depth: PartsSalesHistoryDepth) {
+  const historyRows = [
+    { label: "This Year", values: [0, 1, Math.max(0, selectedQuantity - 1), 0, 0, 0, 0, 0, 0, 0, 0, selectedQuantity] },
+    { label: "Last Year", values: [0, 1, 1, 2, 2, 0, 2, 4, 2, 1, 0, 1] },
+    { label: "2 Yrs Ago", values: [1, 0, 2, 1, 0, 1, 3, 2, 1, 0, 2, Math.max(0, selectedQuantity - 1)] }
+  ];
+
+  return historyRows.slice(0, depth === 36 ? 3 : 2).map((row) => ({
+    ...row,
+    total: row.values.reduce((sum, value) => sum + value, 0)
+  }));
 }
 
 function getPartsLookupAvailableQuantity(row: PartsWorkspaceRow) {
@@ -11648,6 +23306,145 @@ function getPartsLookupLocation(row: PartsWorkspaceRow) {
   }
 
   return "Part Inventory";
+}
+
+function parsePartsQuantity(value: string) {
+  const parsedValue = Number.parseFloat(value.replace(/[^\d.-]/g, ""));
+
+  return Number.isFinite(parsedValue) ? parsedValue : 0;
+}
+
+function parsePartsCurrency(value: string) {
+  const parsedValue = Number.parseFloat(value.replace(/[$,]/g, ""));
+
+  return Number.isFinite(parsedValue) ? parsedValue : 0;
+}
+
+function buildPartsWebOrderLabel(row: PartsWorkspaceRow) {
+  return getPartsLookupLocation(row) === "Web Order" ? "Web" : "-";
+}
+
+function buildPartsOemMessage(_row: PartsWorkspaceRow) {
+  return "-";
+}
+
+function buildPartsRowHealthSignals(row: PartsWorkspaceRow, displayQuantity: string) {
+  const signals: Array<{ key: string; label: string; tone: CommandTone }> = [];
+  const rowQuantity = parsePartsQuantity(displayQuantity);
+
+  if (row.orderType.toLowerCase().includes("spec")) {
+    signals.push({ key: "special", label: "Special", tone: "attention" });
+  }
+
+  if (row.source.trim()) {
+    signals.push({ key: "ro", label: "RO", tone: "accent" });
+  }
+
+  if (buildPartsWebOrderLabel(row) !== "-") {
+    signals.push({ key: "web", label: "Web", tone: "neutral" });
+  }
+
+  signals.push(...buildPartsValidationSignals(row, displayQuantity));
+
+  if (row.orderType.toLowerCase().includes("po")) {
+    signals.push({ key: "po", label: "PO", tone: "accent" });
+  }
+
+  if (rowQuantity > 3) {
+    signals.push({ key: "bulk", label: "Bulk", tone: "stable" });
+  }
+
+  return signals.filter((signal, index) => signals.findIndex((candidate) => candidate.label === signal.label) === index);
+}
+
+function buildPartsValidationSignals(row: PartsWorkspaceRow, displayQuantity: string) {
+  const rowQuantity = parsePartsQuantity(displayQuantity);
+  const availableQuantity = parsePartsQuantity(getPartsLookupAvailableQuantity(row));
+  const rowCost = parsePartsCurrency(row.orderCost);
+  const rowPrice = rowCost * 1.49;
+  const rowMarginPercent = rowPrice > 0 ? (rowPrice - rowCost) / rowPrice : 0;
+  const signals: Array<{ key: PartsQuickFilter; label: string; tone: CommandTone }> = [];
+
+  if (availableQuantity > 0 && rowQuantity > availableQuantity) {
+    signals.push({ key: "qtyRisk", label: "Qty > Avail", tone: "attention" });
+  }
+
+  if (!row.supplier.trim()) {
+    signals.push({ key: "qtyRisk", label: "No Supplier", tone: "attention" });
+  }
+
+  if (rowMarginPercent > 0 && rowMarginPercent < 0.34) {
+    signals.push({ key: "lowMargin", label: "Low Margin", tone: "attention" });
+  }
+
+  if (getPartsLookupLocation(row) === "Part Inventory") {
+    signals.push({ key: "noBin", label: "No Bin", tone: "neutral" });
+  }
+
+  return signals;
+}
+
+function buildPartsInspectorTitle(row: PartsWorkspaceRow, kind: PartsInspectorKind) {
+  if (kind === "supplier") {
+    return row.supplier ? `Supplier ${row.supplier}` : "No supplier";
+  }
+
+  if (kind === "pricing") {
+    return "Pricing Snapshot";
+  }
+
+  return row.source || "No source document";
+}
+
+function buildPartsInspectorLines(row: PartsWorkspaceRow, displayQuantity: string, kind: PartsInspectorKind) {
+  const cost = parsePartsCurrency(row.orderCost);
+  const price = cost * 1.49;
+  const margin = price - cost;
+  const marginPercent = price > 0 ? `${((margin / price) * 100).toFixed(2)}%` : "-";
+
+  if (kind === "supplier") {
+    return [
+      `${row.partNumber} / Qty ${displayQuantity}`,
+      `Avail ${getPartsLookupAvailableQuantity(row)} / ${getPartsLookupLocation(row)}`,
+      `Last receipt 01/21/2026`
+    ];
+  }
+
+  if (kind === "pricing") {
+    return [
+      `Cost ${row.orderCost} / Sell ${formatWorkbenchCurrency(price)}`,
+      `Margin ${formatWorkbenchCurrency(margin)} (${marginPercent})`,
+      `${row.supplier || "No supplier"} / ${row.category}`
+    ];
+  }
+
+  return [
+    row.partNumber,
+    `${row.supplier || "No supplier"} / Qty ${displayQuantity}`,
+    row.description
+  ];
+}
+
+function formatPartsSourceLabel(source: string) {
+  return source.replace(/^REPAIRORDER-/i, "RO-").replace(/^SERVICE-/i, "SVC-") || "-";
+}
+
+function buildPartsOrderTypeTone(row: PartsWorkspaceRow) {
+  const normalizedOrderType = row.orderType.toLowerCase();
+
+  if (normalizedOrderType.includes("spec")) {
+    return "attention";
+  }
+
+  if (normalizedOrderType.includes("po")) {
+    return "accent";
+  }
+
+  return "stable";
+}
+
+function buildPartsMovementCode(row: PartsWorkspaceRow) {
+  return `${row.category} / ${row.orderType}`;
 }
 
 function resolveSelectedRow<T extends { id: string }>(rows: T[], selectedRowId: string | null) {
@@ -13224,6 +25021,91 @@ function createActionWorkflow(workspaceId: WorkspaceId, tool: string, context: W
           { key: "note", label: "Queue Note", control: "textarea", defaultValue: "", placeholder: "What needs review?" }
         ],
         buildDetail: (values) => summarizeWorkflowValues(values, ["queueScope", "ownerFocus", "note"])
+      });
+    case "desktop:Designer":
+      return createWorkflowState({
+        title: "Dashboard Designer",
+        description: `Open the desktop widget builder to add, arrange, and customize dashboard widgets for ${context.storeName}.`,
+        commandLabel: tool,
+        primaryActionLabel: "Open Designer",
+        tone: "neutral",
+        fields: [
+          {
+            key: "action",
+            label: "Designer Action",
+            control: "select",
+            defaultValue: "New Widget",
+            options: ["New Widget", "New View", "Duplicate View", "Reset Layout"]
+          },
+          {
+            key: "widgetType",
+            label: "Widget Type",
+            control: "select",
+            defaultValue: "Scoreboard",
+            options: ["Scoreboard", "Trend Line", "Lane Graph", "Module Board", "Signal List", "Activity Feed", "Report Table", "Gauge Row", "Funnel Steps"]
+          },
+          { key: "note", label: "Designer Note", control: "textarea", defaultValue: "", placeholder: "What should this dashboard show?" }
+        ],
+        buildDetail: (values) => summarizeWorkflowValues(values, ["action", "widgetType", "note"])
+      });
+    case "desktop:Store Status":
+      return createWorkflowState({
+        title: "Store Status",
+        description: `Review store-level operating posture, roster context, and shift notes from the desktop shell.`,
+        commandLabel: tool,
+        primaryActionLabel: "Open Store Status",
+        tone: "neutral",
+        fields: [
+          {
+            key: "storeView",
+            label: "Store View",
+            control: "select",
+            defaultValue: "Store Status Board",
+            options: ["Store Status Board", "Store Summary", "Store Roster", "Shift Notes"]
+          },
+          { key: "ownerFocus", label: "Owner Focus", control: "text", defaultValue: "Store leadership", placeholder: "Who is reviewing this?" },
+          { key: "window", label: "Window", control: "select", defaultValue: "Today", options: ["Today", "This Week", "Current Shift"] }
+        ],
+        buildDetail: (values) => summarizeWorkflowValues(values, ["storeView", "ownerFocus", "window"])
+      });
+    case "desktop:Workspace Tools":
+      return createWorkflowState({
+        title: "Workspace Tools",
+        description: `Workspace Tools is the operator's personal command center for configuring and managing the desktop environment. Use it to control window layout, manage alerts and follow-up prompts, review store operations at a glance, and set up personal preferences and quick-launch shortcuts.`,
+        commandLabel: tool,
+        primaryActionLabel: "Open Workspace Tools",
+        tone: "neutral",
+        fields: [
+          {
+            key: "toolSection",
+            label: "Tool Section",
+            control: "select",
+            defaultValue: "Window Control",
+            options: ["Window Control", "Alerts & Notices", "Store Operations", "Setup"]
+          },
+          {
+            key: "action",
+            label: "Action",
+            control: "select",
+            defaultValue: "Pinned Windows",
+            options: [
+              "Pinned Windows",
+              "Window Layout Presets",
+              "Workspace Reset",
+              "Notifications",
+              "Follow-Up Prompts",
+              "Exception Inbox",
+              "Store Summary",
+              "Store Roster",
+              "Shift Notes",
+              "Preferences",
+              "Personal Shortcuts",
+              "Quick Launch Setup"
+            ]
+          },
+          { key: "note", label: "Operator Note", control: "textarea", defaultValue: "", placeholder: "What needs attention?" }
+        ],
+        buildDetail: (values) => summarizeWorkflowValues(values, ["toolSection", "action", "note"])
       });
     case "desktop:Application Workspace Surface":
       return createWorkflowState({

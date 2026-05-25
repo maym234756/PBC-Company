@@ -86,6 +86,22 @@ async function submitWorkflow(page: Parameters<typeof test>[0]["page"], message:
   await expect(page.getByText(message, { exact: true })).toBeVisible();
 }
 
+async function assertWorkspaceToolsPanel(
+  page: Parameters<typeof test>[0]["page"],
+  config: {
+    section: string;
+    action: string;
+  }
+) {
+  const panel = page.locator(".legacy-workspace-tools-panel");
+
+  await expect(panel).toBeVisible();
+  await expect(panel.locator(".legacy-workspace-tools-heading h3")).toHaveText(config.section);
+  await expect(panel.locator(".legacy-workspace-tools-action.is-active strong")).toHaveText(config.action);
+
+  return panel;
+}
+
 test.describe("top navigation smoke", () => {
   test("opens statement requests from Receivables with a distinct queued action", async ({ page, request }) => {
     await openWorkspace(page, request);
@@ -187,6 +203,8 @@ test.describe("top navigation smoke", () => {
     await menuButton(page, "Website Feed").click();
 
     await expect(page).toHaveURL(/\/dashboard\/[^/]+\/website$/);
+    await expect(page.getByText("Website Feed Integration Console", { exact: true })).toBeVisible();
+    await expect(page.getByText("Connection Setup", { exact: true })).toBeVisible();
     await assertWorkflowPanel(page, {
       title: "Website Feed",
       fields: ["Brand / Site", "Feed Window", "Feed Intent", "System Note"],
@@ -246,12 +264,10 @@ test.describe("top navigation smoke", () => {
     await menuButton(page, "Preferences").click();
 
     await expect(page).toHaveURL(/\/dashboard\/[^/]+\/desktop$/);
-    await assertWorkflowPanel(page, {
-      title: "Preferences",
-      fields: ["Setup Focus", "Owner Focus", "Setup Note"],
-      primaryAction: "Open Personal Setup"
+    await assertWorkspaceToolsPanel(page, {
+      section: "Setup",
+      action: "Preferences"
     });
-    await submitWorkflow(page, "Preferences queued.");
 
     await page.goto(/dashboard/.test(page.url()) ? page.url().replace(/\/desktop$/, "/sales") : "/", { waitUntil: "networkidle" });
     await menuButton(page, "Help").click();
@@ -325,6 +341,8 @@ test.describe("top navigation smoke", () => {
     await menuButton(page, "Counter Permissions").click();
 
     await expect(page).toHaveURL(/\/dashboard\/[^/]+\/parts$/);
+    await expect(page.getByText("Parts Ordering Workbench", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Task Queue", exact: true })).toHaveCount(0);
     await assertWorkflowPanel(page, {
       title: "Counter Permissions",
       fields: ["Security Area", "Owner", "Effective Window"],
