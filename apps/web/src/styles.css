@@ -10549,6 +10549,25 @@ body.is-desktop-dragging {
   padding: 10px;
 }
 
+.website-feed-test-result {
+  display: grid;
+  gap: 5px;
+}
+
+.website-feed-test-result.tone-alert {
+  color: #7a1c1c;
+}
+
+.website-feed-test-latency {
+  font-size: 0.72rem;
+  opacity: 0.65;
+}
+
+.legacy-task-status-button.is-loading {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
 .website-feed-action-row {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }

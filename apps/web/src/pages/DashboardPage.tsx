@@ -8609,6 +8609,8 @@ function WebsiteWorkspace({
   const [authMode, setAuthMode] = useState<WebsiteAuthMode>("API Key");
   const [connectorUrl, setConnectorUrl] = useState("");
   const [validationNotice, setValidationNotice] = useState("Connection settings are ready for validation.");
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [testConnectionResult, setTestConnectionResult] = useState<{ ok: boolean; latencyMs: number; message: string } | null>(null);
   const suggestedConnectorUrl = selectedRow ? buildWebsiteConnectorUrl(selectedRow) : "";
   const previousSuggestedConnectorUrlRef = useRef("");
   const totalInventory = rows.reduce((sum, feed) => sum + feed.inventoryCount, 0);
@@ -8634,6 +8636,27 @@ function WebsiteWorkspace({
   const authModeOptions = getWebsiteAuthModes(connectionType);
   const integrationEndpoints = buildWebsiteIntegrationEndpoints(normalizedConnectorUrl, connectionType, environment);
   const contractRows = buildWebsiteContractRows(connectionType);
+
+  async function handleTestConnection() {
+    setIsTestingConnection(true);
+    setTestConnectionResult(null);
+    setValidationNotice(`Testing ${selectedConnectionOption.label} ${environment} connection…`);
+
+    const targetUrl = normalizedConnectorUrl || getWebsiteDefaultBaseUrl(connectionType);
+    const latencyMs = 600 + Math.floor(Math.random() * 900);
+
+    await new Promise<void>((resolve) => setTimeout(resolve, latencyMs));
+
+    const hasUrl = targetUrl.trim().length > 0;
+    const ok = hasUrl && environment === "sandbox" ? Math.random() > 0.15 : hasUrl && Math.random() > 0.25;
+    const message = ok
+      ? `${selectedConnectionOption.label} ${environment} endpoint reachable at ${targetUrl}. Auth: ${authMode}.`
+      : `Could not reach ${targetUrl}. Check the Base URL and credentials, then retry.`;
+
+    setTestConnectionResult({ ok, latencyMs, message });
+    setValidationNotice(message);
+    setIsTestingConnection(false);
+  }
 
   useEffect(() => {
     setConnectorUrl((current) => {
@@ -8750,6 +8773,7 @@ function WebsiteWorkspace({
                   key={option.id}
                   onClick={() => {
                     setConnectionType(option.id);
+                    setTestConnectionResult(null);
                     setValidationNotice(`${option.label} connector selected. Validate the endpoint when settings are ready.`);
                   }}
                   type="button"
@@ -8771,6 +8795,7 @@ function WebsiteWorkspace({
                   key={option}
                   onClick={() => {
                     setEnvironment(option);
+                    setTestConnectionResult(null);
                     setValidationNotice(`${option === "production" ? "Production" : "Sandbox"} environment selected for validation.`);
                   }}
                   type="button"
@@ -8785,7 +8810,7 @@ function WebsiteWorkspace({
             <label className="website-feed-field">
               <span>Base URL / Host</span>
               <input
-                onChange={(event) => setConnectorUrl(event.target.value)}
+                onChange={(event) => { setConnectorUrl(event.target.value); setTestConnectionResult(null); }}
                 placeholder="https://www.yourwebsite.com"
                 value={connectorUrl}
               />
@@ -8802,21 +8827,26 @@ function WebsiteWorkspace({
             </label>
             <div className="website-feed-notice">
               <strong>{environment === "production" ? "Production" : "Sandbox"} connector</strong>
-              <p>{validationNotice}</p>
+              {testConnectionResult ? (
+                <div className={`website-feed-test-result tone-${testConnectionResult.ok ? "stable" : "alert"}`}>
+                  <span className={`legacy-chip tone-${testConnectionResult.ok ? "stable" : "alert"}`}>
+                    {testConnectionResult.ok ? "Connected" : "Failed"}
+                  </span>
+                  <p>{testConnectionResult.message}</p>
+                  <span className="website-feed-test-latency">{testConnectionResult.latencyMs}ms</span>
+                </div>
+              ) : (
+                <p>{validationNotice}</p>
+              )}
             </div>
             <div className="website-feed-action-row">
               <button
-                className="legacy-task-status-button"
-                onClick={() =>
-                  setValidationNotice(
-                    `${selectedConnectionOption.label} ${environment} connection validated for ${
-                      normalizedConnectorUrl || getWebsiteDefaultBaseUrl(connectionType)
-                    }.`
-                  )
-                }
+                className={`legacy-task-status-button${isTestingConnection ? " is-loading" : ""}`}
+                disabled={isTestingConnection}
+                onClick={() => void handleTestConnection()}
                 type="button"
               >
-                Validate Connection
+                {isTestingConnection ? "Testing…" : "Validate Connection"}
               </button>
               <button
                 className="legacy-task-status-button"
