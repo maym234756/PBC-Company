@@ -437,7 +437,9 @@ export type ServiceOrderDetailMutation =
   | {
       mode: "finalizeInvoice";
       invoiceStatus: "Draft" | "Finalized" | "Paid" | "Voided";
-    };
+    }
+  | { mode: "updateJobStatus"; jobId: string; status: string }
+  | { mode: "requestSignature"; docType: string; recipient: string; message: string };
 
 type ServiceOrderWorkspaceRowPatch = Partial<
   Pick<
@@ -977,6 +979,35 @@ export function applyServiceOrderDetailMutation(
       activityLabel = "Invoice status updated";
       activityDetail = `RO ${row.roNumber} invoice status set to ${mutation.invoiceStatus}.`;
       message = "Invoice updated.";
+      break;
+    }
+    case "updateJobStatus": {
+      const targetJob = nextDetail.jobs.find((j) => j.id === mutation.jobId);
+      if (targetJob) {
+        targetJob.status = mutation.status;
+      }
+      activityLabel = "Job status updated";
+      activityDetail = `RO ${row.roNumber} job status set to ${mutation.status}.`;
+      message = "Job status updated.";
+      break;
+    }
+    case "requestSignature": {
+      const newDoc = {
+        description: mutation.docType,
+        createdBy: "Current User",
+        createdTime: new Date().toISOString().split("T")[0],
+        completedTime: "",
+        status: "Sent",
+        customer: mutation.recipient,
+        dealer1: "",
+        dealer2: "",
+        dealer3: "",
+        dealer4: ""
+      };
+      nextDetail.signatureDocs = [...(nextDetail.signatureDocs ?? []), newDoc];
+      activityLabel = "Signature requested";
+      activityDetail = `RO ${row.roNumber} signature requested for ${mutation.docType}.`;
+      message = "Signature request sent.";
       break;
     }
   }

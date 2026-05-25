@@ -321,6 +321,19 @@ export type ServiceOrderActionRequest =
       mode: "finalizeInvoice";
       actorUserId: string;
       invoiceStatus: "Draft" | "Finalized" | "Paid" | "Voided";
+    }
+  | {
+      mode: "updateJobStatus";
+      actorUserId: string;
+      jobId: string;
+      status: string;
+    }
+  | {
+      mode: "requestSignature";
+      actorUserId: string;
+      docType: string;
+      recipient: string;
+      message: string;
     };
 
 export interface ServiceOrderActionResponse extends ServiceOrderDetailResponse {

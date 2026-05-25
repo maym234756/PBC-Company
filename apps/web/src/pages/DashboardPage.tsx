@@ -1058,6 +1058,20 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const [refreshToken, setRefreshToken] = useState(0);
   const [isManualRefreshPending, setIsManualRefreshPending] = useState(false);
   const [toolbarNotice, setToolbarNotice] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<Array<{
+    id: string;
+    title: string;
+    detail: string;
+    tone: "neutral" | "attention" | "stable";
+    read: boolean;
+    timestamp: string;
+  }>>([
+    { id: "n1", title: "RO #1042 Overdue", detail: "Past promised date by 2 days.", tone: "attention", read: false, timestamp: "2h ago" },
+    { id: "n2", title: "Parts Order Arrived", detail: "PO-8801 received at warehouse.", tone: "stable", read: false, timestamp: "4h ago" },
+    { id: "n3", title: "Customer Waiting", detail: "J. Smith arrived for RO #1041.", tone: "neutral", read: false, timestamp: "1d ago" },
+  ]);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const unreadCount = notifications.filter((n) => !n.read).length;
   const [lastWorkspaceSyncLabel, setLastWorkspaceSyncLabel] = useState<string | null>(null);
   const [commandLog, setCommandLog] = useState<CommandLogEntry[]>([]);
   const [isActivityLoading, setIsActivityLoading] = useState(true);
@@ -4058,6 +4072,47 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                 <div className="legacy-toolbar-summary">
                   {lastWorkspaceSyncLabel ? <div className="legacy-toolbar-meta">{lastWorkspaceSyncLabel}</div> : null}
                 </div>
+                <div className="legacy-notif-bell-wrap">
+                  <button
+                    className="legacy-notif-bell"
+                    onClick={() => setIsNotifOpen((o) => !o)}
+                    type="button"
+                    aria-label="Notifications"
+                  >
+                    🔔
+                    {unreadCount > 0 && <span className="legacy-notif-badge">{unreadCount}</span>}
+                  </button>
+                  {isNotifOpen && (
+                    <div className="legacy-notif-panel">
+                      <div className="legacy-notif-panel-header">
+                        <strong>Notifications</strong>
+                        <button
+                          onClick={() => {
+                            setNotifications((ns) => ns.map((n) => ({ ...n, read: true })));
+                          }}
+                          type="button"
+                        >
+                          Mark all read
+                        </button>
+                      </div>
+                      {notifications.map((n) => (
+                        <button
+                          className={`legacy-notif-item${n.read ? " is-read" : ""}`}
+                          key={n.id}
+                          onClick={() => setNotifications((ns) => ns.map((x) => x.id === n.id ? { ...x, read: true } : x))}
+                          type="button"
+                        >
+                          <div className="legacy-notif-item-body">
+                            <strong>{n.title}</strong>
+                            <span>{n.detail}</span>
+                          </div>
+                          <span className="legacy-notif-item-time">{n.timestamp}</span>
+                        </button>
+                      ))}
+                      {notifications.length === 0 && <p className="legacy-notif-empty">No notifications.</p>}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {toolbarNotice ? <div className="legacy-toolbar-status">{toolbarNotice}</div> : null}
@@ -4251,6 +4306,10 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                             "Invoice updated.",
                             "invoice:finalize"
                           ),
+                        onUpdateJobStatus: (jobId, status) =>
+                          handleServiceOrderAction({ mode: "updateJobStatus", jobId, status, actorUserId: session.user.id }, "Job status updated.", `updateJobStatus-${jobId}`),
+                        onRequestSignature: (docType, recipient, message) =>
+                          handleServiceOrderAction({ mode: "requestSignature", docType, recipient, message, actorUserId: session.user.id }, "Signature request sent.", "requestSignature"),
                         onUpdateQueueRow: handleServiceQueueRowUpdate,
                         onUpdateJob: (payload) =>
                           handleServiceOrderAction(
@@ -4508,6 +4567,19 @@ function ServiceQueueBoard({
     }
   }
 
+  function exportServiceQueueCsv(exportRows: ServiceWorkspaceRow[]) {
+    const headers = ["RO#", "Customer", "Status", "Category", "In Date", "Technician", "Total"];
+    const lines = exportRows.map((r) => [r.roNumber, r.customerName, r.roStatus, r.category, r.inDate, r.serviceWriter, ""].join(","));
+    const csv = [headers.join(","), ...lines].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "service-queue.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="legacy-data-window legacy-data-window-service-list">
       <div className="legacy-service-queue-view-toolbar">
@@ -4518,6 +4590,7 @@ function ServiceQueueBoard({
         <button className="legacy-task-status-button" onClick={() => setIsQueueViewsCollapsed((current) => !current)} type="button">
           {isQueueViewsCollapsed ? "Show queue views" : "Hide queue views"}
         </button>
+        <button className="legacy-task-status-button" onClick={() => exportServiceQueueCsv(filteredRows)} type="button">Export CSV</button>
       </div>
 
       {isQueueViewsCollapsed ? null : (
@@ -4969,6 +5042,8 @@ function renderWorkspace(
     onReturnToAuditCleanup: (() => void) | null;
     onUpdateROHeader: (payload: { purchaseOrder: string; promisedDate: string; closedDate: string }) => Promise<boolean>;
     onFinalizeInvoice: (status: "Draft" | "Finalized" | "Paid" | "Voided") => Promise<boolean>;
+    onUpdateJobStatus: (jobId: string, status: string) => Promise<boolean>;
+    onRequestSignature: (docType: string, recipient: string, message: string) => Promise<boolean>;
     onUpdateQueueRow: (row: ServiceWorkspaceRow) => Promise<boolean>;
     onUpdateCustomer: (payload: ServiceWorkbenchCustomerPayload) => Promise<boolean>;
     onUpdateJob: (payload: {
@@ -5155,6 +5230,8 @@ function renderWorkspace(
             onUpdateOrderType={taskControls.onUpdateOrderType}
             onUpdateROHeader={taskControls.onUpdateROHeader}
             onFinalizeInvoice={taskControls.onFinalizeInvoice}
+            onUpdateJobStatus={taskControls.onUpdateJobStatus}
+            onRequestSignature={taskControls.onRequestSignature}
             onUpdateStatus={taskControls.onUpdateStatus}
             onUpdateWarrantyClaim={taskControls.onUpdateWarrantyClaim}
             operators={taskControls.operators}
@@ -5282,6 +5359,7 @@ function renderWorkspace(
 
       return (
         <DesktopWorkspace
+          availableStores={auditControls.availableStores}
           dashboard={dashboard}
           onOpenWorkspace={onOpenWorkspace}
           openWorkspaceIds={openWorkspaceIds}
@@ -5295,6 +5373,7 @@ function renderWorkspace(
 }
 
 interface DesktopWorkspaceProps {
+  availableStores: SessionState["stores"];
   dashboard: DashboardPayload | null;
   onOpenWorkspace: (workspaceId: WorkspaceId, sourceLabel?: string) => void;
   openWorkspaceIds: WorkspaceId[];
@@ -5303,7 +5382,7 @@ interface DesktopWorkspaceProps {
   workspaceToolsTarget: ApplicationWorkspaceToolsTarget | null;
 }
 
-function DesktopWorkspace({ dashboard, onOpenWorkspace, openWorkspaceIds, rows, widgetStorageKey, workspaceToolsTarget }: DesktopWorkspaceProps) {
+function DesktopWorkspace({ availableStores, dashboard, onOpenWorkspace, openWorkspaceIds, rows, widgetStorageKey, workspaceToolsTarget }: DesktopWorkspaceProps) {
   const defaultWidgetDefinition = getDesktopWidgetDefinition("scoreboard");
   const desktopBoardRef = useRef<HTMLDivElement | null>(null);
   const draggingWidgetIdRef = useRef<string | null>(null);
@@ -6532,6 +6611,27 @@ function DesktopWorkspace({ dashboard, onOpenWorkspace, openWorkspaceIds, rows, 
         storeSummary={dashboard?.store.summary ?? "Store command surface is loading."}
         widgetCount={widgets.length}
       />
+
+      {availableStores.length > 0 && (
+        <div className="legacy-cross-store-summary">
+          {availableStores.map((store, idx) => {
+            const stubRevenue = (82000 + idx * 34500).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+            const stubROs = 18 + idx * 7;
+            return (
+              <div className="legacy-cross-store-card" key={store.id}>
+                <span>{store.name}</span>
+                <strong>{stubRevenue}</strong>
+                <span>{stubROs} ROs</span>
+              </div>
+            );
+          })}
+          <div className="legacy-cross-store-card is-total">
+            <span>All Stores</span>
+            <strong>{availableStores.map((_, idx) => 82000 + idx * 34500).reduce((a, b) => a + b, 0).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })}</strong>
+            <span>{availableStores.map((_, idx) => 18 + idx * 7).reduce((a, b) => a + b, 0)} ROs</span>
+          </div>
+        </div>
+      )}
 
       <section className="legacy-info-card legacy-desktop-board-intro">
         <div className="legacy-desktop-board-heading">
@@ -10608,6 +10708,8 @@ interface ServiceRepairWorkbenchProps extends ServiceUtilityInlinePanelProps {
   onRemovePart: (jobId: string, partNumber: string) => Promise<boolean>;
   onUpdateROHeader: (payload: { purchaseOrder: string; promisedDate: string; closedDate: string }) => Promise<boolean>;
   onFinalizeInvoice: (status: "Draft" | "Finalized" | "Paid" | "Voided") => Promise<boolean>;
+  onUpdateJobStatus: (jobId: string, status: string) => Promise<boolean>;
+  onRequestSignature: (docType: string, recipient: string, message: string) => Promise<boolean>;
   onCloseLabor: (payload: { jobId: string; lineIndex: number; actorName: string }) => Promise<boolean>;
   onReopenLabor: (payload: { jobId: string; lineIndex: number }) => Promise<boolean>;
   onDeleteLaborSession: (sessionIndex: number) => Promise<boolean>;
@@ -10780,6 +10882,15 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
   const [invoiceStatus, setInvoiceStatus] = useState<"Draft" | "Finalized" | "Paid" | "Voided">(
     (model?.invoiceStatus as "Draft" | "Finalized" | "Paid" | "Voided" | undefined) ?? "Draft"
   );
+  const [isSignatureRequestOpen, setIsSignatureRequestOpen] = useState(false);
+  const [sigRequestType, setSigRequestType] = useState("Customer Authorization");
+  const [sigRequestEmail, setSigRequestEmail] = useState("");
+  const [sigRequestMessage, setSigRequestMessage] = useState("");
+  const [authStatus, setAuthStatus] = useState("Pending");
+  const [isCommsPanelOpen, setIsCommsPanelOpen] = useState(false);
+  const [commsType, setCommsType] = useState<"Email" | "SMS">("Email");
+  const [commsTemplate, setCommsTemplate] = useState("Appt Reminder");
+  const [commsMessage, setCommsMessage] = useState("");
 
   useEffect(() => {
     setActiveTab("general");
@@ -11986,154 +12097,77 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
       break;
     }
     case "communications": {
+      const stubComms = [
+        { id: "c1", direction: "Out", type: "Email", sender: "Service Desk", timestamp: "2 days ago", body: "Your RO has been opened. Estimated completion: Friday." },
+        { id: "c2", direction: "In", type: "SMS", sender: "Customer", timestamp: "2 days ago", body: "Thanks! Can you check the trailer lights too?" },
+        { id: "c3", direction: "Out", type: "SMS", sender: "Service Desk", timestamp: "1 day ago", body: "Absolutely, we'll add that to the job." },
+        { id: "c4", direction: "Out", type: "Email", sender: "Service Desk", timestamp: "4h ago", body: "Estimate ready for approval. Please review and sign." },
+        { id: "c5", direction: "In", type: "Email", sender: "Customer", timestamp: "2h ago", body: "Approved! Please proceed." },
+      ];
+
       paneContent = (
-        <div className="legacy-service-tab-screen is-communications">
-          <section className="legacy-service-pane-section is-compact">
-            <div className="legacy-service-crm-banner">
-              Customer relationship management follow-up tracking for {selectedServiceRow.customerName}.
-            </div>
-          </section>
-          <section className="legacy-service-pane-section is-table-heavy">
-            <div className="legacy-service-pane-header">
-              <h4>Follow-Up Chain</h4>
-              <span>{model.openFollowUps[0]?.owner ?? model.closedFollowUps[0]?.owner ?? "Service Advisor"}</span>
-            </div>
-            <div className="legacy-service-table-wrap">
-              <table className="legacy-service-table">
-                <thead>
-                  <tr>
-                    <th>Subject</th>
-                    <th>Owner</th>
-                    <th>Date</th>
-                    <th>Time</th>
-                    <th>Type</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...model.openFollowUps, ...model.closedFollowUps].slice(0, 1).map((followUp, followUpIndex) => (
-                    <tr className="is-selected" key={`${selectedServiceRow.id}-follow-up-chain-${followUpIndex}`}>
-                      <td>{followUp.subject}</td>
-                      <td>{followUp.owner}</td>
-                      <td>{followUp.date}</td>
-                      <td>{followUp.time}</td>
-                      <td>{followUp.type}</td>
-                      <td>{followUpIndex < model.openFollowUps.length ? "Open" : "Closed"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-          <section className="legacy-service-pane-section legacy-service-grow-section">
-            <div className="legacy-service-pane-header">
-              <h4>Open Follow Ups</h4>
-              <span>{model.openFollowUps.length}</span>
-            </div>
-            <div className="legacy-service-table-wrap">
-              <table className="legacy-service-table">
-                <thead>
-                  <tr>
-                    <th>Subject</th>
-                    <th>Owner</th>
-                    <th>Date</th>
-                    <th>Time</th>
-                    <th>Duration</th>
-                    <th>Type</th>
-                    <th>Confirmed</th>
-                    <th>Showed</th>
-                    <th>Automated</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {model.openFollowUps.length > 0 ? (
-                    model.openFollowUps.map((followUp, followUpIndex) => (
-                      <tr key={`${selectedServiceRow.id}-open-follow-up-${followUpIndex}`}>
-                        <td>{followUp.subject}</td>
-                        <td>{followUp.owner}</td>
-                        <td>{followUp.date}</td>
-                        <td>{followUp.time}</td>
-                        <td>{followUp.duration}</td>
-                        <td>{followUp.type}</td>
-                        <td>{followUp.confirmed}</td>
-                        <td>{followUp.showed}</td>
-                        <td>{followUp.automated}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={9}>No open follow ups on this repair order.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-          <div className="legacy-service-communications-lower">
-            <section className="legacy-service-pane-section">
-              <div className="legacy-service-pane-header">
-                <h4>Follow-Up Notes</h4>
-                <span>Internal communication</span>
+        <div className="legacy-service-tab-screen">
+          <div className="legacy-comms-layout" style={{ padding: "14px", overflowY: "auto" }}>
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+              <strong>Customer Communications</strong>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button className="legacy-task-status-button" onClick={() => { setCommsType("Email"); setIsCommsPanelOpen(true); }} type="button">Send Email</button>
+                <button className="legacy-task-status-button" onClick={() => { setCommsType("SMS"); setIsCommsPanelOpen(true); }} type="button">Send SMS</button>
               </div>
-              <div className="legacy-service-note-panel legacy-service-fill-note">
-                {(model.openFollowUps[0]?.notes || model.closedFollowUps[0]?.notes) ? (
-                  <p>{model.openFollowUps[0]?.notes ?? model.closedFollowUps[0]?.notes}</p>
-                ) : (
-                  <p>No notes have been added for the selected follow-up.</p>
-                )}
+            </div>
+
+            {/* Compose panel */}
+            {isCommsPanelOpen && (
+              <div className="legacy-comms-compose">
+                <strong>Quick Send</strong>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <label>
+                    <input checked={commsType === "Email"} onChange={() => setCommsType("Email")} type="radio" /> Email
+                  </label>
+                  <label>
+                    <input checked={commsType === "SMS"} onChange={() => setCommsType("SMS")} type="radio" /> SMS
+                  </label>
+                </div>
+                <label>
+                  To
+                  <input readOnly type="text" value={model.email || selectedServiceRow.customerName} />
+                </label>
+                <label>
+                  Template
+                  <select onChange={(e) => setCommsTemplate(e.target.value)} value={commsTemplate}>
+                    <option>Appt Reminder</option>
+                    <option>Invoice Ready</option>
+                    <option>Estimate Approval</option>
+                    <option>Parts Arrived</option>
+                    <option>Custom</option>
+                  </select>
+                </label>
+                <label>
+                  Message
+                  <textarea onChange={(e) => setCommsMessage(e.target.value)} placeholder="Type your message..." value={commsMessage} />
+                </label>
+                <div className="legacy-comms-compose-actions">
+                  <button className="legacy-task-status-button" onClick={() => { setIsCommsPanelOpen(false); setCommsMessage(""); }} type="button">Send</button>
+                  <button className="legacy-task-status-button" onClick={() => setIsCommsPanelOpen(false)} type="button">Cancel</button>
+                </div>
               </div>
-            </section>
-            <section className="legacy-service-pane-section">
-              <div className="legacy-service-pane-header">
-                <h4>Follow-Up Actions</h4>
-                <span>CRM controls</span>
-              </div>
-              <div className="legacy-service-action-grid is-vertical">
-                <button className="legacy-task-status-button" type="button">Create Follow-Up</button>
-                <button className="legacy-task-status-button" type="button">Create Reminder</button>
-                <button className="legacy-task-status-button" type="button">Open Customer</button>
-                <button className="legacy-task-status-button" type="button">Mark Completed</button>
-              </div>
-            </section>
+            )}
+
+            {/* Message thread */}
+            <div className="legacy-comms-thread">
+              {stubComms.map((msg) => (
+                <div className={`legacy-comms-message${msg.direction === "Out" ? " is-out" : " is-in"}`} key={msg.id}>
+                  <div className="legacy-comms-message-meta">
+                    <span className={`legacy-chip tone-${msg.type === "Email" ? "accent" : "neutral"}`}>{msg.type}</span>
+                    <span>{msg.direction === "Out" ? "↗" : "↙"} {msg.sender}</span>
+                    <span>{msg.timestamp}</span>
+                  </div>
+                  <div className="legacy-comms-message-body">{msg.body}</div>
+                </div>
+              ))}
+            </div>
           </div>
-          <section className="legacy-service-pane-section">
-            <div className="legacy-service-pane-header">
-              <h4>Closed Follow Ups</h4>
-              <span>{model.closedFollowUps.length}</span>
-            </div>
-            <div className="legacy-service-table-wrap">
-              <table className="legacy-service-table">
-                <thead>
-                  <tr>
-                    <th>Subject</th>
-                    <th>Owner</th>
-                    <th>Date</th>
-                    <th>Time</th>
-                    <th>Type</th>
-                    <th>Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {model.closedFollowUps.length > 0 ? (
-                    model.closedFollowUps.map((followUp, followUpIndex) => (
-                      <tr key={`${selectedServiceRow.id}-closed-follow-up-${followUpIndex}`}>
-                        <td>{followUp.subject}</td>
-                        <td>{followUp.owner}</td>
-                        <td>{followUp.date}</td>
-                        <td>{followUp.time}</td>
-                        <td>{followUp.type}</td>
-                        <td>{followUp.notes}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={6}>No closed follow ups recorded yet.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
         </div>
       );
       break;
@@ -12524,10 +12558,38 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
     case "invoice": {
       const fmtInv = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
       const statusTone: Record<string, string> = { Draft: "neutral", Finalized: "accent", Paid: "stable", Voided: "attention" };
+      const blockedJobs = model.jobs.filter((j) => j.status !== "Closed" && j.status !== "Voided");
 
       function handleInvoiceStatus(s: "Draft" | "Finalized" | "Paid" | "Voided") {
         setInvoiceStatus(s);
         void props.onFinalizeInvoice(s);
+      }
+
+      function exportInvoiceCsv(m: ServiceWorkbenchModel) {
+        const lines: string[] = [
+          "RO Invoice Export",
+          `RO#,${m.roNumber}`,
+          `Customer,${m.customerAddress[0] ?? ""}`,
+          "",
+          "Job,Technician,Parts Total,Labor Total,Sublet Total,Job Total",
+          ...m.jobs.map((j) => [j.title, j.technician, j.parts.reduce((s, p) => s + p.price * p.quantity, 0).toFixed(2), j.laborLines.reduce((s, l) => s + l.total, 0).toFixed(2), j.subletLines.reduce((s, sl) => s + sl.price, 0).toFixed(2), j.total.toFixed(2)].join(",")),
+          "",
+          "Summary",
+          `Parts Total,${m.totals.parts}`,
+          `Labor Total,${m.totals.labor}`,
+          `Sublet Total,${m.totals.sublet}`,
+          `Misc Total,${m.totals.misc}`,
+          `Sales Tax,${m.totals.salesTax}`,
+          `Total Due,${m.totals.totalDue}`,
+        ];
+        const csv = lines.join("\n");
+        const blob = new Blob([csv], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `invoice-${m.roNumber}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
       }
 
       paneContent = (
@@ -12544,11 +12606,32 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
                 <span><strong>Date:</strong> {new Date().toLocaleDateString("en-US")}</span>
                 <span className={`legacy-chip tone-${statusTone[invoiceStatus] ?? "neutral"}`}>{invoiceStatus}</span>
               </div>
+              {blockedJobs.length > 0 && (
+                <div className="legacy-invoice-gate-warning">
+                  <div className="legacy-invoice-gate-warning-title">
+                    <span>⚠</span>
+                    <span>{blockedJobs.length} job(s) must be Closed before finalizing.</span>
+                  </div>
+                  {blockedJobs.map((j) => (
+                    <div className="legacy-invoice-gate-job-row" key={j.id}>
+                      <span>{j.title} — {j.status || "No Status"}</span>
+                      <button
+                        className="legacy-task-status-button"
+                        onClick={() => void props.onUpdateJobStatus(j.id, "Closed")}
+                        type="button"
+                      >
+                        Close Job
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="legacy-invoice-actions">
-                <button className="legacy-task-status-button" onClick={() => handleInvoiceStatus("Finalized")} type="button">Finalize Invoice</button>
-                <button className="legacy-task-status-button" onClick={() => handleInvoiceStatus("Paid")} type="button">Mark Paid</button>
+                <button className="legacy-task-status-button" disabled={blockedJobs.length > 0} onClick={() => handleInvoiceStatus("Finalized")} type="button">Finalize Invoice</button>
+                <button className="legacy-task-status-button" disabled={blockedJobs.length > 0} onClick={() => handleInvoiceStatus("Paid")} type="button">Mark Paid</button>
                 <button className="legacy-task-status-button" onClick={() => handleInvoiceStatus("Voided")} type="button">Void</button>
                 <button className="legacy-task-status-button" onClick={() => window.print()} type="button">Print</button>
+                <button className="legacy-task-status-button" onClick={() => exportInvoiceCsv(model)} type="button">Export CSV</button>
               </div>
             </section>
 
@@ -12834,47 +12917,120 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
       break;
     }
     case "esignature": {
-      paneContent = model.signatureDocs.length > 0 ? (
-        <section className="legacy-service-pane-section">
-          <div className="legacy-service-table-wrap">
-            <table className="legacy-service-table">
-              <thead>
-                <tr>
-                  <th>Description</th>
-                  <th>Created By</th>
-                  <th>Created Time</th>
-                  <th>Completed Time</th>
-                  <th>Status</th>
-                  <th>Customer</th>
-                  <th>Dealer 1</th>
-                  <th>Dealer 2</th>
-                  <th>Dealer 3</th>
-                  <th>Dealer 4</th>
-                </tr>
-              </thead>
-              <tbody>
-                {model.signatureDocs.map((doc, docIndex) => (
-                  <tr key={`${selectedServiceRow.id}-signature-${docIndex}`}>
-                    <td>{doc.description}</td>
-                    <td>{doc.createdBy}</td>
-                    <td>{doc.createdTime}</td>
-                    <td>{doc.completedTime}</td>
-                    <td>{doc.status}</td>
-                    <td>{doc.customer}</td>
-                    <td>{doc.dealer1}</td>
-                    <td>{doc.dealer2}</td>
-                    <td>{doc.dealer3}</td>
-                    <td>{doc.dealer4}</td>
+      const signatureDocs = model.signatureDocs;
+
+      paneContent = (
+        <div className="legacy-service-tab-screen">
+          <div className="legacy-esig-layout" style={{ padding: "14px", overflowY: "auto" }}>
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <strong>eSignature Documents</strong>
+                <span className="legacy-chip tone-neutral">{signatureDocs.length} docs</span>
+              </div>
+              <button className="legacy-task-status-button" onClick={() => setIsSignatureRequestOpen((o) => !o)} type="button">
+                {isSignatureRequestOpen ? "Cancel" : "Request Signature"}
+              </button>
+            </div>
+
+            {/* Auth card */}
+            <div className="legacy-esig-auth-card">
+              <div className="legacy-esig-auth-header">
+                <strong>Customer Authorization</strong>
+                <span className={`legacy-chip tone-${authStatus === "Signed" ? "stable" : authStatus === "Declined" ? "attention" : authStatus === "Sent" ? "accent" : "neutral"}`}>{authStatus}</span>
+              </div>
+              <div className="legacy-esig-auth-meta">
+                <span>Customer: {selectedServiceRow.customerName}</span>
+                {signatureDocs[0]?.createdTime ? <span>Sent: {signatureDocs[0].createdTime}</span> : null}
+                {signatureDocs[0]?.completedTime ? <span>Signed: {signatureDocs[0].completedTime}</span> : null}
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  className="legacy-task-status-button"
+                  onClick={() => { setAuthStatus("Sent"); }}
+                  type="button"
+                >
+                  Send Authorization
+                </button>
+                {authStatus === "Sent" && (
+                  <button className="legacy-task-status-button" onClick={() => { setAuthStatus("Sent"); }} type="button">Resend</button>
+                )}
+              </div>
+            </div>
+
+            {/* Docs table */}
+            {signatureDocs.length > 0 && (
+              <table className="legacy-esig-doc-table">
+                <thead>
+                  <tr>
+                    <th>Description</th>
+                    <th>Created By</th>
+                    <th>Status</th>
+                    <th>Customer</th>
+                    <th>Dealer</th>
+                    <th>Completed</th>
+                    <th>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {signatureDocs.map((doc, docIndex) => (
+                    <tr key={`${selectedServiceRow.id}-esig-${docIndex}`}>
+                      <td>{doc.description}</td>
+                      <td>{doc.createdBy}</td>
+                      <td><span className={`legacy-chip tone-${doc.status === "Signed" || doc.status === "Completed" ? "stable" : doc.status === "Sent" ? "accent" : "neutral"}`}>{doc.status}</span></td>
+                      <td>{doc.customer}</td>
+                      <td>{doc.dealer1}</td>
+                      <td>{doc.completedTime || "—"}</td>
+                      <td style={{ display: "flex", gap: "4px" }}>
+                        <button className="legacy-task-status-button" type="button">View</button>
+                        <button className="legacy-task-status-button" type="button">Void</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {/* Request form */}
+            {isSignatureRequestOpen && (
+              <div className="legacy-esig-request-form">
+                <strong>Request Signature</strong>
+                <label>
+                  Document Type
+                  <select onChange={(e) => setSigRequestType(e.target.value)} value={sigRequestType}>
+                    <option>Customer Authorization</option>
+                    <option>Estimate Approval</option>
+                    <option>Work Authorization</option>
+                    <option>Invoice Sign-Off</option>
+                    <option>Warranty Waiver</option>
+                  </select>
+                </label>
+                <label>
+                  Recipient Email
+                  <input onChange={(e) => setSigRequestEmail(e.target.value)} placeholder="customer@email.com" type="email" value={sigRequestEmail} />
+                </label>
+                <label>
+                  Message
+                  <textarea onChange={(e) => setSigRequestMessage(e.target.value)} placeholder="Optional message to recipient..." value={sigRequestMessage} />
+                </label>
+                <div className="legacy-esig-request-actions">
+                  <button
+                    className="legacy-task-status-button"
+                    onClick={() => {
+                      void props.onRequestSignature(sigRequestType, sigRequestEmail, sigRequestMessage);
+                      setIsSignatureRequestOpen(false);
+                      setSigRequestMessage("");
+                    }}
+                    type="button"
+                  >
+                    Send Request
+                  </button>
+                  <button className="legacy-task-status-button" onClick={() => setIsSignatureRequestOpen(false)} type="button">Cancel</button>
+                </div>
+              </div>
+            )}
           </div>
-        </section>
-      ) : (
-        <section className="legacy-service-pane-section">
-          <p className="legacy-audit-empty-state">No eSignature documents are active for this repair order.</p>
-        </section>
+        </div>
       );
       break;
     }
@@ -14513,6 +14669,7 @@ function PartsInventoryBoard({ onOpenDetail, onSelectRow, onSendToPurchasePad, r
     [activePartsOnly, hasInventorySearch, inactivePartsOnly, inventoryRows, onHandPartsOnly, parsedSearch, savedView, searchField]
   );
   const visibleInventoryRows = useMemo(() => matchedInventoryRows.slice(0, 2500), [matchedInventoryRows]);
+  const reorderRows = visibleInventoryRows.filter((row) => row.onHand < 3);
   const inventoryColumns = useMemo(
     () =>
       columnOrder
@@ -14947,6 +15104,14 @@ function PartsInventoryBoard({ onOpenDetail, onSelectRow, onSendToPurchasePad, r
         setInspector(null);
       }}
     >
+      {reorderRows.length > 0 && (
+        <div className="legacy-parts-reorder-banner">
+          <span className="legacy-parts-reorder-banner-text">⚠ {reorderRows.length} part(s) are below minimum stock.</span>
+          <div className="legacy-parts-reorder-banner-actions">
+            <button className="legacy-task-status-button" onClick={() => setSearchTerm("")} type="button">View All</button>
+          </div>
+        </div>
+      )}
       <section className="legacy-info-card legacy-parts-inventory-search">
         <div className="legacy-parts-inventory-search-row">
           <label className="legacy-parts-inventory-search-field">
@@ -18324,6 +18489,7 @@ function SalesDealWorkbench({
 }) {
   const [activeTab, setActiveTab] = useState<SalesDealTab>("general");
   const [dealStage, setDealStage] = useState<"Lead" | "Desk" | "Finance" | "Closed" | "Delivered">("Desk");
+  const [stageBlockMessage, setStageBlockMessage] = useState<string | null>(null);
   const [lender, setLender] = useState("First National Bank");
   const [loanAmount, setLoanAmount] = useState(35000);
   const [interestRate, setInterestRate] = useState(6.9);
@@ -18363,6 +18529,7 @@ function SalesDealWorkbench({
   const stage = dealRow?.finalized ?? "QUOTE - INITIAL";
   const date = dealRow?.date ?? "—";
   const dealNumber = dealRow?.worksheet ?? dealWindow.worksheet;
+  const signatureDocs: Array<{ status: string }> = [];
 
   function fmt(n: number) {
     return n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
@@ -18603,7 +18770,18 @@ function SalesDealWorkbench({
             <Fragment key={s}>
               <button
                 className={`legacy-deal-stage-step${isActive ? " is-active" : isDone ? " is-done" : ""}`}
-                onClick={() => setDealStage(s)}
+                onClick={() => {
+                  const currentIdx = arr.indexOf(dealStage);
+                  const nextIdx = arr.indexOf(s);
+                  if (nextIdx <= currentIdx) { setDealStage(s); setStageBlockMessage(null); return; }
+                  if (nextIdx === currentIdx + 1) {
+                    if (s === "Desk" && !dealRow) { setStageBlockMessage("A unit must be attached before advancing to Desk."); setTimeout(() => setStageBlockMessage(null), 4000); return; }
+                    if (s === "Finance" && !(cashPrice > 0)) { setStageBlockMessage("A cash price must be set before advancing to Finance."); setTimeout(() => setStageBlockMessage(null), 4000); return; }
+                    if (s === "Closed" && signatureDocs.length === 0) { setStageBlockMessage("At least one signature document is required before Closing."); setTimeout(() => setStageBlockMessage(null), 4000); return; }
+                  }
+                  setDealStage(s);
+                  setStageBlockMessage(null);
+                }}
                 type="button"
               >
                 <span className="legacy-deal-stage-dot">{isDone ? "✓" : i + 1}</span>
@@ -18614,6 +18792,7 @@ function SalesDealWorkbench({
           );
         })}
       </div>
+      {stageBlockMessage && <div className="legacy-deal-stage-block">{stageBlockMessage}</div>}
       {/* Tab bar */}
       <div className="sales-deal-tabs">
         {salesDealTabs.map((tab) => (

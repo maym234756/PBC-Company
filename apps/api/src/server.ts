@@ -2005,6 +2005,19 @@ const serviceOrderDetailActionSchema = z.discriminatedUnion("mode", [
     mode: z.literal("finalizeInvoice"),
     actorUserId: z.string().trim().min(1),
     invoiceStatus: z.enum(["Draft", "Finalized", "Paid", "Voided"])
+  }),
+  z.object({
+    mode: z.literal("updateJobStatus"),
+    actorUserId: z.string().trim().min(1),
+    jobId: z.string().trim().min(1),
+    status: z.string().trim().min(1).max(80)
+  }),
+  z.object({
+    mode: z.literal("requestSignature"),
+    actorUserId: z.string().trim().min(1),
+    docType: z.string().trim().min(1).max(120),
+    recipient: z.string().trim().max(120).default(""),
+    message: z.string().trim().max(1000).default("")
   })
 ]);
 const createServiceOrderSchema = z.object({
