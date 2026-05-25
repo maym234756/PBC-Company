@@ -1794,10 +1794,16 @@ export const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
     title: "Website Feed",
     subtitle: "Inventory publishing and lead sync command rail",
     tools: ["Publish Feed", "Lead Sync", "Open Queue", "Refresh"]
+  },
+  reports: {
+    id: "reports",
+    title: "Report Center",
+    subtitle: "Business intelligence reports for revenue, parts, technicians, and aging",
+    tools: ["Refresh", "Export"]
   }
 };
 
-export const workspaceOrder: WorkspaceId[] = ["desktop", "service", "parts", "sales", "analytics", "website", "audit"];
+export const workspaceOrder: WorkspaceId[] = ["desktop", "service", "parts", "sales", "analytics", "website", "audit", "reports"];
 
 export const quickLaunchButtons: QuickLaunchButton[] = [
   { slot: "1", label: "Desktop", workspaceId: "desktop" },

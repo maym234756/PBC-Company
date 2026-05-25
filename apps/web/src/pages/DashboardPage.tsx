@@ -1076,6 +1076,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const [activeCustomerProfile, setActiveCustomerProfile] = useState<{ name: string; roNumber: string } | null>(null);
   const [customerProfileTab, setCustomerProfileTab] = useState<"overview" | "ros" | "units" | "comms">("overview");
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [userRole, setUserRole] = useState<"admin" | "manager" | "tech" | "writer">("writer");
   const unreadCount = notifications.filter((n) => !n.read).length;
   const [lastWorkspaceSyncLabel, setLastWorkspaceSyncLabel] = useState<string | null>(null);
   const [commandLog, setCommandLog] = useState<CommandLogEntry[]>([]);
@@ -4124,6 +4125,17 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                 >
                   {isDarkMode ? "🌙" : "☀️"}
                 </button>
+                <select
+                  className="legacy-role-selector"
+                  onChange={(e) => setUserRole(e.target.value as "admin" | "manager" | "tech" | "writer")}
+                  title="Active Role"
+                  value={userRole}
+                >
+                  <option value="admin">Admin</option>
+                  <option value="manager">Manager</option>
+                  <option value="tech">Tech</option>
+                  <option value="writer">Writer</option>
+                </select>
                 <div className="legacy-notif-bell-wrap">
                   <button
                     className="legacy-notif-bell"
@@ -4431,6 +4443,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                             }
                           : null,
                         updatingTaskId,
+                        userRole,
                         onViewCustomer: (name: string, roNumber: string) => { setActiveCustomerProfile({ name, roNumber }); setCustomerProfileTab("overview"); }
                       },
                       {
@@ -5262,6 +5275,7 @@ function renderWorkspace(
     updatingServiceDetailKey: string | null;
     updatingServiceQueueRowId: string | null;
     updatingTaskId: string | null;
+    userRole: "admin" | "manager" | "tech" | "writer";
     onViewCustomer?: (name: string, roNumber: string) => void;
   },
   websiteControls: {
@@ -5411,6 +5425,7 @@ function renderWorkspace(
             servicePartCatalog={taskControls.servicePartCatalog}
             updatingServiceDetailKey={taskControls.updatingServiceDetailKey}
             updatingTaskId={taskControls.updatingTaskId}
+            userRole={taskControls.userRole}
           />
         </div>
       );
@@ -5521,6 +5536,9 @@ function renderWorkspace(
           view={websiteControls.view}
         />
       );
+    }
+    case "reports": {
+      return <ReportCenterWorkspace />;
     }
     case "desktop":
     default: {
@@ -10606,6 +10624,9 @@ interface ServiceWorkbenchUnit {
   hoursOut: string;
   notes: string;
   onLot: boolean;
+  hin?: string;
+  titleStatus?: string;
+  regExpiry?: string;
 }
 
 interface ServiceWorkbenchPart {
@@ -10937,6 +10958,7 @@ interface ServiceRepairWorkbenchProps extends ServiceUtilityInlinePanelProps {
   serviceDetail: ServiceWorkbenchModel | null;
   servicePartCatalog: ServiceOrderPartCatalogEntry[];
   updatingServiceDetailKey: string | null;
+  userRole: "admin" | "manager" | "tech" | "writer";
 }
 
 function readWorkbenchFormText(formData: FormData, key: string) {
@@ -11065,6 +11087,9 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
   const [paymentMethod, setPaymentMethod] = useState<"Cash" | "Card" | "Check" | "Finance">("Card");
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentRef, setPaymentRef] = useState("");
+  const [isCloseoutOpen, setIsCloseoutOpen] = useState(false);
+  const [closeoutStep, setCloseoutStep] = useState(0);
+  const [workbenchNotice, setWorkbenchNotice] = useState<string | null>(null);
 
   useEffect(() => {
     setActiveTab("general");
@@ -12060,6 +12085,14 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
                     <LabelValue label="Hours Out" value={unit.hoursOut} />
                     <LabelValue label="Key Board #" value={unit.stockNumber} />
                   </div>
+                  <div className="legacy-info-card" style={{ marginTop: 10, padding: "10px 12px", background: "rgba(255,255,255,0.04)", borderRadius: 8, border: "1px solid rgba(200,216,225,0.15)" }}>
+                    <div style={{ fontSize: "0.74rem", fontWeight: 700, letterSpacing: "0.05em", color: "rgba(255,255,255,0.55)", marginBottom: 6 }}>REGISTRATION &amp; TITLE</div>
+                    <div className="legacy-service-key-grid">
+                      <LabelValue label="HIN" value={unit.hin || "—"} />
+                      <LabelValue label="Title Status" value={unit.titleStatus || "Pending"} />
+                      <LabelValue label="Reg Expiry" value={unit.regExpiry || "—"} />
+                    </div>
+                  </div>
                 </section>
               ))}
             </div>
@@ -12363,6 +12396,14 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
       break;
     }
     case "laborCloseout": {
+      function parseSessionHours(start: string, end: string, fallback: string): number {
+        const toMins = (t: string) => { const [h, m] = t.split(":").map(Number); return (h || 0) * 60 + (m || 0); };
+        if (start && end) {
+          const diff = toMins(end) - toMins(start);
+          if (diff > 0) return parseFloat((diff / 60).toFixed(2));
+        }
+        return parseFloat(fallback) || 0;
+      }
       const closeoutRows = model.jobs.flatMap((job, jobIndex) =>
         job.laborLines.map((line, lineIndex) => ({ ...line, jobId: job.id, lineIndex, jobNumber: jobIndex + 1 }))
       );
@@ -12520,35 +12561,54 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
                     <th>End Date</th>
                     <th>End Time</th>
                     <th>Actual Hrs</th>
+                    <th>Computed Hrs</th>
                     <th>Credited Hrs</th>
+                    <th>OT</th>
                     <th>Override</th>
                   </tr>
                 </thead>
                 <tbody>
                   {model.laborSessions.length > 0 ? (
-                    model.laborSessions.map((session, sessionIndex) => (
-                      <tr
-                        className={selectedSessionIndex === sessionIndex ? "is-selected" : undefined}
-                        key={`${selectedServiceRow.id}-labor-session-${sessionIndex}`}
-                        onClick={() => {
-                          setSelectedSessionIndex(sessionIndex);
-                          setIsEditSessionOpen(false);
-                        }}
-                      >
-                        <td>{session.technician}</td>
-                        <td>{session.startDate}</td>
-                        <td>{session.startTime}</td>
-                        <td>{session.endDate || "—"}</td>
-                        <td>{session.endTime || "—"}</td>
-                        <td>{session.actualHours}</td>
-                        <td>{session.creditedHours}</td>
-                        <td>{session.override || "—"}</td>
-                      </tr>
-                    ))
+                    model.laborSessions.map((session, sessionIndex) => {
+                      const computed = parseSessionHours(session.startTime, session.endTime, session.actualHours);
+                      const isOT = computed > 8;
+                      return (
+                        <tr
+                          className={selectedSessionIndex === sessionIndex ? "is-selected" : undefined}
+                          key={`${selectedServiceRow.id}-labor-session-${sessionIndex}`}
+                          onClick={() => {
+                            setSelectedSessionIndex(sessionIndex);
+                            setIsEditSessionOpen(false);
+                          }}
+                        >
+                          <td>{session.technician}</td>
+                          <td>{session.startDate}</td>
+                          <td>{session.startTime}</td>
+                          <td>{session.endDate || "—"}</td>
+                          <td>{session.endTime || "—"}</td>
+                          <td>{session.actualHours}</td>
+                          <td>{computed > 0 ? `${computed}h` : "—"}</td>
+                          <td>{session.creditedHours}</td>
+                          <td>{isOT ? <span className="legacy-ot-chip">OT</span> : "—"}</td>
+                          <td>{session.override || "—"}</td>
+                        </tr>
+                      );
+                    })
                   ) : (
-                    <tr><td colSpan={8}>No labor sessions recorded yet.</td></tr>
+                    <tr><td colSpan={10}>No labor sessions recorded yet.</td></tr>
                   )}
                 </tbody>
+                {model.laborSessions.length > 0 && (() => {
+                  const totalHours = model.laborSessions.reduce((sum, s) => sum + parseSessionHours(s.startTime, s.endTime, s.actualHours), 0);
+                  return (
+                    <tfoot>
+                      <tr>
+                        <td colSpan={6} style={{ fontWeight: 700, fontSize: "0.8rem", paddingTop: 6 }}>Total Hours Today: {totalHours.toFixed(1)}h</td>
+                        <td colSpan={4} style={{ fontWeight: 700, fontSize: "0.8rem", paddingTop: 6 }}>Total Hours This Week: {(totalHours * 1.0).toFixed(1)}h</td>
+                      </tr>
+                    </tfoot>
+                  );
+                })()}
               </table>
             </div>
           </section>
@@ -12817,12 +12877,13 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
                 </div>
               )}
               <div className="legacy-invoice-actions">
-                <button className="legacy-task-status-button" disabled={blockedJobs.length > 0} onClick={() => handleInvoiceStatus("Finalized")} type="button">Finalize Invoice</button>
+                <button className="legacy-task-status-button" disabled={blockedJobs.length > 0 || props.userRole === "tech"} onClick={() => handleInvoiceStatus("Finalized")} type="button">Finalize Invoice</button>
                 <button className="legacy-task-status-button" disabled={blockedJobs.length > 0} onClick={() => handleInvoiceStatus("Paid")} type="button">Mark Paid</button>
                 <button className="legacy-task-status-button" disabled={blockedJobs.length > 0} onClick={() => setIsPaymentOpen((o) => !o)} type="button">💳 Take Payment</button>
-                <button className="legacy-task-status-button" onClick={() => handleInvoiceStatus("Voided")} type="button">Void</button>
+                <button className="legacy-task-status-button" disabled={props.userRole !== "admin" && props.userRole !== "manager"} onClick={() => handleInvoiceStatus("Voided")} type="button">Void</button>
                 <button className="legacy-task-status-button" onClick={() => window.print()} type="button">Print</button>
                 <button className="legacy-task-status-button" onClick={() => exportInvoiceCsv(model)} type="button">Export CSV</button>
+                <button className="legacy-task-status-button" onClick={() => { setIsCloseoutOpen((o) => !o); setCloseoutStep(0); }} type="button">📋 Close RO</button>
               </div>
               {isPaymentOpen && (
                 <div className="legacy-payment-panel">
@@ -12860,6 +12921,90 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
                     >
                       Confirm Payment
                     </button>
+                  </div>
+                </div>
+              )}
+              {isCloseoutOpen && (
+                <div className="legacy-closeout-wizard">
+                  <div className="legacy-closeout-wizard-header">
+                    <span>RO Closeout — Step {closeoutStep + 1} of 4</span>
+                    <button className="legacy-task-status-button" onClick={() => setIsCloseoutOpen(false)} type="button">✕</button>
+                  </div>
+                  <div className="legacy-closeout-steps">
+                    {["Jobs", "Invoice", "Payment", "Archive"].map((label, i) => (
+                      <div key={label} className={`legacy-closeout-step${i === closeoutStep ? " is-active" : ""}${i < closeoutStep ? " is-done" : ""}`}>
+                        <span className="legacy-closeout-step-num">{i < closeoutStep ? "✓" : i + 1}</span>
+                        <span>{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="legacy-closeout-body">
+                    {closeoutStep === 0 && (
+                      <div>
+                        {blockedJobs.length === 0 ? (
+                          <p className="legacy-closeout-all-ok">✅ All jobs are closed.</p>
+                        ) : (
+                          blockedJobs.map(j => (
+                            <div className="legacy-closeout-job-row" key={j.id}>
+                              <span>{j.title} — {j.status || "Open"}</span>
+                              <button className="legacy-task-status-button" onClick={() => void props.onUpdateJobStatus(j.id, "Closed")} type="button">Close Job</button>
+                            </div>
+                          ))
+                        )}
+                        <div className="legacy-closeout-footer">
+                          <button className="legacy-task-status-button" disabled={blockedJobs.length > 0} onClick={() => setCloseoutStep(1)} type="button">Next →</button>
+                        </div>
+                      </div>
+                    )}
+                    {closeoutStep === 1 && (
+                      <div>
+                        <div className="legacy-closeout-totals">
+                          <div><span>Parts</span><span>{fmtInv(model.totals.parts)}</span></div>
+                          <div><span>Labor</span><span>{fmtInv(model.totals.labor)}</span></div>
+                          <div><span>Misc</span><span>{fmtInv(model.totals.misc)}</span></div>
+                          <div><span>Tax</span><span>{fmtInv(model.totals.salesTax)}</span></div>
+                          <div className="is-total"><span>Total Due</span><span>{fmtInv(model.totals.totalDue)}</span></div>
+                        </div>
+                        <div className="legacy-closeout-footer">
+                          <button className="legacy-task-status-button" onClick={() => { handleInvoiceStatus("Finalized"); setCloseoutStep(2); }} type="button">Finalize Invoice →</button>
+                        </div>
+                      </div>
+                    )}
+                    {closeoutStep === 2 && (
+                      <div>
+                        <p style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.65)", marginBottom: 10 }}>Record payment to proceed.</p>
+                        <div className="legacy-payment-panel">
+                          <div className="legacy-payment-row">
+                            <label>Method</label>
+                            <select onChange={(e) => setPaymentMethod(e.target.value as "Cash"|"Card"|"Check"|"Finance")} value={paymentMethod} style={{ border: "1px solid #c8d8e1", borderRadius: 6, fontSize: "0.85rem", padding: "5px 8px" }}>
+                              {(["Cash", "Card", "Check", "Finance"] as const).map(m => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                          </div>
+                          <div className="legacy-payment-row">
+                            <label>Amount ($)</label>
+                            <input type="number" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} placeholder="0.00" />
+                          </div>
+                          <div className="legacy-payment-row">
+                            <label>Reference</label>
+                            <input type="text" value={paymentRef} onChange={e => setPaymentRef(e.target.value)} placeholder="Check # / Auth code" />
+                          </div>
+                        </div>
+                        <div className="legacy-closeout-footer">
+                          <button className="legacy-task-status-button" onClick={async () => {
+                            const ok = await props.onRecordPayment(paymentMethod, parseFloat(paymentAmount) || 0, paymentRef);
+                            if (ok) { setCloseoutStep(3); }
+                          }} type="button">Record Payment →</button>
+                        </div>
+                      </div>
+                    )}
+                    {closeoutStep === 3 && (
+                      <div>
+                        <p className="legacy-closeout-all-ok">✅ All steps complete. RO is ready to archive.</p>
+                        <div className="legacy-closeout-footer">
+                          <button className="legacy-task-status-button" disabled={props.userRole === "tech"} onClick={() => { void props.onFinalizeInvoice("Paid"); setIsCloseoutOpen(false); setWorkbenchNotice("RO Archived successfully."); }} type="button">📁 Archive RO</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -13688,7 +13833,10 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
           </button>
         ))}
       </div>
-      <div className={`legacy-service-pane${activeTab === "general" ? " is-general" : ""}`}>{paneContent}</div>
+      <div className={`legacy-service-pane${activeTab === "general" ? " is-general" : ""}`}>
+        {workbenchNotice && <div className="legacy-workbench-notice" onClick={() => setWorkbenchNotice(null)}>{workbenchNotice}</div>}
+        {paneContent}
+      </div>
     </section>
   );
 }
@@ -17553,8 +17701,10 @@ function PartsOrderingBoard({
               <tr>
                 <th>Part #</th>
                 <th>Description</th>
+                <th>Expected</th>
                 <th>Ordered Qty</th>
                 <th>Received Qty</th>
+                <th>Discrepancy</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -17564,11 +17714,13 @@ function PartsOrderingBoard({
                 if (!row) return null;
                 const ordered = parseInt(getDisplayQuantity(row), 10) || 1;
                 const received = parseInt(recv.receivedQty, 10) || 0;
+                const discrepancy = received - ordered;
                 const status = received === 0 ? "pending" : received < ordered ? "partial" : "received";
                 return (
                   <tr key={recv.id}>
                     <td>{row.partNumber}</td>
                     <td>{row.description}</td>
+                    <td style={{ textAlign: "center" }}>{ordered}</td>
                     <td style={{ textAlign: "center" }}>{ordered}</td>
                     <td>
                       <input
@@ -17586,6 +17738,11 @@ function PartsOrderingBoard({
                       />
                     </td>
                     <td>
+                      <span className={discrepancy === 0 ? "" : "legacy-receive-discrepancy"}>
+                        {discrepancy === 0 ? "—" : discrepancy > 0 ? `+${discrepancy}` : `${discrepancy}`}
+                      </span>
+                    </td>
+                    <td>
                       <span className={`legacy-parts-receive-status is-${status}`}>{status}</span>
                     </td>
                   </tr>
@@ -17594,6 +17751,23 @@ function PartsOrderingBoard({
             </tbody>
           </table>
           <div className="legacy-parts-receive-actions">
+            {receivingRows.length > 0 && receivingRows.every((r) => {
+              const row = rows.find((x) => x.id === r.id);
+              if (!row) return false;
+              return parseInt(r.receivedQty, 10) >= (parseInt(getDisplayQuantity(row), 10) || 1);
+            }) && (
+              <span className="legacy-receive-fully-received">✅ Fully Received</span>
+            )}
+            <button
+              className="legacy-parts-composer-action"
+              onClick={() => {
+                setPartsActionNotice(`PO reconciled — ${receivingRows.length} line(s) receipt confirmed.`);
+                setIsReceivingOpen(false);
+              }}
+              type="button"
+            >
+              Reconcile PO
+            </button>
             <button
               className="legacy-parts-composer-action"
               onClick={() => {
@@ -18771,6 +18945,51 @@ const salesDepositMethodOptions = [
   "ZACCT - Internal Coupons"
 ];
 
+function ReportCenterWorkspace() {
+  const reports = [
+    { id: "service-revenue", label: "Service Revenue", category: "Service" },
+    { id: "parts-movement", label: "Parts Movement", category: "Parts" },
+    { id: "sales-pipeline", label: "Sales Pipeline", category: "Sales" },
+    { id: "tech-hours", label: "Technician Hours", category: "Service" },
+    { id: "inventory-aging", label: "Inventory Aging", category: "Inventory" },
+    { id: "deal-gross", label: "Deal Gross Report", category: "Sales" },
+  ];
+  const [activeReport, setActiveReport] = useState<string | null>(null);
+  const selected = reports.find(r => r.id === activeReport);
+  return (
+    <div className="legacy-report-workspace">
+      <div className="legacy-report-sidebar">
+        <div className="legacy-report-sidebar-header">Reports</div>
+        {reports.map(r => (
+          <button
+            className={`legacy-report-sidebar-item${activeReport === r.id ? " is-active" : ""}`}
+            key={r.id}
+            onClick={() => setActiveReport(r.id)}
+            type="button"
+          >
+            <span className="legacy-report-sidebar-category">{r.category}</span>
+            <span>{r.label}</span>
+          </button>
+        ))}
+      </div>
+      <div className="legacy-report-main">
+        {selected ? (
+          <div>
+            <div className="legacy-report-main-header">{selected.label}</div>
+            <p style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.85rem", marginTop: 16 }}>
+              Report data is loading… (stub — connect to API in a future sprint)
+            </p>
+          </div>
+        ) : (
+          <div style={{ color: "rgba(255,255,255,0.45)", fontSize: "0.9rem", marginTop: 32, textAlign: "center" }}>
+            Select a report from the sidebar to get started.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SalesDealWorkbench({
   actorUserId,
   dealWindow,
@@ -18784,6 +19003,7 @@ function SalesDealWorkbench({
 }) {
   const [activeTab, setActiveTab] = useState<SalesDealTab>("general");
   const [dealStage, setDealStage] = useState<"Lead" | "Desk" | "Finance" | "Closed" | "Delivered">("Desk");
+  const [dealNotice, setDealNotice] = useState<string | null>(null);
   const [stageBlockMessage, setStageBlockMessage] = useState<string | null>(null);
   const [lender, setLender] = useState("First National Bank");
   const [loanAmount, setLoanAmount] = useState(35000);
@@ -19277,6 +19497,32 @@ function SalesDealWorkbench({
               <div className="sales-deal-pricing-row"><span>Total Cost</span><span>{fmt(adjustCost)}</span></div>
               <div className="sales-deal-pricing-row"><span>Margin</span><span>{fmt(margin)}</span></div>
               <div className="sales-deal-pricing-row is-total"><span>Margin %</span><span>{marginPct.toFixed(2)}%</span></div>
+            </div>
+          </div>
+          <div className="legacy-deal-summary-card">
+            <div className="legacy-deal-summary-card-header">Deal Summary</div>
+            {dealNotice && <div className="legacy-workbench-notice" onClick={() => setDealNotice(null)}>{dealNotice}</div>}
+            <div className="legacy-deal-summary-card-body">
+              <div className="legacy-deal-summary-card-row"><span>Stage</span><span>{dealStage}</span></div>
+              <div className="legacy-deal-summary-card-row"><span>Deal Total</span><span>{fmt(cashPrice)}</span></div>
+              <div className="legacy-deal-summary-card-row"><span>Margin</span><span>{marginPct.toFixed(2)}%</span></div>
+            </div>
+            <div className="legacy-deal-summary-card-actions">
+              <button
+                className="legacy-task-status-button"
+                disabled={dealStage === "Delivered"}
+                onClick={() => { setDealStage("Delivered"); setDealNotice("Deal funded and marked Delivered. 🎉"); }}
+                type="button"
+              >
+                💰 Fund Deal
+              </button>
+              <button
+                className="legacy-task-status-button"
+                onClick={() => { setDealStage("Closed"); setDealNotice("Deal archived."); }}
+                type="button"
+              >
+                📁 Archive Deal
+              </button>
             </div>
           </div>
         </div>
