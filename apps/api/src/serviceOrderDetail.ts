@@ -396,6 +396,33 @@ export type ServiceOrderDetailMutation =
   | {
       mode: "deleteJob";
       jobId: string;
+    }
+  | {
+      mode: "closeLabor";
+      jobId: string;
+      lineIndex: number;
+      actorName: string;
+    }
+  | {
+      mode: "reopenLabor";
+      jobId: string;
+      lineIndex: number;
+    }
+  | {
+      mode: "deleteLaborSession";
+      sessionIndex: number;
+    }
+  | {
+      mode: "editLaborSession";
+      sessionIndex: number;
+      technician: string;
+      startDate: string;
+      startTime: string;
+      endDate: string;
+      endTime: string;
+      actualHours: string;
+      creditedHours: string;
+      override: string;
     };
 
 type ServiceOrderWorkspaceRowPatch = Partial<
@@ -845,6 +872,81 @@ export function applyServiceOrderDetailMutation(
           : `RO ${nextRow.roNumber} updated ${changedFields.join(", ")}.`;
       message = "Queue row saved.";
       activityTone = nextRow.orderType !== row.orderType || nextRow.roStatus !== row.roStatus || nextRow.category !== row.category ? "accent" : "stable";
+      break;
+    }
+    case "closeLabor": {
+      const targetJob = nextDetail.jobs.find((job) => job.id === mutation.jobId);
+
+      if (!targetJob) {
+        throw new Error("Service job not found.");
+      }
+
+      const laborLine = targetJob.laborLines[mutation.lineIndex];
+
+      if (!laborLine) {
+        throw new Error("Labor line not found.");
+      }
+
+      const today = new Date().toLocaleDateString("en-US");
+      laborLine.closedDate = today;
+      laborLine.completedBy = mutation.actorName.trim();
+      activityLabel = "Labor line closed";
+      activityDetail = `RO ${row.roNumber} closed ${laborLine.description || laborLine.jobCode}.`;
+      message = "Labor line closed.";
+      activityTone = "stable";
+      break;
+    }
+    case "reopenLabor": {
+      const targetJob = nextDetail.jobs.find((job) => job.id === mutation.jobId);
+
+      if (!targetJob) {
+        throw new Error("Service job not found.");
+      }
+
+      const laborLine = targetJob.laborLines[mutation.lineIndex];
+
+      if (!laborLine) {
+        throw new Error("Labor line not found.");
+      }
+
+      laborLine.closedDate = "";
+      laborLine.completedBy = "";
+      activityLabel = "Labor line reopened";
+      activityDetail = `RO ${row.roNumber} reopened ${laborLine.description || laborLine.jobCode}.`;
+      message = "Labor line reopened.";
+      activityTone = "accent";
+      break;
+    }
+    case "deleteLaborSession": {
+      if (mutation.sessionIndex < 0 || mutation.sessionIndex >= nextDetail.laborSessions.length) {
+        throw new Error("Labor session not found.");
+      }
+
+      const removed = nextDetail.laborSessions.splice(mutation.sessionIndex, 1)[0];
+      activityLabel = "Labor session deleted";
+      activityDetail = `RO ${row.roNumber} removed session for ${removed.technician}.`;
+      message = "Labor session deleted.";
+      activityTone = "neutral";
+      break;
+    }
+    case "editLaborSession": {
+      const session = nextDetail.laborSessions[mutation.sessionIndex];
+
+      if (!session) {
+        throw new Error("Labor session not found.");
+      }
+
+      session.technician = mutation.technician.trim();
+      session.startDate = mutation.startDate.trim();
+      session.startTime = mutation.startTime.trim();
+      session.endDate = mutation.endDate.trim();
+      session.endTime = mutation.endTime.trim();
+      session.actualHours = mutation.actualHours.trim();
+      session.creditedHours = mutation.creditedHours.trim();
+      session.override = mutation.override.trim();
+      activityLabel = "Labor session updated";
+      activityDetail = `RO ${row.roNumber} updated session for ${session.technician}.`;
+      message = "Labor session updated.";
       break;
     }
   }

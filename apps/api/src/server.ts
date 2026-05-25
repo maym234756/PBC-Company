@@ -1959,6 +1959,37 @@ const serviceOrderDetailActionSchema = z.discriminatedUnion("mode", [
     mode: z.literal("deleteJob"),
     actorUserId: z.string().trim().min(1),
     jobId: z.string().trim().min(1)
+  }),
+  z.object({
+    mode: z.literal("closeLabor"),
+    actorUserId: z.string().trim().min(1),
+    jobId: z.string().trim().min(1),
+    lineIndex: z.number().int().min(0),
+    actorName: z.string().trim().min(1).max(120)
+  }),
+  z.object({
+    mode: z.literal("reopenLabor"),
+    actorUserId: z.string().trim().min(1),
+    jobId: z.string().trim().min(1),
+    lineIndex: z.number().int().min(0)
+  }),
+  z.object({
+    mode: z.literal("deleteLaborSession"),
+    actorUserId: z.string().trim().min(1),
+    sessionIndex: z.number().int().min(0)
+  }),
+  z.object({
+    mode: z.literal("editLaborSession"),
+    actorUserId: z.string().trim().min(1),
+    sessionIndex: z.number().int().min(0),
+    technician: z.string().trim().min(1).max(120),
+    startDate: z.string().trim().min(1).max(40),
+    startTime: z.string().trim().min(1).max(40),
+    endDate: z.string().trim().max(40).default(""),
+    endTime: z.string().trim().max(40).default(""),
+    actualHours: z.string().trim().min(1).max(20),
+    creditedHours: z.string().trim().min(1).max(20),
+    override: z.string().trim().max(160).default("")
   })
 ]);
 const createServiceOrderSchema = z.object({
@@ -4528,6 +4559,37 @@ function mapServiceOrderMutation(
       return {
         mode: mutation.mode,
         jobId: mutation.jobId
+      };
+    case "closeLabor":
+      return {
+        mode: mutation.mode,
+        jobId: mutation.jobId,
+        lineIndex: mutation.lineIndex,
+        actorName: mutation.actorName
+      };
+    case "reopenLabor":
+      return {
+        mode: mutation.mode,
+        jobId: mutation.jobId,
+        lineIndex: mutation.lineIndex
+      };
+    case "deleteLaborSession":
+      return {
+        mode: mutation.mode,
+        sessionIndex: mutation.sessionIndex
+      };
+    case "editLaborSession":
+      return {
+        mode: mutation.mode,
+        sessionIndex: mutation.sessionIndex,
+        technician: mutation.technician,
+        startDate: mutation.startDate,
+        startTime: mutation.startTime,
+        endDate: mutation.endDate,
+        endTime: mutation.endTime,
+        actualHours: mutation.actualHours,
+        creditedHours: mutation.creditedHours,
+        override: mutation.override
       };
   }
 }

@@ -275,6 +275,37 @@ export type ServiceOrderActionRequest =
       mode: "deleteJob";
       actorUserId: string;
       jobId: string;
+    }
+  | {
+      mode: "closeLabor";
+      actorUserId: string;
+      jobId: string;
+      lineIndex: number;
+      actorName: string;
+    }
+  | {
+      mode: "reopenLabor";
+      actorUserId: string;
+      jobId: string;
+      lineIndex: number;
+    }
+  | {
+      mode: "deleteLaborSession";
+      actorUserId: string;
+      sessionIndex: number;
+    }
+  | {
+      mode: "editLaborSession";
+      actorUserId: string;
+      sessionIndex: number;
+      technician: string;
+      startDate: string;
+      startTime: string;
+      endDate: string;
+      endTime: string;
+      actualHours: string;
+      creditedHours: string;
+      override: string;
     };
 
 export interface ServiceOrderActionResponse extends ServiceOrderDetailResponse {

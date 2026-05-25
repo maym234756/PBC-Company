@@ -4126,6 +4126,47 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                             "Deleting service job...",
                             `job:delete:${jobId}`
                           ),
+                        onCloseLabor: (payload) =>
+                          handleServiceOrderAction(
+                            {
+                              mode: "closeLabor",
+                              actorUserId: session.user.id,
+                              ...payload,
+                              actorName: session.user.name
+                            },
+                            "Closing labor line...",
+                            `labor:close:${payload.jobId}:${payload.lineIndex}`
+                          ),
+                        onReopenLabor: (payload) =>
+                          handleServiceOrderAction(
+                            {
+                              mode: "reopenLabor",
+                              actorUserId: session.user.id,
+                              ...payload
+                            },
+                            "Reopening labor line...",
+                            `labor:reopen:${payload.jobId}:${payload.lineIndex}`
+                          ),
+                        onDeleteLaborSession: (sessionIndex) =>
+                          handleServiceOrderAction(
+                            {
+                              mode: "deleteLaborSession",
+                              actorUserId: session.user.id,
+                              sessionIndex
+                            },
+                            "Deleting labor session...",
+                            `labor:session:delete:${sessionIndex}`
+                          ),
+                        onEditLaborSession: (payload) =>
+                          handleServiceOrderAction(
+                            {
+                              mode: "editLaborSession",
+                              actorUserId: session.user.id,
+                              ...payload
+                            },
+                            "Saving labor session...",
+                            `labor:session:edit:${payload.sessionIndex}`
+                          ),
                         onCleanupQaTasks: (roNumber) => handleServiceUtilityQaCleanup(activeStore.id, roNumber),
                         onRemovePart: (jobId, partNumber) =>
                           handleServiceOrderAction(
@@ -4792,6 +4833,20 @@ function renderWorkspace(
       technician: string;
     }) => Promise<boolean>;
     onDeleteJob: (jobId: string) => Promise<boolean>;
+    onCloseLabor: (payload: { jobId: string; lineIndex: number; actorName: string }) => Promise<boolean>;
+    onReopenLabor: (payload: { jobId: string; lineIndex: number }) => Promise<boolean>;
+    onDeleteLaborSession: (sessionIndex: number) => Promise<boolean>;
+    onEditLaborSession: (payload: {
+      sessionIndex: number;
+      technician: string;
+      startDate: string;
+      startTime: string;
+      endDate: string;
+      endTime: string;
+      actualHours: string;
+      creditedHours: string;
+      override: string;
+    }) => Promise<boolean>;
     onRemovePart: (jobId: string, partNumber: string) => Promise<boolean>;
     onReturnToAuditCleanup: (() => void) | null;
     onUpdateQueueRow: (row: ServiceWorkspaceRow) => Promise<boolean>;
@@ -4968,6 +5023,10 @@ function renderWorkspace(
             onCleanupQaTasks={taskControls.onCleanupQaTasks}
             onCreateJob={taskControls.onCreateJob}
             onDeleteJob={taskControls.onDeleteJob}
+            onCloseLabor={taskControls.onCloseLabor}
+            onReopenLabor={taskControls.onReopenLabor}
+            onDeleteLaborSession={taskControls.onDeleteLaborSession}
+            onEditLaborSession={taskControls.onEditLaborSession}
             onRemovePart={taskControls.onRemovePart}
             onReturnToAuditCleanup={taskControls.onReturnToAuditCleanup}
             onUpdateCustomer={taskControls.onUpdateCustomer}
@@ -10214,6 +10273,20 @@ interface ServiceRepairWorkbenchProps extends ServiceUtilityInlinePanelProps {
   }) => Promise<boolean>;
   onDeleteJob: (jobId: string) => Promise<boolean>;
   onRemovePart: (jobId: string, partNumber: string) => Promise<boolean>;
+  onCloseLabor: (payload: { jobId: string; lineIndex: number; actorName: string }) => Promise<boolean>;
+  onReopenLabor: (payload: { jobId: string; lineIndex: number }) => Promise<boolean>;
+  onDeleteLaborSession: (sessionIndex: number) => Promise<boolean>;
+  onEditLaborSession: (payload: {
+    sessionIndex: number;
+    technician: string;
+    startDate: string;
+    startTime: string;
+    endDate: string;
+    endTime: string;
+    actualHours: string;
+    creditedHours: string;
+    override: string;
+  }) => Promise<boolean>;
   onUpdateCustomer: (payload: ServiceWorkbenchCustomerPayload) => Promise<boolean>;
   onUpdateJob: (payload: {
     jobId: string;
@@ -10346,6 +10419,11 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
         }
   );
   const isEstimate = selectedServiceRow?.orderType === "Estimate";
+  const [selectedCloseoutKey, setSelectedCloseoutKey] = useState<{ jobId: string; lineIndex: number } | null>(null);
+  const [selectedSessionIndex, setSelectedSessionIndex] = useState<number | null>(null);
+  const [isEditSessionOpen, setIsEditSessionOpen] = useState(false);
+  const [isAddCloseoutSessionOpen, setIsAddCloseoutSessionOpen] = useState(false);
+  const [isTimeClockOpen, setIsTimeClockOpen] = useState(false);
 
   useEffect(() => {
     setActiveTab("general");
@@ -10355,6 +10433,11 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
     setUnitSearchTerm("");
     setCustomerToolMode(null);
     setCustomerSearchTerm("");
+    setSelectedCloseoutKey(null);
+    setSelectedSessionIndex(null);
+    setIsEditSessionOpen(false);
+    setIsAddCloseoutSessionOpen(false);
+    setIsTimeClockOpen(false);
   }, [selectedServiceRow?.id]);
 
   useEffect(() => {
@@ -11608,17 +11691,26 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
       break;
     }
     case "laborCloseout": {
+      const closeoutRows = model.jobs.flatMap((job, jobIndex) =>
+        job.laborLines.map((line, lineIndex) => ({ ...line, jobId: job.id, lineIndex, jobNumber: jobIndex + 1 }))
+      );
+      const selectedCloseoutRow = selectedCloseoutKey
+        ? closeoutRows.find((r) => r.jobId === selectedCloseoutKey.jobId && r.lineIndex === selectedCloseoutKey.lineIndex) ?? null
+        : null;
+      const selectedSession = selectedSessionIndex !== null ? model.laborSessions[selectedSessionIndex] ?? null : null;
+
       paneContent = (
         <div className="legacy-service-tab-screen is-labor-closeout">
           <section className="legacy-service-pane-section legacy-service-grow-section">
             <div className="legacy-service-pane-header">
               <h4>Labor Closeout</h4>
-              <span>{model.laborCloseout.length} closeout row{model.laborCloseout.length === 1 ? "" : "s"}</span>
+              <span>{closeoutRows.length} closeout row{closeoutRows.length === 1 ? "" : "s"}</span>
             </div>
             <div className="legacy-service-table-wrap">
               <table className="legacy-service-table">
                 <thead>
                   <tr>
+                    <th>Job #</th>
                     <th>Technician</th>
                     <th>Job Code</th>
                     <th>Description</th>
@@ -11630,32 +11722,121 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {model.laborCloseout.map((line) => (
-                    <tr key={`${line.jobCode}-${line.technician}`}>
-                      <td>{line.technician}</td>
-                      <td>{line.jobCode}</td>
-                      <td>{line.description}</td>
-                      <td>{line.quantity}</td>
-                      <td>{line.laborRate}</td>
-                      <td>{line.chargeBy}</td>
-                      <td>{line.closedDate || "-"}</td>
-                      <td>{line.completedBy || "-"}</td>
+                  {closeoutRows.length > 0 ? (
+                    closeoutRows.map((line) => {
+                      const isSelected = selectedCloseoutKey?.jobId === line.jobId && selectedCloseoutKey?.lineIndex === line.lineIndex;
+                      return (
+                        <tr
+                          className={isSelected ? "is-selected" : undefined}
+                          key={`${line.jobId}-${line.lineIndex}`}
+                          onClick={() => setSelectedCloseoutKey({ jobId: line.jobId, lineIndex: line.lineIndex })}
+                        >
+                          <td>{line.jobNumber}</td>
+                          <td>{line.technician}</td>
+                          <td>{line.jobCode}</td>
+                          <td>{line.description}</td>
+                          <td>{line.quantity}</td>
+                          <td>{line.laborRate}</td>
+                          <td>{line.chargeBy}</td>
+                          <td>{line.closedDate || "—"}</td>
+                          <td>{line.completedBy || "—"}</td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={9}>No labor lines posted yet. Add a labor session on a job to see closeout rows.</td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
           </section>
           <div className="legacy-service-button-strip">
-            <button className="legacy-task-status-button" type="button">Close Labor</button>
-            <button className="legacy-task-status-button" type="button">Reopen Labor</button>
-            <button className="legacy-task-status-button" type="button">Show Time Clock</button>
-            <button className="legacy-task-status-button" type="button">Override Credited Hours</button>
+            <button
+              className="legacy-task-status-button"
+              disabled={isMutatingServiceDetail || !selectedCloseoutRow || !!selectedCloseoutRow.closedDate}
+              onClick={async () => {
+                if (!selectedCloseoutKey) return;
+                await props.onCloseLabor({
+                  jobId: selectedCloseoutKey.jobId,
+                  lineIndex: selectedCloseoutKey.lineIndex,
+                  actorName: ""
+                });
+              }}
+              type="button"
+            >
+              Close Labor
+            </button>
+            <button
+              className="legacy-task-status-button"
+              disabled={isMutatingServiceDetail || !selectedCloseoutRow || !selectedCloseoutRow.closedDate}
+              onClick={async () => {
+                if (!selectedCloseoutKey) return;
+                await props.onReopenLabor({ jobId: selectedCloseoutKey.jobId, lineIndex: selectedCloseoutKey.lineIndex });
+              }}
+              type="button"
+            >
+              Reopen Labor
+            </button>
+            <button
+              className={`legacy-task-status-button${isTimeClockOpen ? " is-active" : ""}`}
+              onClick={() => setIsTimeClockOpen((prev) => !prev)}
+              type="button"
+            >
+              Show Time Clock
+            </button>
+            <button
+              className={`legacy-task-status-button${isEditSessionOpen && selectedSession ? " is-active" : ""}`}
+              disabled={selectedSessionIndex === null}
+              onClick={() => setIsEditSessionOpen((prev) => selectedSession ? !prev : false)}
+              type="button"
+            >
+              Override Credited Hours
+            </button>
           </div>
+          {isTimeClockOpen && (
+            <section className="legacy-service-pane-section is-compact">
+              <div className="legacy-service-pane-header">
+                <h4>Time Clock View</h4>
+                <span>All sessions for this RO</span>
+              </div>
+              <div className="legacy-service-table-wrap">
+                <table className="legacy-service-table">
+                  <thead>
+                    <tr>
+                      <th>Technician</th>
+                      <th>Start</th>
+                      <th>End</th>
+                      <th>Actual Hrs</th>
+                      <th>Credited Hrs</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {model.laborSessions.length > 0 ? (
+                      model.laborSessions.map((session, idx) => (
+                        <tr key={`timeclock-${idx}`}>
+                          <td>{session.technician}</td>
+                          <td>{session.startDate} {session.startTime}</td>
+                          <td>{session.endDate ? `${session.endDate} ${session.endTime}` : "—"}</td>
+                          <td>{session.actualHours}</td>
+                          <td>{session.creditedHours}</td>
+                          <td>{session.endDate ? "Clocked Out" : "Clocked In"}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr><td colSpan={6}>No sessions recorded.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
           <section className="legacy-service-pane-section legacy-service-grow-section">
             <div className="legacy-service-pane-header">
               <h4>Labor Sessions</h4>
-              <span>{model.laborSessions.length} active sessions</span>
+              <span>{model.laborSessions.length} session{model.laborSessions.length === 1 ? "" : "s"}</span>
             </div>
             <div className="legacy-service-table-wrap">
               <table className="legacy-service-table">
@@ -11672,28 +11853,222 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {model.laborSessions.map((session, sessionIndex) => (
-                    <tr key={`${selectedServiceRow.id}-labor-session-${sessionIndex}`}>
-                      <td>{session.technician}</td>
-                      <td>{session.startDate}</td>
-                      <td>{session.startTime}</td>
-                      <td>{session.endDate}</td>
-                      <td>{session.endTime}</td>
-                      <td>{session.actualHours}</td>
-                      <td>{session.creditedHours}</td>
-                      <td>{session.override}</td>
-                    </tr>
-                  ))}
+                  {model.laborSessions.length > 0 ? (
+                    model.laborSessions.map((session, sessionIndex) => (
+                      <tr
+                        className={selectedSessionIndex === sessionIndex ? "is-selected" : undefined}
+                        key={`${selectedServiceRow.id}-labor-session-${sessionIndex}`}
+                        onClick={() => {
+                          setSelectedSessionIndex(sessionIndex);
+                          setIsEditSessionOpen(false);
+                        }}
+                      >
+                        <td>{session.technician}</td>
+                        <td>{session.startDate}</td>
+                        <td>{session.startTime}</td>
+                        <td>{session.endDate || "—"}</td>
+                        <td>{session.endTime || "—"}</td>
+                        <td>{session.actualHours}</td>
+                        <td>{session.creditedHours}</td>
+                        <td>{session.override || "—"}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr><td colSpan={8}>No labor sessions recorded yet.</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
           </section>
+          {isEditSessionOpen && selectedSession && selectedSessionIndex !== null && (
+            <section className="legacy-service-pane-section is-compact">
+              <div className="legacy-service-pane-header">
+                <h4>Edit Session / Override Credited Hours</h4>
+                <span>Session {selectedSessionIndex + 1} — {selectedSession.technician}</span>
+              </div>
+              <form
+                className="legacy-service-form"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  const formData = new FormData(event.currentTarget);
+                  const form = event.currentTarget;
+                  const saved = await props.onEditLaborSession({
+                    sessionIndex: selectedSessionIndex,
+                    technician: readWorkbenchFormText(formData, "technician"),
+                    startDate: readWorkbenchFormText(formData, "startDate"),
+                    startTime: readWorkbenchFormText(formData, "startTime"),
+                    endDate: readWorkbenchFormText(formData, "endDate"),
+                    endTime: readWorkbenchFormText(formData, "endTime"),
+                    actualHours: readWorkbenchFormText(formData, "actualHours"),
+                    creditedHours: readWorkbenchFormText(formData, "creditedHours"),
+                    override: readWorkbenchFormText(formData, "override")
+                  });
+                  if (saved) {
+                    form.reset();
+                    setIsEditSessionOpen(false);
+                  }
+                }}
+              >
+                <div className="workflow-grid">
+                  <label className="workflow-field">
+                    <span>Technician</span>
+                    <input defaultValue={selectedSession.technician} name="technician" required />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Start Date</span>
+                    <input defaultValue={selectedSession.startDate} name="startDate" required />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Start Time</span>
+                    <input defaultValue={selectedSession.startTime} name="startTime" required />
+                  </label>
+                  <label className="workflow-field">
+                    <span>End Date</span>
+                    <input defaultValue={selectedSession.endDate} name="endDate" />
+                  </label>
+                  <label className="workflow-field">
+                    <span>End Time</span>
+                    <input defaultValue={selectedSession.endTime} name="endTime" />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Actual Hrs</span>
+                    <input defaultValue={selectedSession.actualHours} name="actualHours" required />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Credited Hrs</span>
+                    <input defaultValue={selectedSession.creditedHours} name="creditedHours" required />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Override Reason</span>
+                    <input defaultValue={selectedSession.override} name="override" placeholder="Optional" />
+                  </label>
+                </div>
+                <div className="workflow-actions">
+                  <button className="workflow-primary" disabled={isMutatingServiceDetail} type="submit">Save Session</button>
+                  <button className="workflow-secondary" onClick={() => setIsEditSessionOpen(false)} type="button">Cancel</button>
+                </div>
+              </form>
+            </section>
+          )}
           <div className="legacy-service-button-strip">
-            <button className="legacy-task-status-button" type="button">Add Session</button>
-            <button className="legacy-task-status-button" type="button">Edit Session</button>
-            <button className="legacy-task-status-button" type="button">Delete Session</button>
-            <button className="legacy-task-status-button" type="button">Print Timesheet</button>
+            <button
+              className={`legacy-task-status-button${isAddCloseoutSessionOpen ? " is-active" : ""}`}
+              onClick={() => setIsAddCloseoutSessionOpen((prev) => !prev)}
+              type="button"
+            >
+              Add Session
+            </button>
+            <button
+              className={`legacy-task-status-button${isEditSessionOpen ? " is-active" : ""}`}
+              disabled={selectedSessionIndex === null}
+              onClick={() => setIsEditSessionOpen((prev) => selectedSession ? !prev : false)}
+              type="button"
+            >
+              Edit Session
+            </button>
+            <button
+              className="legacy-task-status-button"
+              disabled={isMutatingServiceDetail || selectedSessionIndex === null}
+              onClick={async () => {
+                if (selectedSessionIndex === null) return;
+                const deleted = await props.onDeleteLaborSession(selectedSessionIndex);
+                if (deleted) {
+                  setSelectedSessionIndex(null);
+                  setIsEditSessionOpen(false);
+                }
+              }}
+              type="button"
+            >
+              Delete Session
+            </button>
+            <button
+              className="legacy-task-status-button"
+              onClick={() => window.print()}
+              type="button"
+            >
+              Print Timesheet
+            </button>
           </div>
+          {isAddCloseoutSessionOpen && (
+            <section className="legacy-service-pane-section is-compact">
+              <div className="legacy-service-pane-header">
+                <h4>Add Labor Session</h4>
+                <span>Post time against a job on this RO</span>
+              </div>
+              <form
+                className="legacy-service-form"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  const formData = new FormData(event.currentTarget);
+                  const form = event.currentTarget;
+                  const saved = await props.onAddLaborSession({
+                    jobId: readWorkbenchFormText(formData, "jobId"),
+                    technician: readWorkbenchFormText(formData, "technician"),
+                    startDate: readWorkbenchFormText(formData, "startDate"),
+                    startTime: readWorkbenchFormText(formData, "startTime"),
+                    endDate: readWorkbenchFormText(formData, "endDate"),
+                    endTime: readWorkbenchFormText(formData, "endTime"),
+                    actualHours: readWorkbenchFormText(formData, "actualHours"),
+                    creditedHours: readWorkbenchFormText(formData, "creditedHours"),
+                    override: readWorkbenchFormText(formData, "override")
+                  });
+                  if (saved) {
+                    form.reset();
+                    setIsAddCloseoutSessionOpen(false);
+                  }
+                }}
+              >
+                <div className="workflow-grid">
+                  <label className="workflow-field">
+                    <span>Job</span>
+                    <select name="jobId" required>
+                      {model.jobs.map((job, jobIndex) => (
+                        <option key={job.id} value={job.id}>
+                          Job {jobIndex + 1}{job.title ? ` — ${job.title}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="workflow-field">
+                    <span>Technician</span>
+                    <input name="technician" required />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Start Date</span>
+                    <input name="startDate" placeholder="MM/DD/YYYY" required />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Start Time</span>
+                    <input name="startTime" placeholder="8:00 AM" required />
+                  </label>
+                  <label className="workflow-field">
+                    <span>End Date</span>
+                    <input name="endDate" placeholder="MM/DD/YYYY" />
+                  </label>
+                  <label className="workflow-field">
+                    <span>End Time</span>
+                    <input name="endTime" placeholder="4:30 PM" />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Actual Hrs</span>
+                    <input defaultValue="1.0" name="actualHours" required />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Credited Hrs</span>
+                    <input defaultValue="1.0" name="creditedHours" required />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Override</span>
+                    <input name="override" placeholder="Optional override reason" />
+                  </label>
+                </div>
+                <div className="workflow-actions">
+                  <button className="workflow-primary" disabled={isMutatingServiceDetail} type="submit">Save Labor Session</button>
+                  <button className="workflow-secondary" onClick={() => setIsAddCloseoutSessionOpen(false)} type="button">Cancel</button>
+                </div>
+              </form>
+            </section>
+          )}
         </div>
       );
       break;
