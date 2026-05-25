@@ -1,0 +1,815 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "slice-parse",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-slice-parse.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "slice-parse",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-slice-parse.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "slice-parse",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-slice-parse.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "prefix-parse",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-prefix-parse.js",
+				"6993"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "prefix-parse",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-prefix-parse.js",
+				"7305"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "prefix-parse",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-prefix-parse.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "prefix-parse-2",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-prefix-parse.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "prefix-parse-3",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-prefix-parse.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "prefix-parse-4",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-prefix-parse.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "prefix-parse-5",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-prefix-parse.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "prefix-parse-sales",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-prefix-parse.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "sales-slice-parse",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-prefix-parse.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "sales-slice-parse-2",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-prefix-parse.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "jsx-stack",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-jsx-stack.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "jsx-stack-2",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-jsx-stack2.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "bracket-scan",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-bracket-scan.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "remove-dup-deposits",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-remove-dup-deposits.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "remove-dup-deposits",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-remove-dup-deposits.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "bracket-scan",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-bracket-scan.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "prefix-parse-current",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-prefix-parse.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "jsx-stack-2",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-jsx-stack2.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "bracket-scan-slice",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-bracket-scan-slice.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "extract-active-trades",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-extract-active-trades.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "move-active-trades",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-move-active-trades.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "extract-sales-tabs",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-extract-sales-tabs.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "delete-stray-sales",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-delete-stray-sales.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "dump-lines-1",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-dump-lines.js",
+				"3028",
+				"3078"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "dump-lines-2",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-dump-lines.js",
+				"3040",
+				"3125"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "dump-lines-3",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-dump-lines.js",
+				"3125",
+				"3245"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "delete-orphan-chain",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-delete-orphan-chain.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-sales-only",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-parse-sales-only.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "simplify-trades-detail",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-simplify-trades-detail.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "replace-sales-chain",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-replace-sales-tab-chain.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "balance-scan",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-balance.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "ts-scanner-balance",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp-ts-scanner-balance.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "git-log-dashboard",
+			"type": "shell",
+			"command": "git",
+			"args": [
+				"log",
+				"--oneline",
+				"--",
+				"apps/web/src/pages/DashboardPage.tsx"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "restore-dashboard-initial",
+			"type": "shell",
+			"command": "git",
+			"args": [
+				"restore",
+				"--source=d1370bd",
+				"--",
+				"apps/web/src/pages/DashboardPage.tsx"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "parse-dashboard-tsx",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp-parse-dashboard.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "build-web-for-errors",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"--workspace",
+				"apps/web",
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "build-web-for-errors-cmd",
+			"type": "shell",
+			"command": "npm.cmd",
+			"args": [
+				"--workspace",
+				"apps/web",
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"group": "build"
+		}
+	]
+}

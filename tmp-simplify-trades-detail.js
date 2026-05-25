@@ -1,0 +1,13 @@
+const fs = require('fs');
+const path = 'apps/web/src/pages/DashboardPage.tsx';
+let text = fs.readFileSync(path, 'utf8');
+const startMarker = '  const activeTradesDetailContent = (() => {\r\n';
+const endMarker = '  })();\r\n\r\n  return (\r\n';
+const start = text.indexOf(startMarker);
+if (start === -1) throw new Error('start marker not found');
+const end = text.indexOf(endMarker, start);
+if (end === -1) throw new Error('end marker not found');
+const replacement = `  const activeTradesDetailContent = (\r\n    <div className="sales-deal-trades-panel is-placeholder">\r\n      <div className="sales-deal-trades-placeholder-title">${'{'}salesDealTabs.find((t) => t.id === activeTab)?.label ?? "Tab"{'}'}</div>\r\n      <p>${'{'}salesDealTabs.find((t) => t.id === activeTab)?.label ?? "Tab"{'}'} is coming soon.</p>\r\n    </div>\r\n  );\r\n\r\n  return (\r\n`;
+text = text.slice(0, start) + replacement + text.slice(end + endMarker.length);
+fs.writeFileSync(path, text, 'utf8');
+console.log('simplified activeTradesDetailContent');

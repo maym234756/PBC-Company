@@ -39,6 +39,55 @@ export interface WorkflowActionResponse {
   taskEntry?: TaskQueueEntry;
 }
 
+export interface SalesDealDepositEntry {
+  id: string;
+  invoice: string;
+  date: string;
+  cashier: string;
+  method: string;
+  arName: string;
+  amount: number;
+  description: string;
+  notes: string;
+  reference: string;
+}
+
+export interface SalesDealDepositActivity {
+  id: string;
+  title: string;
+  detail: string;
+  meta: string;
+}
+
+export interface SalesDealDepositsResponse {
+  dealId: string;
+  dealNumber: string;
+  customerName: string;
+  status: "Pending" | "Posted";
+  targetAmount: number;
+  capturedAmount: number;
+  remainingAmount: number;
+  ledger: SalesDealDepositEntry[];
+  activity: SalesDealDepositActivity[];
+}
+
+export interface CreateSalesDealDepositRequest {
+  actorUserId: string;
+  cashier: string;
+  password: string;
+  date: string;
+  description: string;
+  method: string;
+  amount: number;
+  notes: string;
+  arAccount: string;
+}
+
+export interface SalesDealDepositActivityActionRequest {
+  actorUserId: string;
+  mode: "sendReceipt" | "reprint";
+}
+
 export interface UpdateTaskStatusRequest {
   status: TaskStatus;
   actorUserId: string;
@@ -188,6 +237,24 @@ export type ServiceOrderActionRequest =
       orderType: "Estimate" | "Repair Order";
     }
   | {
+      mode: "updateNotes";
+      actorUserId: string;
+      notes: string;
+      transferNotes: string;
+    }
+  | {
+      mode: "updateCustomer";
+      actorUserId: string;
+      customerName: string;
+      addressLine1: string;
+      location: string;
+      homePhone: string;
+      cellPhone: string;
+      workPhone: string;
+      email: string;
+      customerNo: string;
+    }
+  | {
       mode: "updateQueueRow";
       actorUserId: string;
       inDate: string;
@@ -201,6 +268,11 @@ export type ServiceOrderActionRequest =
       category: string;
       maker: string;
       note: string;
+    }
+  | {
+      mode: "deleteJob";
+      actorUserId: string;
+      jobId: string;
     };
 
 export interface ServiceOrderActionResponse extends ServiceOrderDetailResponse {
@@ -354,6 +426,29 @@ export async function createActivityLog(storeId: string, payload: CreateActivity
 
 export async function submitWorkflowAction(storeId: string, payload: WorkflowActionRequest) {
   return request<WorkflowActionResponse>(`/stores/${storeId}/workflow-actions`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function getSalesDealDeposits(storeId: string, dealId: string) {
+  return request<SalesDealDepositsResponse>(`/stores/${storeId}/sales-deals/${dealId}/deposits`);
+}
+
+export async function createSalesDealDeposit(storeId: string, dealId: string, payload: CreateSalesDealDepositRequest) {
+  return request<SalesDealDepositsResponse>(`/stores/${storeId}/sales-deals/${dealId}/deposits`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function createSalesDealDepositActivity(
+  storeId: string,
+  dealId: string,
+  depositId: string,
+  payload: SalesDealDepositActivityActionRequest
+) {
+  return request<SalesDealDepositsResponse>(`/stores/${storeId}/sales-deals/${dealId}/deposits/${depositId}/activity`, {
     method: "POST",
     body: JSON.stringify(payload)
   });

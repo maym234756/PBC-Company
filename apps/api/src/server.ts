@@ -1775,6 +1775,31 @@ const navigation = [
   }
 ];
 
+interface SalesDealDepositEntry {
+  id: string;
+  invoice: string;
+  date: string;
+  cashier: string;
+  method: string;
+  arName: string;
+  amount: number;
+  description: string;
+  notes: string;
+  reference: string;
+}
+
+interface SalesDealDepositActivity {
+  id: string;
+  title: string;
+  detail: string;
+  meta: string;
+}
+
+interface SalesDealDepositsState {
+  activity: SalesDealDepositActivity[];
+  ledger: SalesDealDepositEntry[];
+}
+
 const loginSchema = z.object({
   email: z.string().trim().email(),
   password: z.string().trim().min(1)
@@ -1816,7 +1841,7 @@ const serviceOrderDetailActionSchema = z.discriminatedUnion("mode", [
   z.object({
     mode: z.literal("createJob"),
     actorUserId: z.string().trim().min(1),
-    title: z.string().trim().min(1).max(120),
+    title: z.string().trim().max(120).default(""),
     unitLabel: z.string().trim().max(160).default(""),
     description: z.string().trim().max(400).default(""),
     technician: z.string().trim().max(120).default("")
@@ -1825,16 +1850,16 @@ const serviceOrderDetailActionSchema = z.discriminatedUnion("mode", [
     mode: z.literal("updateJob"),
     actorUserId: z.string().trim().min(1),
     jobId: z.string().trim().min(1),
-    title: z.string().trim().min(1).max(120),
-    customerApproval: z.string().trim().min(1).max(80),
-    status: z.string().trim().min(1).max(120),
-    appliance: z.string().trim().min(1).max(120),
+    title: z.string().trim().max(120),
+    customerApproval: z.string().trim().max(80),
+    status: z.string().trim().max(120),
+    appliance: z.string().trim().max(120),
     description: z.string().trim().max(600),
     resolution: z.string().trim().max(600),
     recommendations: z.string().trim().max(600),
-    technician: z.string().trim().min(1).max(120),
-    laborRate: z.string().trim().min(1).max(120),
-    chargeBy: z.string().trim().min(1).max(40),
+    technician: z.string().trim().max(120),
+    laborRate: z.string().trim().max(120),
+    chargeBy: z.string().trim().max(40),
     rate: z.number().finite().min(0),
     quantity: z.number().finite().min(0)
   }),
@@ -1896,6 +1921,24 @@ const serviceOrderDetailActionSchema = z.discriminatedUnion("mode", [
     orderType: serviceOrderTypeSchema
   }),
   z.object({
+    mode: z.literal("updateNotes"),
+    actorUserId: z.string().trim().min(1),
+    notes: z.string().trim().max(4000),
+    transferNotes: z.string().trim().max(4000)
+  }),
+  z.object({
+    mode: z.literal("updateCustomer"),
+    actorUserId: z.string().trim().min(1),
+    customerName: z.string().trim().max(120),
+    addressLine1: z.string().trim().max(160),
+    location: z.string().trim().max(160),
+    homePhone: z.string().trim().max(40),
+    cellPhone: z.string().trim().max(40),
+    workPhone: z.string().trim().max(40),
+    email: z.string().trim().max(160),
+    customerNo: z.string().trim().max(80)
+  }),
+  z.object({
     mode: z.literal("updateQueueRow"),
     actorUserId: z.string().trim().min(1),
     inDate: z.string().trim().min(1).max(20),
@@ -1909,6 +1952,11 @@ const serviceOrderDetailActionSchema = z.discriminatedUnion("mode", [
     category: z.string().trim().min(1).max(120),
     maker: z.string().trim().min(1).max(120),
     note: z.string().trim().max(4000)
+  }),
+  z.object({
+    mode: z.literal("deleteJob"),
+    actorUserId: z.string().trim().min(1),
+    jobId: z.string().trim().min(1)
   })
 ]);
 const createServiceOrderSchema = z.object({
@@ -1979,6 +2027,21 @@ const workflowActionSchema = z.object({
   tone: activityToneSchema,
   values: z.record(z.string(), z.string()).default({})
 }).extend(actorContextSchema.shape);
+const createSalesDealDepositSchema = z.object({
+  actorUserId: z.string().trim().min(1),
+  cashier: z.string().trim().min(1).max(120),
+  password: z.string().trim().max(120).default(""),
+  date: z.string().trim().min(1).max(40),
+  description: z.string().trim().min(1).max(200),
+  method: z.string().trim().min(1).max(120),
+  amount: z.number().finite().positive(),
+  notes: z.string().trim().max(400).default(""),
+  arAccount: z.string().trim().max(80).default("")
+});
+const salesDealDepositActivityActionSchema = z.object({
+  actorUserId: z.string().trim().min(1),
+  mode: z.enum(["sendReceipt", "reprint"])
+});
 
 const defaultTaskSlaPolicyCatalog = [
   { workspaceId: "desktop", action: "Designer", slaMinutes: 90 },
@@ -2485,6 +2548,202 @@ app.get("/api/stores/:storeId/workspaces/:workspaceId", async (request, response
       headline: moduleItem.headline
     }))
   });
+});
+
+app.get("/api/stores/:storeId/sales-deals/:dealId/deposits", async (request, response) => {
+  try {
+    const { storeId, dealId } = request.params;
+    const deal = await prisma.salesDeal.findFirst({
+      where: {
+        id: dealId,
+        storeId
+      }
+    });
+
+    if (!deal) {
+      response.status(404).json({ message: "Sales deal not found." });
+      return;
+    }
+
+    const depositState = await loadSalesDealDepositsState(storeId, deal);
+    response.json(buildSalesDealDepositsResponse(deal, depositState));
+  } catch (_error) {
+    response.status(500).json({ message: "Unable to load sales deal deposits." });
+  }
+});
+
+app.post("/api/stores/:storeId/sales-deals/:dealId/deposits", async (request, response) => {
+  try {
+    const { storeId, dealId } = request.params;
+    const parsedDeposit = createSalesDealDepositSchema.safeParse(request.body);
+
+    if (!parsedDeposit.success) {
+      response.status(400).json({ message: "Enter valid deposit details before posting." });
+      return;
+    }
+
+    const deal = await prisma.salesDeal.findFirst({
+      where: {
+        id: dealId,
+        storeId
+      }
+    });
+
+    if (!deal) {
+      response.status(404).json({ message: "Sales deal not found." });
+      return;
+    }
+
+    const actor = await resolveActorContext(storeId, parsedDeposit.data.actorUserId);
+    const invoice = `INV-${createNumericRecordId("6")}`;
+    const postedAmountCents = Math.round(parsedDeposit.data.amount * 100);
+    const postedAmount = postedAmountCents / 100;
+    const postedDate = parsedDeposit.data.date.trim();
+    const arName = parsedDeposit.data.arAccount.trim() || resolveSalesDealDepositArName(parsedDeposit.data.method);
+    await Promise.all([
+      prisma.$transaction(async (transactionClient) => {
+        const createdDeposit = await transactionClient.salesDealDeposit.create({
+          data: {
+            invoice,
+            dateLabel: postedDate,
+            cashier: parsedDeposit.data.cashier,
+            method: parsedDeposit.data.method,
+            arName,
+            amountCents: postedAmountCents,
+            description: parsedDeposit.data.description,
+            notes: parsedDeposit.data.notes,
+            reference: `DEP-${createNumericRecordId("6")}`,
+            salesDealId: deal.id,
+            storeId
+          }
+        });
+        await transactionClient.salesDealDepositActivity.create({
+          data: {
+            salesDealDepositId: createdDeposit.id,
+            title: "Deposit posted",
+            detail: `${createdDeposit.method} deposit of ${formatCurrency(postedAmount)} posted by ${createdDeposit.cashier}.`,
+            meta: `${postedDate} · ${invoice}`
+          }
+        });
+        await transactionClient.salesDeal.update({
+          where: {
+            id: deal.id
+          },
+          data: {
+            stage: "Deposit",
+            tone: "gold"
+          }
+        });
+      }),
+      recordStoreActivity(
+        storeId,
+        {
+          workspaceId: "sales",
+          label: "Deposit posted",
+          detail: `${deal.customerName} (${deal.worksheet}) deposit ${formatCurrency(postedAmount)} via ${parsedDeposit.data.method}.`,
+          tone: "accent"
+        },
+        actor
+      )
+    ]);
+    const refreshedDeal = await prisma.salesDeal.findFirst({
+      where: {
+        id: deal.id,
+        storeId
+      }
+    });
+
+    if (!refreshedDeal) {
+      response.status(404).json({ message: "Sales deal not found after posting deposit." });
+      return;
+    }
+
+    const depositState = await loadSalesDealDepositsState(storeId, refreshedDeal);
+    response.status(201).json(buildSalesDealDepositsResponse(refreshedDeal, depositState));
+  } catch (error) {
+    if (error instanceof RequestError) {
+      response.status(error.statusCode).json({ message: error.message });
+      return;
+    }
+
+    response.status(500).json({ message: "Unable to post sales deal deposit." });
+  }
+});
+
+app.post("/api/stores/:storeId/sales-deals/:dealId/deposits/:depositId/activity", async (request, response) => {
+  try {
+    const { storeId, dealId, depositId } = request.params;
+    const parsedAction = salesDealDepositActivityActionSchema.safeParse(request.body);
+
+    if (!parsedAction.success) {
+      response.status(400).json({ message: "Enter a valid deposit activity action payload." });
+      return;
+    }
+
+    const deal = await prisma.salesDeal.findFirst({
+      where: {
+        id: dealId,
+        storeId
+      }
+    });
+
+    if (!deal) {
+      response.status(404).json({ message: "Sales deal not found." });
+      return;
+    }
+
+    const deposit = await prisma.salesDealDeposit.findFirst({
+      where: {
+        id: depositId,
+        salesDealId: deal.id,
+        storeId
+      }
+    });
+
+    if (!deposit) {
+      response.status(404).json({ message: "Sales deal deposit not found." });
+      return;
+    }
+
+    const actor = await resolveActorContext(storeId, parsedAction.data.actorUserId);
+    const now = new Date();
+    const mode = parsedAction.data.mode;
+    const title = mode === "sendReceipt" ? "Receipt sent" : "Deposit reprinted";
+    const detail = mode === "sendReceipt"
+      ? `Receipt sent for invoice ${deposit.invoice}.`
+      : `Deposit reprint opened for invoice ${deposit.invoice}.`;
+    const meta = `${formatDate(now)} | ${deposit.reference}`;
+
+    await Promise.all([
+      prisma.salesDealDepositActivity.create({
+        data: {
+          salesDealDepositId: deposit.id,
+          title,
+          detail,
+          meta
+        }
+      }),
+      recordStoreActivity(
+        storeId,
+        {
+          workspaceId: "sales",
+          label: title,
+          detail: `${deal.customerName} (${deal.worksheet}) ${detail}`,
+          tone: "neutral"
+        },
+        actor
+      )
+    ]);
+    const depositState = await loadSalesDealDepositsState(storeId, deal);
+    response.json(buildSalesDealDepositsResponse(deal, depositState));
+  } catch (error) {
+    if (error instanceof RequestError) {
+      response.status(error.statusCode).json({ message: error.message });
+      return;
+    }
+
+    response.status(500).json({ message: "Unable to record sales deal deposit activity." });
+  }
 });
 
 app.get("/api/stores/:storeId/service-orders/:serviceOrderId", async (request, response) => {
@@ -3834,6 +4093,170 @@ function formatClockTime(date: Date) {
   }).format(date);
 }
 
+function resolveSalesDealDepositArName(method: string) {
+  if (method.toLowerCase().includes("check")) {
+    return "A/R Checks";
+  }
+
+  if (method.toLowerCase().includes("cash")) {
+    return "A/R Cash";
+  }
+
+  if (method.toLowerCase().includes("credit")) {
+    return "A/R Credit Card";
+  }
+
+  if (method.toLowerCase().includes("coupon")) {
+    return "A/R Internal Credits";
+  }
+
+  return "A/R Deposits";
+}
+
+async function ensureSalesDealDepositSeed(
+  storeId: string,
+  deal: {
+    id: string;
+    worksheet: string;
+    customerName: string;
+    cashPrice: number;
+  }
+) {
+  const existingCount = await prisma.salesDealDeposit.count({
+    where: {
+      storeId,
+      salesDealId: deal.id
+    }
+  });
+
+  if (existingCount > 0) {
+    return;
+  }
+
+  const targetAmount = Math.max(5_000, Math.round(deal.cashPrice * 0.1));
+  const seededAmount = Math.min(2_500, targetAmount);
+  const seededAmountCents = Math.round(seededAmount * 100);
+  const seededDate = formatDate(new Date());
+
+  await prisma.$transaction(async (transactionClient) => {
+    const seededDeposit = await transactionClient.salesDealDeposit.create({
+      data: {
+        invoice: `INV-${createNumericRecordId("6")}`,
+        dateLabel: seededDate,
+        cashier: "Roger Harrison",
+        method: "Credit Card - InStore",
+        arName: "A/R Credit Card",
+        amountCents: seededAmountCents,
+        description: "Initial buyer deposit",
+        notes: "Imported from worksheet history",
+        reference: `DEP-${createNumericRecordId("6")}`,
+        salesDealId: deal.id,
+        storeId
+      }
+    });
+
+    await transactionClient.salesDealDepositActivity.create({
+      data: {
+        salesDealDepositId: seededDeposit.id,
+        title: "Deposit history loaded",
+        detail: `${deal.customerName} deposit history linked to worksheet ${deal.worksheet}.`,
+        meta: `${seededDate} · Legacy import`
+      }
+    });
+  });
+}
+
+async function loadSalesDealDepositsState(
+  storeId: string,
+  deal: {
+    id: string;
+    worksheet: string;
+    customerName: string;
+    cashPrice: number;
+  }
+) {
+  await ensureSalesDealDepositSeed(storeId, deal);
+
+  const [deposits, activities] = await Promise.all([
+    prisma.salesDealDeposit.findMany({
+      where: {
+        storeId,
+        salesDealId: deal.id
+      },
+      orderBy: {
+        createdAt: "desc"
+      }
+    }),
+    prisma.salesDealDepositActivity.findMany({
+      where: {
+        salesDealDeposit: {
+          storeId,
+          salesDealId: deal.id
+        }
+      },
+      include: {
+        salesDealDeposit: {
+          select: {
+            createdAt: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: "desc"
+      }
+    })
+  ]);
+
+  return {
+    ledger: deposits.map((entry) => ({
+      id: entry.id,
+      invoice: entry.invoice,
+      date: entry.dateLabel,
+      cashier: entry.cashier,
+      method: entry.method,
+      arName: entry.arName,
+      amount: entry.amountCents / 100,
+      description: entry.description,
+      notes: entry.notes,
+      reference: entry.reference
+    })),
+    activity: activities.map((entry) => ({
+      id: entry.id,
+      title: entry.title,
+      detail: entry.detail,
+      meta: entry.meta
+    }))
+  } as SalesDealDepositsState;
+}
+
+function buildSalesDealDepositsResponse(
+  deal: {
+    id: string;
+    worksheet: string;
+    customerName: string;
+    stage: string;
+    cashPrice: number;
+  },
+  state: SalesDealDepositsState
+) {
+  const capturedAmount = state.ledger.reduce((total, entry) => total + entry.amount, 0);
+  const targetAmount = Math.max(5_000, Math.round(deal.cashPrice * 0.1));
+  const remainingAmount = Math.max(0, targetAmount - capturedAmount);
+  const isPosted = capturedAmount > 0 || deal.stage.toLowerCase() === "deposit";
+
+  return {
+    dealId: deal.id,
+    dealNumber: deal.worksheet,
+    customerName: deal.customerName,
+    status: isPosted ? "Posted" : "Pending",
+    targetAmount,
+    capturedAmount,
+    remainingAmount,
+    ledger: [...state.ledger],
+    activity: [...state.activity]
+  };
+}
+
 function formatStoreActivityEntry(activity: {
   id: string;
   label: string;
@@ -4064,6 +4487,24 @@ function mapServiceOrderMutation(
         mode: mutation.mode,
         orderType: mutation.orderType
       };
+    case "updateNotes":
+      return {
+        mode: mutation.mode,
+        notes: mutation.notes,
+        transferNotes: mutation.transferNotes
+      };
+    case "updateCustomer":
+      return {
+        mode: mutation.mode,
+        customerName: mutation.customerName,
+        addressLine1: mutation.addressLine1,
+        location: mutation.location,
+        homePhone: mutation.homePhone,
+        cellPhone: mutation.cellPhone,
+        workPhone: mutation.workPhone,
+        email: mutation.email,
+        customerNo: mutation.customerNo
+      };
     case "updateQueueRow":
       return {
         mode: mutation.mode,
@@ -4078,6 +4519,11 @@ function mapServiceOrderMutation(
         category: mutation.category,
         maker: mutation.maker,
         note: mutation.note
+      };
+    case "deleteJob":
+      return {
+        mode: mutation.mode,
+        jobId: mutation.jobId
       };
   }
 }

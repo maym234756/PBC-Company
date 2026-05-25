@@ -1769,7 +1769,7 @@ export const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
     id: "parts",
     title: "Parts Ordering",
     subtitle: "Fast ordering flow with line visibility and supplier detail",
-    tools: ["Guide", "Purchase Order", "Delete Selected", "Refresh"]
+    tools: ["Delete", "Delete Selected", "Guide", "Purchase Order", "Refresh"]
   },
   sales: {
     id: "sales",
@@ -1801,7 +1801,7 @@ export const workspaceOrder: WorkspaceId[] = ["desktop", "service", "parts", "sa
 
 export const quickLaunchButtons: QuickLaunchButton[] = [
   { slot: "1", label: "Desktop", workspaceId: "desktop" },
-  { slot: "2", label: "Service ROs", workspaceId: "service" },
+  { slot: "2", label: "Estimates & Repair Orders", workspaceId: "service" },
   { slot: "3", label: "Parts Ordering", workspaceId: "parts" },
   { slot: "4", label: "Sales Board", workspaceId: "sales" },
   { slot: "5", label: "Exec Board", workspaceId: "analytics" },

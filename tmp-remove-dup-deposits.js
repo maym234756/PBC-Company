@@ -1,0 +1,12 @@
+const fs = require('fs');
+const path = 'apps/web/src/pages/DashboardPage.tsx';
+const text = fs.readFileSync(path, 'utf8');
+const startMarker = '            ) : activeTab === "deposits" ? (\r\n';
+const endMarker = '            ) : (\r\n              <div className="sales-deal-trades-panel is-placeholder">';
+const start = text.indexOf(startMarker);
+if (start === -1) throw new Error('start marker not found');
+const end = text.indexOf(endMarker, start);
+if (end === -1) throw new Error('end marker not found');
+const nextText = text.slice(0, start) + text.slice(end);
+fs.writeFileSync(path, nextText, 'utf8');
+console.log('removed duplicate deposits branch');

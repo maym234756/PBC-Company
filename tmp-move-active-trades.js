@@ -1,0 +1,15 @@
+const fs = require('fs');
+const path = 'apps/web/src/pages/DashboardPage.tsx';
+let text = fs.readFileSync(path, 'utf8');
+const lines = text.split(/\r?\n/);
+const startLine = 3048;
+const endLine = 3407;
+const block = lines.slice(startLine - 1, endLine).join('\r\n') + '\r\n';
+lines.splice(startLine - 1, endLine - startLine + 1);
+text = lines.join('\r\n');
+const insertMarker = '\r\n  return (\r\n    <div className="sales-deal-workbench">';
+const insertIndex = text.indexOf(insertMarker);
+if (insertIndex === -1) throw new Error('sales return marker not found');
+text = text.slice(0, insertIndex) + '\r\n' + block + text.slice(insertIndex);
+fs.writeFileSync(path, text, 'utf8');
+console.log('moved active trades detail content');

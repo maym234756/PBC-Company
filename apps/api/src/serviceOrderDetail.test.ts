@@ -209,6 +209,124 @@ test("updateQueueRow keeps larger plain-text notes intact", () => {
   assert.match(result.detail.notes, /Writer follow-up:/);
 });
 
+test("updateNotes saves operator and transfer notes without changing queue fields", () => {
+  const row = createServiceRow();
+  const detail = resolveServiceOrderDetail(null, row, emptyTaskEntries, emptyActivityEntries);
+
+  const result = applyServiceOrderDetailMutation(
+    row,
+    detail,
+    {
+      mode: "updateNotes",
+      notes: "Customer requested a noon call before any added labor.",
+      transferNotes: "Move through insurance lane after adjuster photos are attached."
+    },
+    emptyTaskEntries,
+    emptyActivityEntries
+  );
+
+  assert.equal(result.detail.notes, "Customer requested a noon call before any added labor.");
+  assert.equal(result.detail.transferNotes, "Move through insurance lane after adjuster photos are attached.");
+  assert.deepEqual(result.rowPatch, {});
+  assert.equal(result.message, "Notes saved.");
+});
+
+test("createJob adds a blank job line without generated labor or default copy", () => {
+  const row = createServiceRow();
+  const detail = resolveServiceOrderDetail(null, row, emptyTaskEntries, emptyActivityEntries);
+  const result = applyServiceOrderDetailMutation(
+    row,
+    detail,
+    {
+      mode: "createJob",
+      title: "",
+      unitLabel: "",
+      description: "",
+      technician: ""
+    },
+    emptyTaskEntries,
+    emptyActivityEntries
+  );
+  const newJob = result.detail.jobs.at(-1);
+  const hydrated = resolveServiceOrderDetail(serializeServiceOrderDetail(result.detail), row, emptyTaskEntries, emptyActivityEntries);
+  const hydratedNewJob = hydrated.jobs.at(-1);
+
+  assert.ok(newJob);
+  assert.equal(result.detail.jobs.length, detail.jobs.length + 1);
+  assert.equal(newJob?.id, `${row.id}-job-${detail.jobs.length + 1}`);
+  assert.equal(newJob?.title, "");
+  assert.equal(newJob?.unitLabel, "");
+  assert.equal(newJob?.customerApproval, "");
+  assert.equal(newJob?.status, "");
+  assert.equal(newJob?.appliance, "");
+  assert.equal(newJob?.description, "");
+  assert.equal(newJob?.recommendations, "");
+  assert.equal(newJob?.resolution, "");
+  assert.equal(newJob?.rate, 0);
+  assert.equal(newJob?.quantity, 0);
+  assert.equal(newJob?.total, 0);
+  assert.deepEqual(newJob?.parts, []);
+  assert.deepEqual(newJob?.laborLines, []);
+  assert.deepEqual(newJob?.subletLines, []);
+  assert.equal(hydratedNewJob?.title, "");
+  assert.deepEqual(hydratedNewJob?.laborLines, []);
+  assert.deepEqual(result.rowPatch, {});
+});
+
+test("updateCustomer saves and clears customer fields without regenerating defaults", () => {
+  const row = createServiceRow();
+  const detail = resolveServiceOrderDetail(null, row, emptyTaskEntries, emptyActivityEntries);
+
+  const updateResult = applyServiceOrderDetailMutation(
+    row,
+    detail,
+    {
+      mode: "updateCustomer",
+      customerName: "Avery, Christopher",
+      addressLine1: "718 Anchor Point",
+      location: "Charleston, South Carolina 29412",
+      homePhone: "512-818-6318",
+      cellPhone: "512-839-6339",
+      workPhone: "512-829-6329",
+      email: "avery.christopher@customer.mail",
+      customerNo: "45631830"
+    },
+    emptyTaskEntries,
+    emptyActivityEntries
+  );
+
+  assert.equal(updateResult.rowPatch.customerName, "Avery, Christopher");
+  assert.equal(updateResult.detail.customerInfoEdited, true);
+  assert.deepEqual(updateResult.detail.customerAddress, ["718 Anchor Point", "Charleston, South Carolina 29412"]);
+  assert.equal(updateResult.detail.email, "avery.christopher@customer.mail");
+
+  const clearedRow = { ...row, ...updateResult.rowPatch };
+  const clearResult = applyServiceOrderDetailMutation(
+    clearedRow,
+    updateResult.detail,
+    {
+      mode: "updateCustomer",
+      customerName: "",
+      addressLine1: "",
+      location: "",
+      homePhone: "",
+      cellPhone: "",
+      workPhone: "",
+      email: "",
+      customerNo: ""
+    },
+    emptyTaskEntries,
+    emptyActivityEntries
+  );
+  const hydratedCleared = resolveServiceOrderDetail(serializeServiceOrderDetail(clearResult.detail), { ...clearedRow, ...clearResult.rowPatch }, emptyTaskEntries, emptyActivityEntries);
+
+  assert.equal(clearResult.rowPatch.customerName, "");
+  assert.equal(hydratedCleared.customerInfoEdited, true);
+  assert.deepEqual(hydratedCleared.customerAddress, []);
+  assert.equal(hydratedCleared.homePhone, "");
+  assert.equal(hydratedCleared.email, "");
+});
+
 test("initializeServiceOrder seeds estimate defaults and snapshot content", () => {
   const result = initializeServiceOrder({
     id: "service-order-new",

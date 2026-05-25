@@ -230,6 +230,7 @@ export interface ServiceOrderSignatureDoc {
 
 export interface ServiceOrderDetailPayload {
   roNumber: string;
+  customerInfoEdited?: boolean;
   customerAddress: string[];
   homePhone: string;
   workPhone: string;
@@ -361,6 +362,22 @@ export type ServiceOrderDetailMutation =
       orderType: "Estimate" | "Repair Order";
     }
   | {
+      mode: "updateNotes";
+      notes: string;
+      transferNotes: string;
+    }
+  | {
+      mode: "updateCustomer";
+      customerName: string;
+      addressLine1: string;
+      location: string;
+      homePhone: string;
+      cellPhone: string;
+      workPhone: string;
+      email: string;
+      customerNo: string;
+    }
+  | {
       mode: "updateQueueRow";
       inDate: string;
       roNumber: string;
@@ -373,6 +390,10 @@ export type ServiceOrderDetailMutation =
       category: string;
       maker: string;
       note: string;
+    }
+  | {
+      mode: "deleteJob";
+      jobId: string;
     };
 
 type ServiceOrderWorkspaceRowPatch = Partial<
@@ -485,56 +506,57 @@ export function applyServiceOrderDetailMutation(
   switch (mutation.mode) {
     case "createJob": {
       const nextJobIndex = nextDetail.jobs.length + 1;
-      const jobId = `${row.id}-job-${Date.now()}`;
-      const jobCode = buildJobCode(row, nextJobIndex + resolveServiceSeed(row.roNumber));
-      const resolvedTechnician = mutation.technician.trim() || resolveServiceTechnicians(row.serviceWriter)[0];
-      const quantity = row.orderType === "Estimate" ? 1 : 2;
-      const rate = 139;
+      const jobId = `${row.id}-job-${nextJobIndex}`;
 
       nextDetail.jobs.push({
         id: jobId,
         title: mutation.title.trim(),
-        unitLabel: mutation.unitLabel.trim() || nextDetail.units[0]?.label || row.model,
-        customerApproval: row.orderType === "Estimate" ? "Pending" : "Approved",
-        status: row.orderType === "Estimate" ? "Estimate" : "Queued",
-        warranty: row.category.toLowerCase().includes("warranty") ? row.maker : "-",
-        appliance: "None",
-        description: mutation.description.trim() || row.note,
+        unitLabel: mutation.unitLabel.trim(),
+        customerApproval: "",
+        status: "",
+        warranty: "",
+        appliance: "",
+        description: mutation.description.trim(),
         resolution: "",
         recommendations: "",
-        jobCode,
-        technician: resolvedTechnician,
-        laborRate: row.orderType === "Estimate" ? "Estimate" : "Customer Pay - Retail Hourly",
-        chargeBy: "Hours",
-        rate,
-        quantity,
-        total: roundWorkbenchCurrency(rate * quantity),
+        jobCode: "",
+        technician: mutation.technician.trim(),
+        laborRate: "",
+        chargeBy: "",
+        rate: 0,
+        quantity: 0,
+        total: 0,
         closedDate: "",
         completedBy: "",
         techNotes: "",
         parts: [],
-        laborLines: [
-          {
-            technician: resolvedTechnician,
-            jobCode,
-            description: mutation.title.trim(),
-            quantity: formatWorkbenchHours(quantity),
-            laborRate: row.orderType === "Estimate" ? "Estimate" : "Customer Pay - Retail Hourly",
-            chargeBy: "Hours",
-            rate,
-            total: roundWorkbenchCurrency(rate * quantity),
-            closedDate: "",
-            completedBy: ""
-          }
-        ],
+        laborLines: [],
         subletLines: [],
         attachments: [],
-        warrantyClaim: buildServiceWorkbenchWarrantyClaim(row, resolveServiceSeed(row.roNumber) + nextJobIndex, "", row.category.toLowerCase().includes("warranty"))
+        warrantyClaim: buildBlankServiceWorkbenchWarrantyClaim()
       });
       activityLabel = "Service job created";
-      activityDetail = `RO ${row.roNumber} added job ${mutation.title.trim()}.`;
+      activityDetail = `RO ${row.roNumber} added blank job ${nextJobIndex}.`;
       message = "Job created.";
       activityTone = "accent";
+      break;
+    }
+    case "deleteJob": {
+      const jobIndex = nextDetail.jobs.findIndex((job) => job.id === mutation.jobId);
+
+      if (jobIndex === -1) {
+        throw new Error("Service job not found.");
+      }
+      if (nextDetail.jobs.length <= 1) {
+        throw new Error("Cannot delete the only remaining job on this repair order.");
+      }
+
+      const deletedJob = nextDetail.jobs[jobIndex];
+      nextDetail.jobs.splice(jobIndex, 1);
+      activityLabel = "Service job deleted";
+      activityDetail = `RO ${row.roNumber} removed job: ${deletedJob.title || `Job ${jobIndex + 1}`}.`;
+      message = "Job deleted.";
+      activityTone = "attention";
       break;
     }
     case "updateJob": {
@@ -557,28 +579,32 @@ export function applyServiceOrderDetailMutation(
       targetJob.rate = roundWorkbenchCurrency(mutation.rate);
       targetJob.quantity = roundWorkbenchCurrency(mutation.quantity);
 
-      const existingLine = targetJob.laborLines[0] ?? {
-        technician: targetJob.technician,
-        jobCode: targetJob.jobCode,
-        description: targetJob.title,
-        quantity: formatWorkbenchHours(targetJob.quantity),
-        laborRate: targetJob.laborRate,
-        chargeBy: targetJob.chargeBy,
-        rate: targetJob.rate,
-        total: roundWorkbenchCurrency(targetJob.rate * targetJob.quantity),
-        closedDate: targetJob.closedDate,
-        completedBy: targetJob.completedBy
-      };
-      targetJob.laborLines[0] = {
-        ...existingLine,
-        technician: targetJob.technician,
-        description: targetJob.title,
-        quantity: formatWorkbenchHours(targetJob.quantity),
-        laborRate: targetJob.laborRate,
-        chargeBy: targetJob.chargeBy,
-        rate: targetJob.rate,
-        total: roundWorkbenchCurrency(targetJob.rate * targetJob.quantity)
-      };
+      if (isBlankServiceOrderJob(targetJob)) {
+        targetJob.laborLines = [];
+      } else {
+        const existingLine = targetJob.laborLines[0] ?? {
+          technician: targetJob.technician,
+          jobCode: targetJob.jobCode,
+          description: targetJob.title,
+          quantity: formatWorkbenchHours(targetJob.quantity),
+          laborRate: targetJob.laborRate,
+          chargeBy: targetJob.chargeBy,
+          rate: targetJob.rate,
+          total: roundWorkbenchCurrency(targetJob.rate * targetJob.quantity),
+          closedDate: targetJob.closedDate,
+          completedBy: targetJob.completedBy
+        };
+        targetJob.laborLines[0] = {
+          ...existingLine,
+          technician: targetJob.technician,
+          description: targetJob.title,
+          quantity: formatWorkbenchHours(targetJob.quantity),
+          laborRate: targetJob.laborRate,
+          chargeBy: targetJob.chargeBy,
+          rate: targetJob.rate,
+          total: roundWorkbenchCurrency(targetJob.rate * targetJob.quantity)
+        };
+      }
 
       if (nextDetail.jobs[0]?.id === mutation.jobId) {
         rowPatch.note = targetJob.description;
@@ -719,6 +745,39 @@ export function applyServiceOrderDetailMutation(
       activityTone = "accent";
       break;
     }
+    case "updateNotes": {
+      nextDetail.notes = mutation.notes.trim();
+      nextDetail.transferNotes = mutation.transferNotes.trim();
+
+      activityLabel = "Service notes updated";
+      activityDetail = `RO ${row.roNumber} operator and transfer notes updated.`;
+      message = "Notes saved.";
+      activityTone = "stable";
+      break;
+    }
+    case "updateCustomer": {
+      const customerName = mutation.customerName.trim();
+      const addressLine1 = mutation.addressLine1.trim();
+      const location = mutation.location.trim();
+
+      rowPatch.customerName = customerName;
+      nextDetail.customerInfoEdited = true;
+      nextDetail.customerAddress = [addressLine1, location].filter((line) => line.length > 0);
+      nextDetail.homePhone = mutation.homePhone.trim();
+      nextDetail.cellPhone = mutation.cellPhone.trim();
+      nextDetail.workPhone = mutation.workPhone.trim();
+      nextDetail.email = mutation.email.trim();
+      nextDetail.customerNo = mutation.customerNo.trim();
+
+      activityLabel = customerName.length > 0 ? "Service customer updated" : "Service customer cleared";
+      activityDetail =
+        customerName.length > 0
+          ? `RO ${row.roNumber} customer updated to ${customerName}.`
+          : `RO ${row.roNumber} customer information cleared.`;
+      message = customerName.length > 0 ? "Customer information saved." : "Customer information cleared.";
+      activityTone = customerName.length > 0 ? "stable" : "attention";
+      break;
+    }
     case "updateQueueRow": {
       const previousDefaultNotes = buildDefaultServiceDetailNotes(row);
       const previousDefaultTransferNotes = buildDefaultServiceTransferNotes(row);
@@ -851,16 +910,18 @@ function hydrateServiceOrderDetail(
   const jobs = detail.jobs.map((job, jobIndex) => hydrateServiceOrderJob(job, row, jobIndex + 1));
   const miscCharges = detail.miscCharges.length > 0 ? detail.miscCharges : buildServiceWorkbenchMiscCharges(row, seed);
   const totals = buildServiceOrderTotals(jobs, miscCharges, isEstimate);
+  const customerInfoEdited = detail.customerInfoEdited === true;
 
   return {
     ...detail,
     roNumber: row.roNumber,
-    customerAddress: detail.customerAddress.length > 0 ? detail.customerAddress : buildServiceCustomerAddress(seed),
-    homePhone: detail.homePhone || buildServicePhone(seed),
-    workPhone: detail.workPhone || buildServicePhone(seed + 11),
-    cellPhone: detail.cellPhone || buildServicePhone(seed + 21),
-    email: detail.email || buildServiceEmail(row.customerName),
-    customerNo: detail.customerNo || `${seed}${(seed % 97).toString().padStart(2, "0")}`,
+    customerInfoEdited,
+    customerAddress: customerInfoEdited || detail.customerAddress.length > 0 ? detail.customerAddress : buildServiceCustomerAddress(seed),
+    homePhone: customerInfoEdited ? detail.homePhone : detail.homePhone || buildServicePhone(seed),
+    workPhone: customerInfoEdited ? detail.workPhone : detail.workPhone || buildServicePhone(seed + 11),
+    cellPhone: customerInfoEdited ? detail.cellPhone : detail.cellPhone || buildServicePhone(seed + 21),
+    email: customerInfoEdited ? detail.email : detail.email || buildServiceEmail(row.customerName),
+    customerNo: customerInfoEdited ? detail.customerNo : detail.customerNo || `${seed}${(seed % 97).toString().padStart(2, "0")}`,
     setupDate: detail.setupDate || shiftUsDate(row.inDate, -21),
     loyaltyPoints: detail.loyaltyPoints || `${(seed % 7) * 50}`,
     promisedDate: detail.promisedDate || shiftUsDate(row.inDate, isEstimate ? 7 : row.roStatus === "Ready to Cash" ? 1 : row.roStatus === "In Progress" ? 2 : 4),
@@ -884,20 +945,23 @@ function hydrateServiceOrderDetail(
 }
 
 function hydrateServiceOrderJob(job: ServiceOrderJob, row: ServiceOrderWorkspaceRow, jobIndex: number): ServiceOrderJob {
-  const laborLines = job.laborLines.length > 0 ? job.laborLines : [
-    {
-      technician: job.technician,
-      jobCode: job.jobCode,
-      description: job.title,
-      quantity: formatWorkbenchHours(job.quantity),
-      laborRate: job.laborRate,
-      chargeBy: job.chargeBy,
-      rate: job.rate,
-      total: roundWorkbenchCurrency(job.rate * job.quantity),
-      closedDate: job.closedDate,
-      completedBy: job.completedBy
-    }
-  ];
+  const laborLines =
+    job.laborLines.length > 0 || isBlankServiceOrderJob(job)
+      ? job.laborLines
+      : [
+          {
+            technician: job.technician,
+            jobCode: job.jobCode,
+            description: job.title,
+            quantity: formatWorkbenchHours(job.quantity),
+            laborRate: job.laborRate,
+            chargeBy: job.chargeBy,
+            rate: job.rate,
+            total: roundWorkbenchCurrency(job.rate * job.quantity),
+            closedDate: job.closedDate,
+            completedBy: job.completedBy
+          }
+        ];
   const partsTotal = roundWorkbenchCurrency(job.parts.reduce((total, part) => total + part.price * part.quantity, 0));
   const laborTotal = roundWorkbenchCurrency(laborLines.reduce((total, line) => total + line.total, 0));
   const subletTotal = roundWorkbenchCurrency(job.subletLines.reduce((total, line) => total + line.price, 0));
@@ -908,6 +972,29 @@ function hydrateServiceOrderJob(job: ServiceOrderJob, row: ServiceOrderWorkspace
     total: roundWorkbenchCurrency(partsTotal + laborTotal + subletTotal),
     warrantyClaim: job.warrantyClaim ?? buildServiceWorkbenchWarrantyClaim(row, resolveServiceSeed(row.roNumber) + jobIndex, "", row.category.toLowerCase().includes("warranty"))
   };
+}
+
+function isBlankServiceOrderJob(job: ServiceOrderJob) {
+  return (
+    job.title.trim().length === 0 &&
+    job.unitLabel.trim().length === 0 &&
+    job.customerApproval.trim().length === 0 &&
+    job.status.trim().length === 0 &&
+    job.warranty.trim().length === 0 &&
+    job.appliance.trim().length === 0 &&
+    job.description.trim().length === 0 &&
+    job.resolution.trim().length === 0 &&
+    job.recommendations.trim().length === 0 &&
+    job.jobCode.trim().length === 0 &&
+    job.technician.trim().length === 0 &&
+    job.laborRate.trim().length === 0 &&
+    job.chargeBy.trim().length === 0 &&
+    job.rate === 0 &&
+    job.quantity === 0 &&
+    job.parts.length === 0 &&
+    job.laborLines.length === 0 &&
+    job.subletLines.length === 0
+  );
 }
 
 function buildServiceOrderTotals(
@@ -1412,6 +1499,29 @@ function buildServiceWorkbenchWarrantyClaim(row: ServiceOrderWorkspaceRow, seed:
     dateFiledWithCarrier: isWarranty ? shiftUsDate(row.inDate, 1) : "",
     authorizations: isWarranty ? [`AUTH-${seed}`, `AUTH-${seed + 1}`] : ["-"],
     extraLabor: isWarranty ? [{ hours: "0.5", reason: "Documentation" }] : [{ hours: "0", reason: "N/A" }]
+  };
+}
+
+function buildBlankServiceWorkbenchWarrantyClaim(): ServiceOrderWarrantyClaim {
+  return {
+    warrantyClaimNumber: "",
+    internalWarrantyNumber: "",
+    failureDate: "",
+    contentionCode: "",
+    problemCode: "",
+    problemDescription: "",
+    claimType: "",
+    status: "",
+    deductible: 0,
+    failedPartNumber: "",
+    actionTaken: "",
+    reasonForDelay: "",
+    carrierNumber: "",
+    invoiceDate: "",
+    invoiceNumber: "",
+    dateFiledWithCarrier: "",
+    authorizations: [],
+    extraLabor: []
   };
 }
 
