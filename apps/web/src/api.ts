@@ -701,6 +701,17 @@ export async function deleteBoatInventoryUnit(storeId: string, unitId: string) {
   });
 }
 
+export interface GlobalSearchResult {
+  serviceOrders: unknown[];
+  partsLines: unknown[];
+  salesDeals: unknown[];
+  units: unknown[];
+}
+
+export async function globalSearch(storeId: string, query: string): Promise<GlobalSearchResult> {
+  return request<GlobalSearchResult>(`/stores/${storeId}/search?q=${encodeURIComponent(query)}`);
+}
+
 async function request<T>(path: string, init?: RequestInit) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,

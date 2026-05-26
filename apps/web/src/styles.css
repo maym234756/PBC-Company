@@ -12938,3 +12938,20 @@ body.is-desktop-dragging {
   .legacy-boat-inventory-layout { grid-template-columns: 1fr; }
   .legacy-crm-pipeline { grid-template-columns: repeat(3, minmax(150px, 1fr)); }
 }
+
+/* Sprint 10 */
+.legacy-error-boundary { align-items: center; display: flex; flex-direction: column; gap: 12px; justify-content: center; min-height: 200px; padding: 32px; text-align: center; }
+.legacy-error-boundary-icon { font-size: 2rem; }
+.legacy-error-boundary-title { font-size: 1rem; font-weight: 700; }
+.legacy-error-boundary-detail { color: rgba(255,255,255,0.5); font-size: 0.82rem; max-width: 320px; }
+.legacy-empty-state { align-items: center; color: rgba(255,255,255,0.45); display: flex; flex-direction: column; gap: 8px; justify-content: center; min-height: 160px; padding: 24px; text-align: center; }
+.legacy-empty-state-icon { font-size: 1.8rem; opacity: 0.5; }
+.legacy-empty-state-title { color: rgba(255,255,255,0.6); font-size: 0.9rem; font-weight: 600; }
+.legacy-empty-state-detail { font-size: 0.78rem; max-width: 280px; }
+.legacy-parts-to-po-panel { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; display: grid; gap: 10px; margin-top: 10px; padding: 14px; }
+.legacy-parts-to-po-header { align-items: center; display: flex; font-size: 0.85rem; font-weight: 700; gap: 8px; justify-content: space-between; }
+.legacy-parts-to-po-meta { color: rgba(255,255,255,0.55); display: flex; flex-wrap: wrap; font-size: 0.8rem; gap: 10px; }
+.legacy-parts-to-po-form { display: grid; gap: 8px; grid-template-columns: 1fr 1fr 1fr; }
+.legacy-global-search-api-results { border-top: 1px solid rgba(255,255,255,0.08); margin-top: 8px; padding-top: 8px; }
+.legacy-global-search-section-label { color: rgba(255,255,255,0.4); font-size: 0.72rem; margin-bottom: 4px; text-transform: uppercase; }
+.legacy-global-search-api-row { color: rgba(255,255,255,0.7); font-size: 0.82rem; padding: 2px 0; }

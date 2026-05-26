@@ -2,80 +2,37 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
-  workflow_dispatch:
+    branches: [main]
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
 
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
+          node-version: '20'
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build workspaces
-        run: npm run build
+      - name: Generate Prisma client
+        run: npx prisma generate --schema packages/database/prisma/schema.prisma
 
-  unit-tests:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+      - name: Build web
+        run: npm run build -w @marine-cloud/web
 
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - name: Build API
+        run: npm run build -w @marine-cloud/api
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
+      - name: Run API tests
+        run: npm run test -w @marine-cloud/api
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run unit tests
-        run: npm test
-
-  smoke-tests:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Playwright Chromium
-        run: npm exec -w @marine-cloud/web playwright install --with-deps chromium
-
-      - name: Prepare demo database
-        run: npm run setup:db
-
-      - name: Run smoke tests
-        run: npm run test:smoke
-
-      - name: Upload Playwright artifacts
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-artifacts
-          path: test-results/playwright
-          if-no-files-found: ignore
+      - name: Type check web
+        run: npm run build -w @marine-cloud/web

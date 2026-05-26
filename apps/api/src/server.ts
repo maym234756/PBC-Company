@@ -4508,6 +4508,34 @@ app.delete("/api/stores/:storeId/boat-inventory/:unitId", async (request, respon
   response.json({ ok: deleted.count > 0 });
 });
 
+app.get("/api/stores/:storeId/search", async (request, response) => {
+  const { storeId } = request.params as { storeId: string };
+  const query = (request.query as { q?: string }).q?.trim() ?? "";
+  if (query.length < 2) {
+    response.json({ serviceOrders: [], partsLines: [], salesDeals: [], units: [] });
+    return;
+  }
+  const [serviceOrders, partsLines, salesDeals, units] = await Promise.all([
+    prisma.serviceOrder.findMany({
+      where: { storeId, OR: [{ roNumber: { contains: query } }, { customerName: { contains: query } }, { model: { contains: query } }] },
+      take: 8, orderBy: { inDate: "desc" }
+    }),
+    prisma.partsOrderLine.findMany({
+      where: { storeId, OR: [{ partNumber: { contains: query } }, { description: { contains: query } }] },
+      take: 8, orderBy: { updatedAt: "desc" }
+    }),
+    prisma.salesDeal.findMany({
+      where: { storeId, OR: [{ customerName: { contains: query } }, { worksheet: { contains: query } }, { make: { contains: query } }] },
+      take: 8, orderBy: { openedAt: "desc" }
+    }),
+    prisma.boatInventoryUnit.findMany({
+      where: { storeId, OR: [{ stockNumber: { contains: query } }, { vinHin: { contains: query } }, { make: { contains: query } }, { model: { contains: query } }] },
+      take: 8, orderBy: { createdAt: "desc" }
+    }),
+  ]);
+  response.json({ serviceOrders, partsLines, salesDeals, units });
+});
+
 function getBearerUserId(request: express.Request) {
   const authHeader = request.headers.authorization;
 

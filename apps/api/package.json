@@ -10,7 +10,8 @@
     "test:service-notifications": "node --import tsx --test src/serviceNotifications.test.ts",
     "test:workflow-action-plans": "node --import tsx --test src/workflowActionPlans.test.ts",
     "test:service-order-detail": "node --import tsx --test src/serviceOrderDetail.test.ts",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "seed": "tsx src/seed.ts"
   },
   "dependencies": {
     "@marine-cloud/database": "^0.1.0",
