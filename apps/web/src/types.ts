@@ -14,7 +14,7 @@ export interface StoreOperatorOption {
   avatarInitial: string;
 }
 
-export type WorkspaceId = "desktop" | "sales" | "service" | "parts" | "analytics" | "website" | "audit" | "reports";
+export type WorkspaceId = "desktop" | "sales" | "service" | "parts" | "analytics" | "website" | "audit" | "reports" | "boatInventory";
 export type RowTone = "lime" | "teal" | "salmon" | "gold" | "violet" | "green" | "gray";
 export type CommandTone = "stable" | "accent" | "attention" | "neutral";
 export type TaskStatus = "Queued" | "In Progress" | "Blocked" | "Done";
@@ -352,4 +352,9 @@ export type WorkspacePayload =
       workspaceId: "reports";
       title: string;
       rows: never[];
+    }
+  | {
+      workspaceId: "boatInventory";
+      title: string;
+      rows: unknown[];
     };

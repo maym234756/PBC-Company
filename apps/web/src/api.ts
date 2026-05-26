@@ -137,6 +137,35 @@ export interface ServiceOrderDetailResponse {
   partCatalog: ServiceOrderPartCatalogEntry[];
 }
 
+export interface BoatInventoryUnit {
+  id: string;
+  stockNumber: string;
+  vinHin: string;
+  status: string;
+  condition: string;
+  year: number;
+  make: string;
+  model: string;
+  lengthFt: number;
+  engine: string;
+  exteriorColor: string;
+  interiorColor: string;
+  location: string;
+  ageDays: number;
+  costCents: number;
+  priceCents: number;
+  photosJson: string;
+  notes: string;
+  storeId: string;
+}
+
+export type BoatInventoryUnitInput = Omit<BoatInventoryUnit, "id" | "storeId">;
+
+export interface NormalizedServiceOrderResponse {
+  source: "normalized" | "snapshot";
+  serviceOrder: unknown;
+}
+
 export interface CreateServiceOrderRequest {
   actorUserId: string;
   orderType: "Estimate" | "Repair Order";
@@ -578,6 +607,16 @@ export async function updateServiceOrderDetail(storeId: string, serviceOrderId: 
   });
 }
 
+export async function getNormalizedServiceOrder(storeId: string, roNumber: string) {
+  return request<NormalizedServiceOrderResponse>(`/stores/${storeId}/service-orders/${encodeURIComponent(roNumber)}/normalized`);
+}
+
+export async function normalizeServiceOrder(storeId: string, roNumber: string) {
+  return request<{ ok: boolean; createdJobs: number }>(`/stores/${storeId}/service-orders/${encodeURIComponent(roNumber)}/normalize`, {
+    method: "POST"
+  });
+}
+
 export async function updateTaskSlaPolicy(storeId: string, payload: UpdateTaskSlaPolicyRequest) {
   return request<UpdateTaskSlaPolicyResponse>(`/stores/${storeId}/task-sla-policies`, {
     method: "POST",
@@ -636,6 +675,30 @@ export async function updateApproval(storeId: string, approvalId: string, data: 
   const response = await fetch(`/api/stores/${storeId}/approvals/${approvalId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
   if (!response.ok) throw new Error("Failed to update approval");
   return response.json();
+}
+
+export async function getBoatInventoryUnits(storeId: string) {
+  return request<BoatInventoryUnit[]>(`/stores/${storeId}/boat-inventory`);
+}
+
+export async function createBoatInventoryUnit(storeId: string, data: BoatInventoryUnitInput) {
+  return request<BoatInventoryUnit>(`/stores/${storeId}/boat-inventory`, {
+    method: "POST",
+    body: JSON.stringify(data)
+  });
+}
+
+export async function updateBoatInventoryUnit(storeId: string, unitId: string, data: Partial<BoatInventoryUnitInput>) {
+  return request<BoatInventoryUnit>(`/stores/${storeId}/boat-inventory/${unitId}`, {
+    method: "PUT",
+    body: JSON.stringify(data)
+  });
+}
+
+export async function deleteBoatInventoryUnit(storeId: string, unitId: string) {
+  return request<{ ok: boolean }>(`/stores/${storeId}/boat-inventory/${unitId}`, {
+    method: "DELETE"
+  });
 }
 
 async function request<T>(path: string, init?: RequestInit) {

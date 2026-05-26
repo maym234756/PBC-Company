@@ -12864,3 +12864,77 @@ body.is-desktop-dragging {
   padding: 3px 8px;
   width: 180px;
 }
+
+/* Sprint 9 additions */
+.legacy-boat-inventory-shell,
+.legacy-user-admin-shell,
+.legacy-crm-shell,
+.legacy-fi-products-library,
+.legacy-report-real-panel { color: inherit; height: 100%; overflow: auto; padding: 14px; }
+.legacy-boat-inventory-toolbar,
+.legacy-crm-toolbar { align-items: center; display: flex; gap: 8px; margin-bottom: 10px; }
+.legacy-boat-inventory-toolbar input,
+.legacy-boat-inventory-toolbar select,
+.legacy-boat-inventory-form input,
+.legacy-boat-inventory-form select,
+.legacy-boat-inventory-form textarea,
+.legacy-user-admin-form input,
+.legacy-user-admin-form select,
+.legacy-crm-form input,
+.legacy-crm-form select { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14); border-radius: 7px; color: inherit; font-size: 0.82rem; padding: 6px 8px; }
+.legacy-boat-inventory-toolbar input { flex: 1; min-width: 220px; }
+.legacy-boat-inventory-summary { display: grid; gap: 8px; grid-template-columns: repeat(6, minmax(0, 1fr)); margin-bottom: 10px; }
+.legacy-boat-inventory-card { min-height: 66px; padding: 10px; }
+.legacy-boat-inventory-card span { color: rgba(255,255,255,0.55); font-size: 0.72rem; text-transform: uppercase; }
+.legacy-boat-inventory-card strong { display: block; font-size: 1.05rem; margin-top: 5px; }
+.legacy-boat-inventory-layout { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) 310px; min-height: 320px; }
+.legacy-boat-inventory-table-wrap { border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; overflow: auto; }
+.legacy-boat-inventory-table { border-collapse: collapse; font-size: 0.78rem; width: 100%; }
+.legacy-boat-inventory-table th { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.52); font-size: 0.68rem; letter-spacing: 0.05em; padding: 7px 9px; text-align: left; text-transform: uppercase; }
+.legacy-boat-inventory-table td { border-top: 1px solid rgba(255,255,255,0.06); cursor: pointer; padding: 7px 9px; }
+.legacy-boat-inventory-table tr.is-selected td { background: rgba(229,90,43,0.12); }
+.legacy-boat-inventory-detail { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px; }
+.legacy-boat-inventory-detail h3 { font-size: 1rem; margin: 8px 0 2px; }
+.legacy-boat-inventory-detail p { color: rgba(255,255,255,0.58); font-size: 0.78rem; margin: 0 0 8px; }
+.legacy-boat-inventory-photo-grid { display: grid; gap: 6px; grid-template-columns: repeat(2, 1fr); }
+.legacy-boat-inventory-photo-grid span { align-items: center; aspect-ratio: 1.8; background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03)); border: 1px dashed rgba(255,255,255,0.16); border-radius: 8px; color: rgba(255,255,255,0.5); display: flex; font-size: 0.7rem; justify-content: center; }
+.legacy-boat-inventory-specs { display: grid; gap: 6px; grid-template-columns: repeat(2, 1fr); margin: 10px 0; }
+.legacy-boat-inventory-specs span { color: rgba(255,255,255,0.5); display: grid; font-size: 0.7rem; }
+.legacy-boat-inventory-specs strong { color: rgba(255,255,255,0.88); font-size: 0.82rem; }
+.legacy-boat-inventory-notes { background: rgba(255,255,255,0.04); border-radius: 8px; padding: 8px; }
+.legacy-boat-inventory-actions { display: flex; gap: 8px; }
+.legacy-boat-inventory-form { background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; margin-top: 12px; padding: 12px; }
+.legacy-schema-health-panel { align-items: center; background: rgba(123,204,160,0.08); border: 1px solid rgba(123,204,160,0.24); border-radius: 9px; display: flex; justify-content: space-between; gap: 12px; margin: 10px 0; padding: 10px 12px; }
+.legacy-schema-health-panel span { color: rgba(255,255,255,0.55); display: block; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
+.legacy-schema-health-panel strong { display: block; font-size: 0.9rem; }
+.legacy-schema-health-panel small { color: rgba(255,255,255,0.55); display: block; font-size: 0.72rem; }
+.legacy-user-admin-table-wrap { border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; overflow: auto; }
+.legacy-user-admin-form { background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; margin-top: 12px; padding: 12px; }
+.legacy-crm-pipeline { display: grid; gap: 10px; grid-template-columns: repeat(6, minmax(140px, 1fr)); overflow-x: auto; }
+.legacy-crm-stage { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; min-height: 150px; padding: 8px; }
+.legacy-crm-stage h4 { color: rgba(255,255,255,0.64); font-size: 0.76rem; margin: 0 0 8px; }
+.legacy-crm-card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: inherit; display: grid; gap: 3px; margin-bottom: 6px; padding: 8px; text-align: left; width: 100%; }
+.legacy-crm-card strong { font-size: 0.82rem; }
+.legacy-crm-card span,
+.legacy-crm-card small { color: rgba(255,255,255,0.55); font-size: 0.72rem; }
+.legacy-crm-detail { background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; margin-top: 10px; padding: 10px; }
+.legacy-crm-detail h3 { margin: 0; }
+.legacy-crm-timeline { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.legacy-crm-timeline span { background: rgba(255,255,255,0.06); border-radius: 999px; color: rgba(255,255,255,0.68); font-size: 0.72rem; padding: 4px 8px; }
+.legacy-crm-form { background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; margin-top: 10px; padding: 12px; }
+.legacy-fi-products-library { padding: 16px; }
+.legacy-fi-products-deal { border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 10px; padding-bottom: 10px; }
+.legacy-fi-products-list { display: grid; gap: 6px; }
+.legacy-fi-products-option { align-items: center; background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; display: flex; gap: 8px; padding: 7px; }
+.legacy-fi-products-option.is-selected { border-color: rgba(123,204,160,0.6); box-shadow: inset 3px 0 0 #7bcca0; }
+.legacy-fi-products-option span { display: grid; }
+.legacy-fi-products-option small { color: rgba(255,255,255,0.52); font-size: 0.72rem; }
+.legacy-fi-products-totals { display: flex; gap: 10px; margin-top: 8px; }
+.legacy-fi-products-totals span { background: rgba(255,255,255,0.06); border-radius: 8px; color: rgba(255,255,255,0.6); font-size: 0.75rem; padding: 6px 8px; }
+.legacy-fi-products-totals strong { color: rgba(255,255,255,0.92); margin-left: 4px; }
+.legacy-report-real-panel { padding: 10px 0; }
+@media (max-width: 1100px) {
+  .legacy-boat-inventory-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .legacy-boat-inventory-layout { grid-template-columns: 1fr; }
+  .legacy-crm-pipeline { grid-template-columns: repeat(3, minmax(150px, 1fr)); }
+}

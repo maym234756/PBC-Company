@@ -958,6 +958,20 @@ export const legacyFallbackNavigation: NavigationGroup[] = [
     ]
   },
   {
+    label: "Inventory",
+    items: [
+      {
+        label: "Units",
+        items: [
+          {
+            label: "Boat Stock",
+            items: ["Boat Inventory", "Unit Inventory", "Boats In Stock"]
+          }
+        ]
+      }
+    ]
+  },
+  {
     label: "Sales",
     items: [
       {
@@ -1771,6 +1785,12 @@ export const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
     subtitle: "Fast ordering flow with line visibility and supplier detail",
     tools: ["Delete", "Delete Selected", "Guide", "Purchase Order", "Refresh"]
   },
+  boatInventory: {
+    id: "boatInventory",
+    title: "Boat Inventory",
+    subtitle: "Unit stock, trade-ins, on-order boats, pricing, and merchandising readiness",
+    tools: ["Add Unit", "Edit Unit", "Refresh"]
+  },
   sales: {
     id: "sales",
     title: "Leads, Quotes & Deals",
@@ -1803,7 +1823,7 @@ export const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
   }
 };
 
-export const workspaceOrder: WorkspaceId[] = ["desktop", "service", "parts", "sales", "analytics", "website", "audit", "reports"];
+export const workspaceOrder: WorkspaceId[] = ["desktop", "service", "parts", "boatInventory", "sales", "analytics", "website", "audit", "reports"];
 
 export const quickLaunchButtons: QuickLaunchButton[] = [
   { slot: "1", label: "Desktop", workspaceId: "desktop" },
@@ -1875,6 +1895,9 @@ export function resolveWorkspaceFromMenuItem(groupLabel: string, item: string): 
     "application:favorite website feed": "website",
     "application:favorite audit trail": "audit",
     "parts:parts inventory": "parts",
+    "inventory:boat inventory": "boatInventory",
+    "inventory:unit inventory": "boatInventory",
+    "inventory:boats in stock": "boatInventory",
     "parts:ordering": "parts",
     "parts:receiving": "parts",
     "parts:special orders": "parts",
@@ -1981,6 +2004,7 @@ export function resolveWorkspaceFromMenuItem(groupLabel: string, item: string): 
   const groupFallbackLookup: Record<string, WorkspaceId> = {
     application: "desktop",
     parts: "parts",
+    inventory: "boatInventory",
     service: "service",
     sales: "sales",
     "management activity": "analytics",

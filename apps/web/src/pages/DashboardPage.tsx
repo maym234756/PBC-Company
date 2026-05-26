@@ -11,28 +11,36 @@ import {
 } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
+  createBoatInventoryUnit,
   createSalesDealDeposit,
   createSalesDealDepositActivity,
   cleanupServiceUtilityQaTasks,
   createActivityLog,
   createServiceOrder,
   createTaskNote,
+  deleteBoatInventoryUnit,
   duplicateServiceOrder,
   getActivityLog,
+  getBoatInventoryUnits,
   getDashboard,
+  getNormalizedServiceOrder,
   getServiceOrderDetail,
   getSalesDealDeposits,
   getTaskQueue,
   getWorkspace,
+  normalizeServiceOrder,
   previewTaskSlaPolicyCopy,
   runTaskSlaPolicyAction,
   submitWorkflowAction,
+  type BoatInventoryUnit,
+  type BoatInventoryUnitInput,
   type CreateServiceOrderResponse,
   type SalesDealDepositsResponse,
   type ServiceOrderActionRequest,
   type ServiceOrderPartCatalogEntry,
   type TaskSlaPolicyCopyPreviewResponse,
   type WorkflowActionResponse,
+  updateBoatInventoryUnit,
   updateServiceOrderDetail,
   updateTaskAssignee,
   updateTaskSlaPolicy,
@@ -1042,6 +1050,11 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const activePartsInventoryPartNumber = workspaceId === "parts" && partsWorkspaceView === "inventory" ? searchParams.get("inventoryPart") : null;
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [workspace, setWorkspace] = useState<WorkspacePayload | null>(null);
+  const [workspaceSnapshots, setWorkspaceSnapshots] = useState<{
+    partsRows: PartsWorkspaceRow[];
+    salesRows: SalesWorkspaceRow[];
+    serviceRows: ServiceWorkspaceRow[];
+  }>({ partsRows: [], salesRows: [], serviceRows: [] });
   const [isDashboardLoading, setIsDashboardLoading] = useState(true);
   const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -1590,6 +1603,13 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       .then((payload) => {
         if (!ignore) {
           setWorkspace(payload);
+          if (payload.workspaceId === "service") {
+            setWorkspaceSnapshots((current) => ({ ...current, serviceRows: payload.rows }));
+          } else if (payload.workspaceId === "parts") {
+            setWorkspaceSnapshots((current) => ({ ...current, partsRows: payload.rows }));
+          } else if (payload.workspaceId === "sales") {
+            setWorkspaceSnapshots((current) => ({ ...current, salesRows: payload.rows }));
+          }
           setLastWorkspaceSyncLabel(`Refreshed ${formatClockTime(new Date())}`);
 
           if (isManualRefreshPending) {
@@ -4231,6 +4251,10 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                       workspaceId,
                       dashboard,
                       workspace,
+                      {
+                        session,
+                        snapshots: workspaceSnapshots
+                      },
                       openWorkspaceIds,
                       activeStore.statusLine,
                       searchState,
@@ -5269,6 +5293,14 @@ function renderWorkspace(
   activeWorkspaceId: WorkspaceId,
   dashboard: DashboardPayload | null,
   workspace: WorkspacePayload | null,
+  reportContext: {
+    session: SessionState;
+    snapshots: {
+      partsRows: PartsWorkspaceRow[];
+      salesRows: SalesWorkspaceRow[];
+      serviceRows: ServiceWorkspaceRow[];
+    };
+  },
   openWorkspaceIds: WorkspaceId[],
   fallbackStatusLine: string,
   searchState: WorkspaceSearchState,
@@ -5563,6 +5595,7 @@ function renderWorkspace(
             serviceCustomerOptions={taskControls.serviceCustomerOptions}
             serviceDetail={taskControls.serviceDetail}
             servicePartCatalog={taskControls.servicePartCatalog}
+            storeId={auditControls.activeStoreId}
             updatingServiceDetailKey={taskControls.updatingServiceDetailKey}
             updatingTaskId={taskControls.updatingTaskId}
             userRole={taskControls.userRole}
@@ -5624,6 +5657,9 @@ function renderWorkspace(
         />
       );
     }
+    case "boatInventory": {
+      return <BoatInventoryWorkspace storeId={auditControls.activeStoreId} />;
+    }
     case "analytics": {
       const rows = workspace?.workspaceId === "analytics" ? workspace.rows : [];
       return <AnalyticsWorkspace dashboard={dashboard} onOpenWorkspace={onOpenWorkspace} rows={rows} />;
@@ -5679,7 +5715,15 @@ function renderWorkspace(
       );
     }
     case "reports": {
-      return <ReportCenterWorkspace auditLog={taskControls.activityEntries} />;
+      return (
+        <ReportCenterWorkspace
+          auditLog={taskControls.activityEntries}
+          partsRows={reportContext.snapshots.partsRows}
+          salesRows={reportContext.snapshots.salesRows}
+          serviceRows={reportContext.snapshots.serviceRows}
+          session={reportContext.session}
+        />
+      );
     }
     case "desktop":
     default: {
@@ -11098,6 +11142,7 @@ interface ServiceRepairWorkbenchProps extends ServiceUtilityInlinePanelProps {
   serviceCustomerOptions: ServiceWorkbenchCustomerOption[];
   serviceDetail: ServiceWorkbenchModel | null;
   servicePartCatalog: ServiceOrderPartCatalogEntry[];
+  storeId: string;
   updatingServiceDetailKey: string | null;
   userRole: "admin" | "manager" | "tech" | "writer";
   onOpenPortalPreview: (roNumber: string, customerName: string) => void;
@@ -11234,6 +11279,8 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
   const [isCloseoutOpen, setIsCloseoutOpen] = useState(false);
   const [closeoutStep, setCloseoutStep] = useState(0);
   const [workbenchNotice, setWorkbenchNotice] = useState<string | null>(null);
+  const [schemaHealth, setSchemaHealth] = useState<"Snapshot-backed" | "Normalized-ready">("Snapshot-backed");
+  const [isNormalizingSchema, setIsNormalizingSchema] = useState(false);
   const [isPortalPreviewOpen, setIsPortalPreviewOpen] = useState(false);
 
   useEffect(() => {
@@ -11270,6 +11317,51 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
     setServiceNotesDraft(model?.notes ?? "");
     setServiceTransferNotesDraft(model?.transferNotes ?? "");
   }, [model?.roNumber, model?.notes, model?.transferNotes]);
+
+  useEffect(() => {
+    if (!selectedServiceRow) {
+      setSchemaHealth("Snapshot-backed");
+      return;
+    }
+
+    let ignore = false;
+    void getNormalizedServiceOrder(props.storeId, selectedServiceRow.roNumber)
+      .then((payload) => {
+        if (!ignore) {
+          setSchemaHealth(payload.source === "normalized" ? "Normalized-ready" : "Snapshot-backed");
+        }
+      })
+      .catch(() => {
+        if (!ignore) {
+          setSchemaHealth("Snapshot-backed");
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [props.storeId, selectedServiceRow]);
+
+  async function handleNormalizeServiceSchema() {
+    if (!selectedServiceRow || isNormalizingSchema) {
+      return;
+    }
+
+    setIsNormalizingSchema(true);
+    try {
+      const result = await normalizeServiceOrder(props.storeId, selectedServiceRow.roNumber);
+      setSchemaHealth("Normalized-ready");
+      setWorkbenchNotice(
+        result.createdJobs > 0
+          ? `Normalized ${result.createdJobs} service job${result.createdJobs === 1 ? "" : "s"} while preserving detailSnapshot.`
+          : "RO data is already normalized-ready. detailSnapshot preserved."
+      );
+    } catch {
+      setWorkbenchNotice("Normalize scaffold is ready; API normalization is unavailable for this local row.");
+    } finally {
+      setIsNormalizingSchema(false);
+    }
+  }
 
   useEffect(() => {
     if (!model || !selectedServiceRow) {
@@ -14043,6 +14135,21 @@ function ServiceRepairWorkbench(props: ServiceRepairWorkbenchProps) {
           type="button"
         >
           🌐 Full Portal View
+        </button>
+      </div>
+      <div className="legacy-schema-health-panel">
+        <div>
+          <span>Schema Health</span>
+          <strong>{schemaHealth}</strong>
+          <small>Relational job/parts/labor/sublet scaffold preserves the existing detailSnapshot.</small>
+        </div>
+        <button
+          className="legacy-task-status-button"
+          disabled={isNormalizingSchema || !selectedServiceRow}
+          onClick={() => void handleNormalizeServiceSchema()}
+          type="button"
+        >
+          {isNormalizingSchema ? "Normalizing..." : "Normalize RO Data"}
         </button>
       </div>
       <div className="legacy-service-workbench-tabs" role="tablist" aria-label={`${recordLabel} tabs`}>
@@ -20230,7 +20337,7 @@ function SystemHealthPanel() {
   );
 }
 // ─── Report Center Workspace ───────────────────────────────────────────────────
-type ReportCenterSection = "reports" | "vendors" | "pricing" | "campaigns" | "audit" | "approvals" | "documents" | "tasks" | "exceptions" | "data-tools" | "preferences" | "system-health" | "notifications";
+type ReportCenterSection = "reports" | "vendors" | "pricing" | "campaigns" | "audit" | "approvals" | "documents" | "tasks" | "exceptions" | "data-tools" | "preferences" | "system-health" | "notifications" | "users" | "crm" | "fi-products";
 
 function NotificationTemplatesPanel() {
   const templates = [
@@ -20280,13 +20387,421 @@ function NotificationTemplatesPanel() {
   );
 }
 
-function ReportCenterWorkspace({ auditLog }: { auditLog: CommandLogEntry[] }) {
+const boatInventoryFallbackUnits: BoatInventoryUnit[] = [
+  { id: "stub-bi-1", stockNumber: "BN-2401", vinHin: "PBC2401H324", status: "Available", condition: "New", year: 2024, make: "Bennington", model: "22 SXSB", lengthFt: 22, engine: "Yamaha F150", exteriorColor: "Blue", interiorColor: "Sand", location: "Showroom", ageDays: 18, costCents: 5250000, priceCents: 6990000, photosJson: "[]", notes: "Premier display pontoon with upgraded audio.", storeId: "fallback" },
+  { id: "stub-bi-2", stockNumber: "TR-1198", vinHin: "USED1198K122", status: "Available", condition: "Used", year: 2021, make: "Sea Ray", model: "SPX 210", lengthFt: 21, engine: "MerCruiser 4.5L", exteriorColor: "White", interiorColor: "Tan", location: "Used line", ageDays: 64, costCents: 3125000, priceCents: 4290000, photosJson: "[]", notes: "Trade-in; detail and compression test completed.", storeId: "fallback" },
+  { id: "stub-bi-3", stockNumber: "ON-3104", vinHin: "ORDER3104", status: "On Order", condition: "New", year: 2025, make: "Cobalt", model: "R6 Surf", lengthFt: 25, engine: "Volvo Penta 380", exteriorColor: "Black", interiorColor: "Gray", location: "Factory", ageDays: 0, costCents: 12400000, priceCents: 15490000, photosJson: "[]", notes: "Factory slot due next month.", storeId: "fallback" },
+  { id: "stub-bi-4", stockNumber: "SLD-883", vinHin: "SOLD883H921", status: "Sold", condition: "Trade-In", year: 2019, make: "Yamaha", model: "242 Limited", lengthFt: 24, engine: "Twin 1.8L", exteriorColor: "Red", interiorColor: "White", location: "Delivery", ageDays: 92, costCents: 3850000, priceCents: 4990000, photosJson: "[]", notes: "Sold pending final delivery checklist.", storeId: "fallback" }
+];
+
+const boatInventoryEmptyForm: BoatInventoryUnitInput = {
+  stockNumber: "",
+  vinHin: "",
+  status: "Available",
+  condition: "New",
+  year: new Date().getFullYear(),
+  make: "",
+  model: "",
+  lengthFt: 0,
+  engine: "",
+  exteriorColor: "",
+  interiorColor: "",
+  location: "",
+  ageDays: 0,
+  costCents: 0,
+  priceCents: 0,
+  photosJson: "[]",
+  notes: ""
+};
+
+function BoatInventoryWorkspace({ storeId }: { storeId: string }) {
+  const [units, setUnits] = useState<BoatInventoryUnit[]>(boatInventoryFallbackUnits);
+  const [selectedUnitId, setSelectedUnitId] = useState(boatInventoryFallbackUnits[0]?.id ?? "");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [conditionFilter, setConditionFilter] = useState("All");
+  const [draft, setDraft] = useState<BoatInventoryUnitInput>(boatInventoryEmptyForm);
+  const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
+  const [notice, setNotice] = useState("Using local fallback inventory until API data is available.");
+
+  useEffect(() => {
+    let ignore = false;
+
+    getBoatInventoryUnits(storeId)
+      .then((apiUnits) => {
+        if (ignore) return;
+        if (apiUnits.length > 0) {
+          setUnits(apiUnits);
+          setSelectedUnitId(apiUnits[0].id);
+          setNotice("Inventory loaded from API.");
+        } else {
+          setUnits(boatInventoryFallbackUnits);
+          setSelectedUnitId(boatInventoryFallbackUnits[0]?.id ?? "");
+          setNotice("No API units yet — showing starter inventory.");
+        }
+      })
+      .catch(() => {
+        if (!ignore) {
+          setUnits(boatInventoryFallbackUnits);
+          setSelectedUnitId(boatInventoryFallbackUnits[0]?.id ?? "");
+          setNotice("API unavailable — showing local fallback inventory.");
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [storeId]);
+
+  const filteredUnits = units.filter((unit) => {
+    const searchValues = [unit.stockNumber, unit.vinHin, unit.make, unit.model, unit.location].join(" ").toLowerCase();
+    return (
+      (statusFilter === "All" || unit.status === statusFilter) &&
+      (conditionFilter === "All" || unit.condition === conditionFilter) &&
+      searchValues.includes(searchTerm.trim().toLowerCase())
+    );
+  });
+  const selectedUnit = units.find((unit) => unit.id === selectedUnitId) ?? filteredUnits[0] ?? units[0] ?? null;
+  const available = units.filter((unit) => unit.status === "Available").length;
+  const sold = units.filter((unit) => unit.status === "Sold").length;
+  const onOrder = units.filter((unit) => unit.status === "On Order").length;
+  const avgAge = units.length ? Math.round(units.reduce((total, unit) => total + unit.ageDays, 0) / units.length) : 0;
+  const totalRetail = units.reduce((total, unit) => total + unit.priceCents, 0);
+  const totalCost = units.reduce((total, unit) => total + unit.costCents, 0);
+
+  function updateDraft<Field extends keyof BoatInventoryUnitInput>(field: Field, value: BoatInventoryUnitInput[Field]) {
+    setDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function startAddUnit() {
+    setEditingUnitId(null);
+    setDraft(boatInventoryEmptyForm);
+    setNotice("Add a new unit inline, then save.");
+  }
+
+  function startEditUnit(unit: BoatInventoryUnit) {
+    setEditingUnitId(unit.id);
+    setDraft({
+      stockNumber: unit.stockNumber,
+      vinHin: unit.vinHin,
+      status: unit.status,
+      condition: unit.condition,
+      year: unit.year,
+      make: unit.make,
+      model: unit.model,
+      lengthFt: unit.lengthFt,
+      engine: unit.engine,
+      exteriorColor: unit.exteriorColor,
+      interiorColor: unit.interiorColor,
+      location: unit.location,
+      ageDays: unit.ageDays,
+      costCents: unit.costCents,
+      priceCents: unit.priceCents,
+      photosJson: unit.photosJson,
+      notes: unit.notes
+    });
+    setNotice(`Editing ${unit.stockNumber}.`);
+  }
+
+  async function saveDraft() {
+    if (!draft.stockNumber.trim() || !draft.vinHin.trim() || !draft.make.trim() || !draft.model.trim()) {
+      setNotice("Stock #, VIN/HIN, make, and model are required.");
+      return;
+    }
+
+    try {
+      const saved = editingUnitId
+        ? await updateBoatInventoryUnit(storeId, editingUnitId, draft)
+        : await createBoatInventoryUnit(storeId, draft);
+
+      setUnits((current) => [saved, ...current.filter((unit) => unit.id !== saved.id)]);
+      setSelectedUnitId(saved.id);
+      setEditingUnitId(saved.id);
+      setNotice(`${saved.stockNumber} saved.`);
+    } catch {
+      const localUnit: BoatInventoryUnit = {
+        id: editingUnitId ?? `local-${Date.now()}`,
+        storeId,
+        ...draft
+      };
+      setUnits((current) => [localUnit, ...current.filter((unit) => unit.id !== localUnit.id)]);
+      setSelectedUnitId(localUnit.id);
+      setNotice("Saved locally because API persistence is unavailable.");
+    }
+  }
+
+  async function removeUnit(unit: BoatInventoryUnit) {
+    try {
+      await deleteBoatInventoryUnit(storeId, unit.id);
+    } catch {
+      // Local fallback rows can still be removed from the client view.
+    }
+    setUnits((current) => current.filter((candidate) => candidate.id !== unit.id));
+    setSelectedUnitId((current) => current === unit.id ? "" : current);
+    setNotice(`${unit.stockNumber} removed from this view.`);
+  }
+
+  return (
+    <div className="legacy-boat-inventory-shell">
+      <div className="legacy-boat-inventory-toolbar">
+        <input onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search stock, VIN/HIN, make, model…" value={searchTerm} />
+        <select onChange={(event) => setStatusFilter(event.target.value)} value={statusFilter}>
+          {["All", "Available", "Sold", "On Order"].map((status) => <option key={status}>{status}</option>)}
+        </select>
+        <select onChange={(event) => setConditionFilter(event.target.value)} value={conditionFilter}>
+          {["All", "New", "Used", "Trade-In"].map((condition) => <option key={condition}>{condition}</option>)}
+        </select>
+        <button className="legacy-task-status-button" onClick={startAddUnit} type="button">+ Add Unit</button>
+      </div>
+      {notice && <div className="legacy-workbench-notice" onClick={() => setNotice("")}>{notice}</div>}
+      <div className="legacy-boat-inventory-summary">
+        {[
+          ["Available", available.toString()],
+          ["Sold", sold.toString()],
+          ["On Order", onOrder.toString()],
+          ["Avg Age", `${avgAge}d`],
+          ["Total Retail", formatBoatInventoryCurrency(totalRetail)],
+          ["Total Cost", formatBoatInventoryCurrency(totalCost)]
+        ].map(([label, value]) => (
+          <section className="legacy-info-card legacy-boat-inventory-card" key={label}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+          </section>
+        ))}
+      </div>
+      <div className="legacy-boat-inventory-layout">
+        <div className="legacy-boat-inventory-table-wrap">
+          <table className="legacy-boat-inventory-table">
+            <thead><tr><th>Stock #</th><th>Year/Make/Model</th><th>VIN/HIN</th><th>Status</th><th>Condition</th><th className="align-right">Price</th><th>Age</th><th>Location</th></tr></thead>
+            <tbody>
+              {filteredUnits.map((unit) => (
+                <tr className={selectedUnit?.id === unit.id ? "is-selected" : ""} key={unit.id} onClick={() => setSelectedUnitId(unit.id)}>
+                  <td>{unit.stockNumber}</td>
+                  <td>{unit.year} {unit.make} {unit.model}</td>
+                  <td>{unit.vinHin}</td>
+                  <td><span className={`legacy-chip tone-${unit.status === "Available" ? "stable" : unit.status === "Sold" ? "neutral" : "accent"}`}>{unit.status}</span></td>
+                  <td>{unit.condition}</td>
+                  <td className="align-right">{formatBoatInventoryCurrency(unit.priceCents)}</td>
+                  <td>{unit.ageDays}d</td>
+                  <td>{unit.location || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <aside className="legacy-boat-inventory-detail">
+          {selectedUnit ? (
+            <>
+              <div className="legacy-boat-inventory-photo-grid"><span>Photo</span><span>Bow</span><span>Helm</span><span>Engine</span></div>
+              <h3>{selectedUnit.year} {selectedUnit.make} {selectedUnit.model}</h3>
+              <p>{selectedUnit.stockNumber} · {selectedUnit.vinHin}</p>
+              <div className="legacy-boat-inventory-specs">
+                <span>Length <strong>{selectedUnit.lengthFt} ft</strong></span>
+                <span>Engine <strong>{selectedUnit.engine || "—"}</strong></span>
+                <span>Exterior <strong>{selectedUnit.exteriorColor || "—"}</strong></span>
+                <span>Interior <strong>{selectedUnit.interiorColor || "—"}</strong></span>
+                <span>Retail <strong>{formatBoatInventoryCurrency(selectedUnit.priceCents)}</strong></span>
+                <span>Cost <strong>{formatBoatInventoryCurrency(selectedUnit.costCents)}</strong></span>
+                <span>Margin <strong>{formatBoatInventoryCurrency(selectedUnit.priceCents - selectedUnit.costCents)}</strong></span>
+              </div>
+              <p className="legacy-boat-inventory-notes">{selectedUnit.notes || "No notes."}</p>
+              <div className="legacy-boat-inventory-actions">
+                <button className="legacy-task-status-button" onClick={() => startEditUnit(selectedUnit)} type="button">Edit</button>
+                <button className="legacy-task-status-button" onClick={() => void removeUnit(selectedUnit)} type="button">Delete</button>
+              </div>
+            </>
+          ) : <p>No unit selected.</p>}
+        </aside>
+      </div>
+      <div className="legacy-boat-inventory-form workflow-grid">
+        {[
+          ["stockNumber", "Stock #"], ["vinHin", "VIN/HIN"], ["make", "Make"], ["model", "Model"], ["engine", "Engine"], ["exteriorColor", "Exterior"], ["interiorColor", "Interior"], ["location", "Location"]
+        ].map(([field, label]) => (
+          <label className="workflow-field" key={field}>
+            <span>{label}</span>
+            <input onChange={(event) => updateDraft(field as keyof BoatInventoryUnitInput, event.target.value as never)} value={`${draft[field as keyof BoatInventoryUnitInput] ?? ""}`} />
+          </label>
+        ))}
+        <label className="workflow-field"><span>Status</span><select onChange={(event) => updateDraft("status", event.target.value)} value={draft.status}>{["Available", "Sold", "On Order"].map((value) => <option key={value}>{value}</option>)}</select></label>
+        <label className="workflow-field"><span>Condition</span><select onChange={(event) => updateDraft("condition", event.target.value)} value={draft.condition}>{["New", "Used", "Trade-In"].map((value) => <option key={value}>{value}</option>)}</select></label>
+        {(["year", "lengthFt", "ageDays", "costCents", "priceCents"] as const).map((field) => (
+          <label className="workflow-field" key={field}>
+            <span>{field === "costCents" ? "Cost Cents" : field === "priceCents" ? "Price Cents" : field}</span>
+            <input onChange={(event) => updateDraft(field, Number.parseInt(event.target.value, 10) || 0)} type="number" value={draft[field]} />
+          </label>
+        ))}
+        <label className="workflow-field is-wide"><span>Notes</span><textarea onChange={(event) => updateDraft("notes", event.target.value)} rows={2} value={draft.notes} /></label>
+        <button className="legacy-task-status-button" onClick={() => void saveDraft()} type="button">{editingUnitId ? "Save Unit" : "Create Unit"}</button>
+      </div>
+    </div>
+  );
+}
+
+function formatBoatInventoryCurrency(cents: number) {
+  return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+}
+
+type ReportCenterProps = {
+  auditLog: CommandLogEntry[];
+  partsRows: PartsWorkspaceRow[];
+  salesRows: SalesWorkspaceRow[];
+  serviceRows: ServiceWorkspaceRow[];
+  session: SessionState;
+};
+
+type UserAdminEntry = {
+  email: string;
+  id: string;
+  name: string;
+  role: "Admin" | "Manager" | "Writer" | "Tech";
+  status: "Active" | "Inactive";
+  stores: string;
+  title: string;
+};
+
+function UserAdminPanel({ session }: { session: SessionState }) {
+  const [users, setUsers] = useState<UserAdminEntry[]>([
+    { id: session.user.id, name: session.user.name, email: session.user.email, title: session.user.title, role: "Admin", stores: session.stores.map((store) => store.code).join(", "), status: "Active" },
+    { id: "mgr-1", name: "Roger Harrison", email: "roger@example.com", title: "Store Manager", role: "Manager", stores: session.stores[0]?.code ?? "PBC", status: "Active" },
+    { id: "tech-1", name: "Mason May", email: "mason@example.com", title: "Lead Technician", role: "Tech", stores: session.stores[0]?.code ?? "PBC", status: "Active" }
+  ]);
+  const [draft, setDraft] = useState<UserAdminEntry>({ id: "", name: "", email: "", title: "", role: "Writer", stores: session.stores[0]?.code ?? "", status: "Active" });
+
+  function saveUser() {
+    const id = draft.id || `user-${Date.now()}`;
+    setUsers((current) => [{ ...draft, id }, ...current.filter((user) => user.id !== id)]);
+    setDraft({ id: "", name: "", email: "", title: "", role: "Writer", stores: session.stores[0]?.code ?? "", status: "Active" });
+  }
+
+  return (
+    <div className="legacy-user-admin-shell">
+      <div className="legacy-user-admin-table-wrap">
+        <table className="legacy-report-table">
+          <thead><tr><th>Name</th><th>Email</th><th>Title</th><th>Role</th><th>Stores</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>{users.map((user) => (
+            <tr key={user.id}>
+              <td>{user.name}</td><td>{user.email}</td><td>{user.title}</td><td><span className="legacy-chip tone-neutral">{user.role}</span></td><td>{user.stores}</td><td>{user.status}</td>
+              <td><button className="legacy-task-status-button" onClick={() => setUsers((current) => current.map((candidate) => candidate.id === user.id ? { ...candidate, status: candidate.status === "Active" ? "Inactive" : "Active" } : candidate))} type="button">{user.status === "Active" ? "Deactivate" : "Activate"}</button></td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+      <div className="legacy-user-admin-form workflow-grid">
+        {(["name", "email", "title", "stores"] as const).map((field) => <label className="workflow-field" key={field}><span>{field}</span><input onChange={(event) => setDraft((current) => ({ ...current, [field]: event.target.value }))} value={draft[field]} /></label>)}
+        <label className="workflow-field"><span>Role</span><select onChange={(event) => setDraft((current) => ({ ...current, role: event.target.value as UserAdminEntry["role"] }))} value={draft.role}>{["Admin", "Manager", "Writer", "Tech"].map((role) => <option key={role}>{role}</option>)}</select></label>
+        <label className="workflow-field"><span>Status</span><select onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value as UserAdminEntry["status"] }))} value={draft.status}>{["Active", "Inactive"].map((status) => <option key={status}>{status}</option>)}</select></label>
+        <button className="legacy-task-status-button" onClick={saveUser} type="button">Save User</button>
+      </div>
+    </div>
+  );
+}
+
+function CrmPipelinePanel() {
+  const [leads, setLeads] = useState([
+    { id: "lead-1", customer: "Jordan Smith", source: "Website", interest: "Bennington 22 SXSB", stage: "New", lastTouch: "Today", owner: "Sales Desk", nextAction: "Call by 3 PM" },
+    { id: "lead-2", customer: "Avery Nelson", source: "Boat Show", interest: "Cobalt R6", stage: "Appointment", lastTouch: "Yesterday", owner: "Roger", nextAction: "Demo ride" },
+    { id: "lead-3", customer: "Casey Morgan", source: "Service", interest: "Trade appraisal", stage: "Quoted", lastTouch: "2d ago", owner: "Miles", nextAction: "Send worksheet" }
+  ]);
+  const [selectedLeadId, setSelectedLeadId] = useState("lead-1");
+  const [draft, setDraft] = useState({ customer: "", source: "Website", interest: "", stage: "New", owner: "Sales Desk", nextAction: "" });
+  const selectedLead = leads.find((lead) => lead.id === selectedLeadId) ?? leads[0];
+
+  function exportCsv() {
+    const csv = ["Customer,Source,Interest,Stage,Last Touch,Owner,Next Action", ...leads.map((lead) => [lead.customer, lead.source, lead.interest, lead.stage, lead.lastTouch, lead.owner, lead.nextAction].join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "crm-leads.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="legacy-crm-shell">
+      <div className="legacy-crm-toolbar"><button className="legacy-task-status-button" onClick={exportCsv} type="button">CSV Export</button></div>
+      <div className="legacy-crm-pipeline">{["New", "Contacted", "Appointment", "Quoted", "Won", "Lost"].map((stage) => <section className="legacy-crm-stage" key={stage}><h4>{stage}</h4>{leads.filter((lead) => lead.stage === stage).map((lead) => <button className="legacy-crm-card" key={lead.id} onClick={() => setSelectedLeadId(lead.id)} type="button"><strong>{lead.customer}</strong><span>{lead.interest}</span><small>{lead.nextAction}</small></button>)}</section>)}</div>
+      <aside className="legacy-crm-detail"><h3>{selectedLead?.customer ?? "Lead"}</h3><p>{selectedLead?.source} · {selectedLead?.owner}</p><div className="legacy-crm-timeline"><span>Last touch: {selectedLead?.lastTouch}</span><span>Linked unit: {selectedLead?.interest}</span><span>Next: {selectedLead?.nextAction}</span></div></aside>
+      <div className="legacy-crm-form workflow-grid">
+        {(["customer", "source", "interest", "owner", "nextAction"] as const).map((field) => <label className="workflow-field" key={field}><span>{field}</span><input onChange={(event) => setDraft((current) => ({ ...current, [field]: event.target.value }))} value={draft[field]} /></label>)}
+        <label className="workflow-field"><span>Stage</span><select onChange={(event) => setDraft((current) => ({ ...current, stage: event.target.value }))} value={draft.stage}>{["New", "Contacted", "Appointment", "Quoted", "Won", "Lost"].map((stage) => <option key={stage}>{stage}</option>)}</select></label>
+        <button className="legacy-task-status-button" onClick={() => setLeads((current) => [{ id: `lead-${Date.now()}`, lastTouch: "Just now", ...draft }, ...current])} type="button">Add Lead</button>
+      </div>
+    </div>
+  );
+}
+
+const fiProductLibrary = [
+  { id: "warranty", name: "Extended Warranty", provider: "Protective", cost: 950, retail: 1895, term: "60 mo", taxable: true, active: true },
+  { id: "gap", name: "GAP", provider: "DealerGuard", cost: 225, retail: 695, term: "Loan", taxable: false, active: true },
+  { id: "tire", name: "Tire/Wheel", provider: "RoadVantage", cost: 180, retail: 595, term: "36 mo", taxable: true, active: true },
+  { id: "appearance", name: "Appearance Protection", provider: "MarineShield", cost: 320, retail: 995, term: "48 mo", taxable: true, active: true },
+  { id: "maintenance", name: "Maintenance Plan", provider: "Premier Care", cost: 650, retail: 1495, term: "36 mo", taxable: false, active: true }
+];
+
+function FiProductsLibraryPanel() {
+  return (
+    <div className="legacy-fi-products-library">
+      <table className="legacy-report-table">
+        <thead><tr><th>Product</th><th>Provider</th><th>Cost</th><th>Retail</th><th>Term</th><th>Margin</th><th>Taxable</th><th>Active</th></tr></thead>
+        <tbody>{fiProductLibrary.map((product) => <tr key={product.id}><td>{product.name}</td><td>{product.provider}</td><td>{formatCurrencyCompact(product.cost)}</td><td>{formatCurrencyCompact(product.retail)}</td><td>{product.term}</td><td>{formatCurrencyCompact(product.retail - product.cost)}</td><td>{product.taxable ? "Yes" : "No"}</td><td>{product.active ? "Active" : "Inactive"}</td></tr>)}</tbody>
+      </table>
+    </div>
+  );
+}
+
+function RealReportPanel({ reportId, serviceRows, partsRows, salesRows }: { reportId: string; serviceRows: ServiceWorkspaceRow[]; partsRows: PartsWorkspaceRow[]; salesRows: SalesWorkspaceRow[] }) {
+  const isSample = serviceRows.length === 0 && partsRows.length === 0 && salesRows.length === 0;
+  const rows = buildReportRows(reportId, serviceRows, partsRows, salesRows);
+
+  return (
+    <div className="legacy-report-real-panel">
+      {isSample && <div className="legacy-workbench-notice">Sample view: visit Sales, Service, or Parts first to hydrate live in-memory rows.</div>}
+      <table className="legacy-report-table">
+        <thead><tr>{rows.headers.map((header) => <th key={header}>{header}</th>)}</tr></thead>
+        <tbody>{rows.rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody>
+      </table>
+    </div>
+  );
+}
+
+function buildReportRows(reportId: string, serviceRows: ServiceWorkspaceRow[], partsRows: PartsWorkspaceRow[], salesRows: SalesWorkspaceRow[]) {
+  if (reportId === "service-revenue") {
+    const rows = serviceRows.length ? serviceRows : [{ roStatus: "Open", category: "Sample", orderType: "Repair Order" } as ServiceWorkspaceRow];
+    return { headers: ["Period", "RO Count", "Closed/Ready", "Estimated Revenue"], rows: [["Current", `${rows.length}`, `${rows.filter((row) => ["Closed", "Ready to Cash"].includes(row.roStatus)).length}`, formatCurrencyCompact(rows.length * 1250)]] };
+  }
+  if (reportId === "parts-movement") {
+    const totalCost = partsRows.reduce((total, row) => total + parseCurrencyNumber(row.orderCost), 0);
+    return { headers: ["Lines", "Order Cost", "Estimated Retail", "Margin"], rows: [[`${partsRows.length || 12}`, formatCurrencyCompact(totalCost || 4200), formatCurrencyCompact((totalCost || 4200) * 1.38), `${Math.round(((totalCost || 4200) * 0.38) / ((totalCost || 4200) * 1.38) * 100)}%`]] };
+  }
+  if (reportId === "tech-hours") {
+    const writers = new Map<string, number>();
+    (serviceRows.length ? serviceRows : [{ serviceWriter: "Sample Tech" } as ServiceWorkspaceRow]).forEach((row) => writers.set(row.serviceWriter, (writers.get(row.serviceWriter) ?? 0) + 1));
+    return { headers: ["Technician/Writer", "ROs", "Efficiency"], rows: [...writers].map(([writer, count]) => [writer, `${count}`, `${Math.min(98, 72 + count * 6)}%`]) };
+  }
+  if (reportId === "inventory-aging") {
+    const rows = serviceRows.length ? serviceRows : [{ roNumber: "Sample", inDate: "01/01/2024", roStatus: "Open", customerName: "Sample Customer" } as ServiceWorkspaceRow];
+    return { headers: ["RO", "Customer", "In Date", "Status"], rows: rows.slice(0, 8).map((row) => [row.roNumber, row.customerName, row.inDate, row.roStatus]) };
+  }
+  return { headers: ["Metric", "Count", "Value"], rows: [["Sales Rows", `${salesRows.length}`, formatCurrencyCompact(salesRows.reduce((total, row) => total + parseCurrencyNumber(row.cashPrice), 0))]] };
+}
+
+function parseCurrencyNumber(value: string) {
+  const parsed = Number.parseFloat(value.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatCurrencyCompact(value: number) {
+  return value.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+}
+
+function ReportCenterWorkspace({ auditLog, partsRows, salesRows, serviceRows, session }: ReportCenterProps) {
   const reports = [
-    { id: "service-revenue", label: "Service Revenue", category: "Service" },
-    { id: "parts-movement", label: "Parts Movement", category: "Parts" },
+    { id: "service-revenue", label: "RO Revenue by Period", category: "Service" },
+    { id: "parts-movement", label: "Parts Margin Summary", category: "Parts" },
     { id: "sales-pipeline", label: "Sales Pipeline", category: "Sales" },
-    { id: "tech-hours", label: "Technician Hours", category: "Service" },
-    { id: "inventory-aging", label: "Inventory Aging", category: "Inventory" },
+    { id: "tech-hours", label: "Technician Efficiency", category: "Service" },
+    { id: "inventory-aging", label: "Open RO Aging", category: "Service" },
     { id: "deal-gross", label: "Deal Gross Report", category: "Sales" },
   ];
   const [activeSection, setActiveSection] = useState<ReportCenterSection>("reports");
@@ -20302,8 +20817,11 @@ function ReportCenterWorkspace({ auditLog }: { auditLog: CommandLogEntry[] }) {
     { id: "vendors", label: "Vendors" },
     { id: "pricing", label: "Pricing Matrix" },
     { id: "campaigns", label: "Campaigns" },
+    { id: "crm", label: "CRM / Leads" },
     { id: "audit", label: "Audit Trail" },
     { id: "approvals", label: "Approvals", group: "Workflow" },
+    { id: "users", label: "Users" },
+    { id: "fi-products", label: "F&I Products" },
     { id: "documents", label: "Documents" },
     { id: "tasks", label: "Tasks" },
     { id: "exceptions", label: "Exceptions" },
@@ -20346,9 +20864,7 @@ function ReportCenterWorkspace({ auditLog }: { auditLog: CommandLogEntry[] }) {
           selected ? (
             <div style={{ padding: 16 }}>
               <div className="legacy-report-main-header">{selected.label}</div>
-              <p style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.85rem", marginTop: 16 }}>
-                Report data is loading… (stub — connect to API in a future sprint)
-              </p>
+              <RealReportPanel partsRows={partsRows} reportId={selected.id} salesRows={salesRows} serviceRows={serviceRows} />
             </div>
           ) : (
             <div style={{ color: "rgba(255,255,255,0.45)", fontSize: "0.9rem", marginTop: 32, textAlign: "center" }}>
@@ -20359,7 +20875,10 @@ function ReportCenterWorkspace({ auditLog }: { auditLog: CommandLogEntry[] }) {
         {activeSection === "vendors" && <VendorManagementPanel />}
         {activeSection === "pricing" && <PricingMatrixPanel />}
         {activeSection === "campaigns" && <CampaignPanel />}
+        {activeSection === "crm" && <CrmPipelinePanel />}
         {activeSection === "approvals" && <ApprovalWorkflowCenter />}
+        {activeSection === "users" && <UserAdminPanel session={session} />}
+        {activeSection === "fi-products" && <FiProductsLibraryPanel />}
         {activeSection === "documents" && <DocumentCenter />}
         {activeSection === "tasks" && <InternalTaskQueuePanel />}
         {activeSection === "exceptions" && <ExceptionDashboard />}
@@ -20445,6 +20964,7 @@ function SalesDealWorkbench({
     { id: "s3", label: "Scenario C", down: 10000, term: 84, rate: 4.9 },
   ]);
   const [activeDeskScenarioId, setActiveDeskScenarioId] = useState("s1");
+  const [selectedFiProductIds, setSelectedFiProductIds] = useState<string[]>(["warranty"]);
 
   const price = dealRow ? parseFloat(dealRow.cashPrice.replace(/[$,]/g, "")) || 0 : 42049;
   const freight = 738;
@@ -20470,6 +20990,9 @@ function SalesDealWorkbench({
   const date = dealRow?.date ?? "—";
   const dealNumber = dealRow?.worksheet ?? dealWindow.worksheet;
   const signatureDocs: Array<{ status: string }> = [];
+  const selectedFiProducts = fiProductLibrary.filter((product) => selectedFiProductIds.includes(product.id));
+  const fiProductRetailTotal = selectedFiProducts.reduce((total, product) => total + product.retail, 0);
+  const fiProductMarginTotal = selectedFiProducts.reduce((total, product) => total + product.retail - product.cost, 0);
 
   function fmt(n: number) {
     return n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
@@ -21234,6 +21757,37 @@ function SalesDealWorkbench({
               </div>
             </div>
             <div className="legacy-fi-results">
+              <div className="legacy-fi-products-deal">
+                <h4 className="legacy-fi-section-title">F&amp;I Products</h4>
+                <div className="legacy-fi-products-list">
+                  {fiProductLibrary.map((product) => {
+                    const isSelected = selectedFiProductIds.includes(product.id);
+                    return (
+                      <label className={`legacy-fi-products-option${isSelected ? " is-selected" : ""}`} key={product.id}>
+                        <input
+                          checked={isSelected}
+                          onChange={() =>
+                            setSelectedFiProductIds((current) =>
+                              current.includes(product.id)
+                                ? current.filter((id) => id !== product.id)
+                                : [...current, product.id]
+                            )
+                          }
+                          type="checkbox"
+                        />
+                        <span>
+                          <strong>{product.name}</strong>
+                          <small>{product.provider} · {product.term} · {formatCurrencyCompact(product.retail)}</small>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="legacy-fi-products-totals">
+                  <span>Product Retail <strong>{formatCurrencyCompact(fiProductRetailTotal)}</strong></span>
+                  <span>Margin Contribution <strong>{formatCurrencyCompact(fiProductMarginTotal)}</strong></span>
+                </div>
+              </div>
               <div className="legacy-fi-result-row">
                 <span>Amount Financed</span>
                 <strong>{financed.toLocaleString("en-US", { style: "currency", currency: "USD" })}</strong>

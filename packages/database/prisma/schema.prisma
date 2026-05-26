@@ -33,6 +33,8 @@ model User {
   updatedTasks  StoreTask[] @relation("StoreTaskUpdatedBy")
   taskComments  StoreTaskComment[] @relation("StoreTaskCommentAuthor")
   latestCommentedTasks StoreTask[] @relation("StoreTaskLatestCommentBy")
+  role          String      @default("writer")
+  status        String      @default("Active")
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 }
@@ -58,6 +60,7 @@ model Store {
   vendors         Vendor[]
   pricingRules    PricingRule[]
   approvalRequests ApprovalRequest[]
+  boatInventoryUnits BoatInventoryUnit[]
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 }
@@ -191,11 +194,104 @@ model ServiceOrder {
   tone          String
   storeId       String
   store         Store    @relation(fields: [storeId], references: [id])
+  serviceJobs   ServiceJob[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   @@unique([storeId, roNumber])
   @@index([storeId, inDate])
+}
+
+model BoatInventoryUnit {
+  id              String   @id @default(cuid())
+  stockNumber     String
+  vinHin          String
+  status          String   @default("Available")
+  condition       String   @default("New")
+  year            Int
+  make            String
+  model           String
+  lengthFt        Int      @default(0)
+  engine          String
+  exteriorColor   String
+  interiorColor   String
+  location        String
+  ageDays         Int      @default(0)
+  costCents       Int      @default(0)
+  priceCents      Int      @default(0)
+  photosJson      String   @default("[]")
+  notes           String   @default("")
+  storeId         String
+  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([storeId, stockNumber])
+  @@index([storeId, status, condition])
+  @@index([storeId, vinHin])
+}
+
+model ServiceJob {
+  id              String   @id @default(cuid())
+  jobNumber       Int      @default(1)
+  title           String
+  status          String   @default("Open")
+  technician      String   @default("")
+  unitLabel       String   @default("")
+  description     String   @default("")
+  recommendations String   @default("")
+  resolution      String   @default("")
+  serviceOrderId  String
+  serviceOrder    ServiceOrder @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
+  parts           ServiceJobPart[]
+  laborLines      ServiceLaborLine[]
+  subletLines     ServiceSubletLine[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([serviceOrderId, status])
+}
+
+model ServiceJobPart {
+  id             String   @id @default(cuid())
+  partNumber     String
+  description    String
+  quantity       Int      @default(1)
+  unitPriceCents Int      @default(0)
+  serviceJobId   String
+  serviceJob     ServiceJob @relation(fields: [serviceJobId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([serviceJobId, partNumber])
+}
+
+model ServiceLaborLine {
+  id           String   @id @default(cuid())
+  technician   String
+  hours        Int      @default(0)
+  rateCents    Int      @default(0)
+  status       String   @default("Open")
+  serviceJobId String
+  serviceJob   ServiceJob @relation(fields: [serviceJobId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([serviceJobId, status])
+}
+
+model ServiceSubletLine {
+  id           String   @id @default(cuid())
+  vendor       String
+  description  String
+  amountCents  Int      @default(0)
+  status       String   @default("Open")
+  serviceJobId String
+  serviceJob   ServiceJob @relation(fields: [serviceJobId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([serviceJobId, status])
 }
 
 model PartsOrderLine {

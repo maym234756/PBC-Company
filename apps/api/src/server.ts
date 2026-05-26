@@ -22,6 +22,9 @@ const port = Number(process.env.PORT ?? 4000);
 const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
 const allowedOrigins = new Set([webOrigin, "http://localhost:5173", "http://127.0.0.1:5173"]);
 const localHostnames = new Set(["localhost", "127.0.0.1", "[::1]"]);
+const authLoginAttempts = new Map<string, { count: number; resetAt: number }>();
+const authLoginWindowMs = 60_000;
+const authLoginMaxAttempts = 60;
 
 function isAllowedOrigin(origin: string) {
   if (allowedOrigins.has(origin)) {
@@ -981,6 +984,20 @@ const navigation = [
     ]
   },
   {
+    label: "Inventory",
+    items: [
+      {
+        label: "Units",
+        items: [
+          {
+            label: "Boat Stock",
+            items: ["Boat Inventory", "Unit Inventory", "Boats In Stock"]
+          }
+        ]
+      }
+    ]
+  },
+  {
     label: "Sales",
     items: [
       {
@@ -1805,7 +1822,7 @@ const loginSchema = z.object({
   password: z.string().trim().min(1)
 });
 
-const workspaceSchema = z.enum(["desktop", "sales", "service", "parts", "analytics", "website", "audit"]);
+const workspaceSchema = z.enum(["desktop", "sales", "service", "parts", "analytics", "website", "audit", "reports", "boatInventory"]);
 const serviceOrderTypeSchema = z.enum(["Estimate", "Repair Order"]);
 const activityToneSchema = z.enum(["stable", "accent", "attention", "neutral"]);
 const taskStatusSchema = z.enum(["Queued", "In Progress", "Blocked", "Done"]);
@@ -2105,6 +2122,56 @@ const salesDealDepositActivityActionSchema = z.object({
   mode: z.enum(["sendReceipt", "reprint"])
 });
 
+const vendorMutationSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  contact: z.string().trim().max(120).default(""),
+  phone: z.string().trim().max(80).default(""),
+  email: z.string().trim().max(160).default(""),
+  terms: z.string().trim().max(80).default(""),
+  leadDays: z.number().finite().int().min(0).max(365),
+  notes: z.string().trim().max(1000).default("")
+});
+const pricingRuleMutationSchema = z.object({
+  category: z.string().trim().min(1).max(120),
+  costMin: z.number().finite().min(0),
+  costMax: z.number().finite().min(0),
+  markupPct: z.number().finite().min(0).max(1000),
+  retailMethod: z.string().trim().min(1).max(120),
+  minMarginPct: z.number().finite().min(0).max(100)
+});
+const approvalCreateSchema = z.object({
+  type: z.string().trim().min(1).max(120),
+  reference: z.string().trim().min(1).max(120),
+  requestedBy: z.string().trim().min(1).max(120),
+  impact: z.string().trim().max(200).default(""),
+  reason: z.string().trim().max(1000).default("")
+});
+const approvalUpdateSchema = z.object({
+  status: z.string().trim().min(1).max(80),
+  reviewedBy: z.string().trim().max(120).optional(),
+  reviewNote: z.string().trim().max(1000).optional()
+});
+const boatInventoryUnitMutationSchema = z.object({
+  stockNumber: z.string().trim().min(1).max(80),
+  vinHin: z.string().trim().min(1).max(120),
+  status: z.string().trim().min(1).max(80).default("Available"),
+  condition: z.string().trim().min(1).max(80).default("New"),
+  year: z.number().finite().int().min(1900).max(2200),
+  make: z.string().trim().min(1).max(120),
+  model: z.string().trim().min(1).max(160),
+  lengthFt: z.number().finite().int().min(0).max(300).default(0),
+  engine: z.string().trim().max(160).default(""),
+  exteriorColor: z.string().trim().max(120).default(""),
+  interiorColor: z.string().trim().max(120).default(""),
+  location: z.string().trim().max(120).default(""),
+  ageDays: z.number().finite().int().min(0).max(10000).default(0),
+  costCents: z.number().finite().int().min(0).default(0),
+  priceCents: z.number().finite().int().min(0).default(0),
+  photosJson: z.string().trim().max(10000).default("[]"),
+  notes: z.string().trim().max(2000).default("")
+});
+const boatInventoryUnitUpdateSchema = boatInventoryUnitMutationSchema.partial();
+
 const defaultTaskSlaPolicyCatalog = [
   { workspaceId: "desktop", action: "Designer", slaMinutes: 90 },
   { workspaceId: "desktop", action: "Store Status", slaMinutes: 60 },
@@ -2148,6 +2215,13 @@ app.use(
   })
 );
 app.use(express.json());
+app.use((request, response, next) => {
+  response.setHeader("X-Content-Type-Options", "nosniff");
+  response.setHeader("X-Frame-Options", "SAMEORIGIN");
+  response.setHeader("Referrer-Policy", "same-origin");
+  next();
+});
+app.use("/api/auth/login", authLoginRateLimit);
 
 app.get("/api/health", (_request, response) => {
   response.json({ status: "ok" });
@@ -2216,18 +2290,17 @@ app.post("/api/auth/logout", (_request, response) => {
 });
 
 app.get("/api/auth/me", async (request, response) => {
-  const authHeader = request.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) {
+  const userId = getBearerUserId(request);
+  if (!userId) {
     response.status(401).json({ error: "Unauthorized" });
     return;
   }
-  const userId = authHeader.slice(7);
   const user = await prisma.user.findUnique({ where: { id: userId }, include: { dealerGroup: true } });
   if (!user) {
     response.status(401).json({ error: "User not found" });
     return;
   }
-  response.json({ id: user.id, name: user.name, email: user.email, role: "writer" });
+  response.json({ id: user.id, name: user.name, email: user.email, role: user.role, status: user.status });
 });
 
 app.get("/api/stores/:storeId/dashboard", async (request, response) => {
@@ -2424,6 +2497,12 @@ app.get("/api/stores/:storeId/workspaces/:workspaceId", async (request, response
         orderBy: {
           createdAt: "desc"
         }
+      },
+      boatInventoryUnits: {
+        orderBy: [
+          { status: "asc" },
+          { stockNumber: "asc" }
+        ]
       }
     }
   });
@@ -2434,6 +2513,24 @@ app.get("/api/stores/:storeId/workspaces/:workspaceId", async (request, response
   }
 
   const workspaceId = parsed.data;
+
+  if (workspaceId === "boatInventory") {
+    response.json({
+      workspaceId,
+      title: "Boat Inventory",
+      rows: store.boatInventoryUnits
+    });
+    return;
+  }
+
+  if (workspaceId === "reports") {
+    response.json({
+      workspaceId,
+      title: "Report Center",
+      rows: []
+    });
+    return;
+  }
 
   if (workspaceId === "sales") {
     response.json({
@@ -2824,6 +2921,137 @@ app.post("/api/stores/:storeId/sales-deals/:dealId/deposits/:depositId/activity"
     }
 
     response.status(500).json({ message: "Unable to record sales deal deposit activity." });
+  }
+});
+
+app.get("/api/stores/:storeId/service-orders/:roNumber/normalized", async (request, response) => {
+  try {
+    const order = await prisma.serviceOrder.findFirst({
+      where: {
+        storeId: request.params.storeId,
+        roNumber: request.params.roNumber
+      },
+      include: {
+        serviceJobs: {
+          include: {
+            parts: true,
+            laborLines: true,
+            subletLines: true
+          },
+          orderBy: {
+            jobNumber: "asc"
+          }
+        }
+      }
+    });
+
+    if (!order) {
+      response.status(404).json({ message: "Service order not found." });
+      return;
+    }
+
+    if (order.serviceJobs.length > 0) {
+      response.json({ source: "normalized", serviceOrder: order });
+      return;
+    }
+
+    const snapshot = parseServiceDetailSnapshot(order.detailSnapshot);
+    response.json({
+      source: "snapshot",
+      serviceOrder: {
+        ...order,
+        serviceJobs: buildSnapshotServiceJobs(snapshot)
+      }
+    });
+  } catch (error) {
+    if (error instanceof RequestError) {
+      response.status(error.statusCode).json({ message: error.message });
+      return;
+    }
+
+    response.status(500).json({ message: "Unable to load normalized service order data." });
+  }
+});
+
+app.post("/api/stores/:storeId/service-orders/:roNumber/normalize", async (request, response) => {
+  try {
+    const order = await prisma.serviceOrder.findFirst({
+      where: {
+        storeId: request.params.storeId,
+        roNumber: request.params.roNumber
+      },
+      include: {
+        serviceJobs: {
+          select: {
+            id: true
+          }
+        }
+      }
+    });
+
+    if (!order) {
+      response.status(404).json({ message: "Service order not found." });
+      return;
+    }
+
+    if (order.serviceJobs.length > 0) {
+      response.json({ ok: true, createdJobs: 0 });
+      return;
+    }
+
+    const snapshot = parseServiceDetailSnapshot(order.detailSnapshot);
+    const snapshotJobs = buildSnapshotServiceJobs(snapshot);
+
+    await prisma.$transaction(
+      snapshotJobs.map((job) =>
+        prisma.serviceJob.create({
+          data: {
+            jobNumber: job.jobNumber,
+            title: job.title,
+            status: job.status,
+            technician: job.technician,
+            unitLabel: job.unitLabel,
+            description: job.description,
+            recommendations: job.recommendations,
+            resolution: job.resolution,
+            serviceOrderId: order.id,
+            parts: {
+              create: job.parts.map((part) => ({
+                partNumber: part.partNumber,
+                description: part.description,
+                quantity: part.quantity,
+                unitPriceCents: part.unitPriceCents
+              }))
+            },
+            laborLines: {
+              create: job.laborLines.map((line) => ({
+                technician: line.technician,
+                hours: line.hours,
+                rateCents: line.rateCents,
+                status: line.status
+              }))
+            },
+            subletLines: {
+              create: job.subletLines.map((line) => ({
+                vendor: line.vendor,
+                description: line.description,
+                amountCents: line.amountCents,
+                status: line.status
+              }))
+            }
+          }
+        })
+      )
+    );
+
+    response.json({ ok: true, createdJobs: snapshotJobs.length });
+  } catch (error) {
+    if (error instanceof RequestError) {
+      response.status(error.statusCode).json({ message: error.message });
+      return;
+    }
+
+    response.status(500).json({ message: "Unable to normalize service order data." });
   }
 });
 
@@ -4114,23 +4342,39 @@ app.get("/api/stores/:storeId/vendors", async (request, response) => {
 });
 
 app.post("/api/stores/:storeId/vendors", async (request, response) => {
+  if (!(await ensureOptionalBearerActor(request, response))) return;
   const { storeId } = request.params as { storeId: string };
-  const body = request.body as { name: string; contact: string; phone: string; email: string; terms: string; leadDays: number; notes: string };
-  const vendor = await prisma.vendor.create({ data: { ...body, storeId } });
-  response.json(vendor);
+  const parsed = vendorMutationSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter valid vendor details including a finite lead day value." });
+    return;
+  }
+  const vendor = await prisma.vendor.create({ data: { ...parsed.data, storeId } });
+  response.status(201).json(vendor);
 });
 
 app.put("/api/stores/:storeId/vendors/:vendorId", async (request, response) => {
-  const { vendorId } = request.params as { storeId: string; vendorId: string };
-  const body = request.body as Partial<{ name: string; contact: string; phone: string; email: string; terms: string; leadDays: number; notes: string }>;
-  const vendor = await prisma.vendor.update({ where: { id: vendorId }, data: body });
+  if (!(await ensureOptionalBearerActor(request, response))) return;
+  const { storeId, vendorId } = request.params as { storeId: string; vendorId: string };
+  const parsed = vendorMutationSchema.partial().safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter valid vendor details including a finite lead day value." });
+    return;
+  }
+  const existing = await prisma.vendor.findFirst({ where: { id: vendorId, storeId } });
+  if (!existing) {
+    response.status(404).json({ message: "Vendor not found." });
+    return;
+  }
+  const vendor = await prisma.vendor.update({ where: { id: vendorId }, data: parsed.data });
   response.json(vendor);
 });
 
 app.delete("/api/stores/:storeId/vendors/:vendorId", async (request, response) => {
-  const { vendorId } = request.params as { storeId: string; vendorId: string };
-  await prisma.vendor.delete({ where: { id: vendorId } });
-  response.json({ ok: true });
+  if (!(await ensureOptionalBearerActor(request, response))) return;
+  const { storeId, vendorId } = request.params as { storeId: string; vendorId: string };
+  const deleted = await prisma.vendor.deleteMany({ where: { id: vendorId, storeId } });
+  response.json({ ok: deleted.count > 0 });
 });
 
 // Pricing Rules CRUD
@@ -4141,23 +4385,45 @@ app.get("/api/stores/:storeId/pricing-rules", async (request, response) => {
 });
 
 app.post("/api/stores/:storeId/pricing-rules", async (request, response) => {
+  if (!(await ensureOptionalBearerActor(request, response))) return;
   const { storeId } = request.params as { storeId: string };
-  const body = request.body as { category: string; costMin: number; costMax: number; markupPct: number; retailMethod: string; minMarginPct: number };
-  const rule = await prisma.pricingRule.create({ data: { ...body, storeId } });
-  response.json(rule);
+  const parsed = pricingRuleMutationSchema.safeParse(request.body);
+  if (!parsed.success || parsed.data.costMax < parsed.data.costMin) {
+    response.status(400).json({ message: "Enter valid finite pricing rule amounts and percentages." });
+    return;
+  }
+  const rule = await prisma.pricingRule.create({ data: { ...parsed.data, storeId } });
+  response.status(201).json(rule);
 });
 
 app.put("/api/stores/:storeId/pricing-rules/:ruleId", async (request, response) => {
-  const { ruleId } = request.params as { storeId: string; ruleId: string };
-  const body = request.body as Partial<{ category: string; costMin: number; costMax: number; markupPct: number; retailMethod: string; minMarginPct: number }>;
-  const rule = await prisma.pricingRule.update({ where: { id: ruleId }, data: body });
+  if (!(await ensureOptionalBearerActor(request, response))) return;
+  const { storeId, ruleId } = request.params as { storeId: string; ruleId: string };
+  const parsed = pricingRuleMutationSchema.partial().safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter valid finite pricing rule amounts and percentages." });
+    return;
+  }
+  const current = await prisma.pricingRule.findFirst({ where: { id: ruleId, storeId } });
+  if (!current) {
+    response.status(404).json({ message: "Pricing rule not found." });
+    return;
+  }
+  const nextMin = parsed.data.costMin ?? current.costMin;
+  const nextMax = parsed.data.costMax ?? current.costMax;
+  if (nextMax < nextMin) {
+    response.status(400).json({ message: "Cost max must be greater than or equal to cost min." });
+    return;
+  }
+  const rule = await prisma.pricingRule.update({ where: { id: ruleId }, data: parsed.data });
   response.json(rule);
 });
 
 app.delete("/api/stores/:storeId/pricing-rules/:ruleId", async (request, response) => {
-  const { ruleId } = request.params as { storeId: string; ruleId: string };
-  await prisma.pricingRule.delete({ where: { id: ruleId } });
-  response.json({ ok: true });
+  if (!(await ensureOptionalBearerActor(request, response))) return;
+  const { storeId, ruleId } = request.params as { storeId: string; ruleId: string };
+  const deleted = await prisma.pricingRule.deleteMany({ where: { id: ruleId, storeId } });
+  response.json({ ok: deleted.count > 0 });
 });
 
 // Approval Requests CRUD
@@ -4168,18 +4434,230 @@ app.get("/api/stores/:storeId/approvals", async (request, response) => {
 });
 
 app.post("/api/stores/:storeId/approvals", async (request, response) => {
+  if (!(await ensureOptionalBearerActor(request, response))) return;
   const { storeId } = request.params as { storeId: string };
-  const body = request.body as { type: string; reference: string; requestedBy: string; impact: string; reason: string };
-  const approval = await prisma.approvalRequest.create({ data: { ...body, storeId, status: "Pending" } });
-  response.json(approval);
+  const parsed = approvalCreateSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter valid approval request details." });
+    return;
+  }
+  const approval = await prisma.approvalRequest.create({ data: { ...parsed.data, storeId, status: "Pending" } });
+  response.status(201).json(approval);
 });
 
 app.put("/api/stores/:storeId/approvals/:approvalId", async (request, response) => {
-  const { approvalId } = request.params as { storeId: string; approvalId: string };
-  const body = request.body as { status: string; reviewedBy?: string; reviewNote?: string };
-  const approval = await prisma.approvalRequest.update({ where: { id: approvalId }, data: body });
+  if (!(await ensureOptionalBearerActor(request, response))) return;
+  const { storeId, approvalId } = request.params as { storeId: string; approvalId: string };
+  const parsed = approvalUpdateSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter valid approval review details." });
+    return;
+  }
+  const existing = await prisma.approvalRequest.findFirst({ where: { id: approvalId, storeId } });
+  if (!existing) {
+    response.status(404).json({ message: "Approval request not found." });
+    return;
+  }
+  const approval = await prisma.approvalRequest.update({ where: { id: approvalId }, data: parsed.data });
   response.json(approval);
 });
+
+// Boat Inventory CRUD
+app.get("/api/stores/:storeId/boat-inventory", async (request, response) => {
+  const { storeId } = request.params as { storeId: string };
+  const units = await prisma.boatInventoryUnit.findMany({
+    where: { storeId },
+    orderBy: [{ status: "asc" }, { stockNumber: "asc" }]
+  });
+  response.json(units);
+});
+
+app.post("/api/stores/:storeId/boat-inventory", async (request, response) => {
+  if (!(await ensureOptionalBearerActor(request, response))) return;
+  const { storeId } = request.params as { storeId: string };
+  const parsed = boatInventoryUnitMutationSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter valid boat inventory details and finite cost/price values." });
+    return;
+  }
+  const unit = await prisma.boatInventoryUnit.create({ data: { ...parsed.data, storeId } });
+  response.status(201).json(unit);
+});
+
+app.put("/api/stores/:storeId/boat-inventory/:unitId", async (request, response) => {
+  if (!(await ensureOptionalBearerActor(request, response))) return;
+  const { storeId, unitId } = request.params as { storeId: string; unitId: string };
+  const parsed = boatInventoryUnitUpdateSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter valid boat inventory details and finite cost/price values." });
+    return;
+  }
+  const existing = await prisma.boatInventoryUnit.findFirst({ where: { id: unitId, storeId } });
+  if (!existing) {
+    response.status(404).json({ message: "Boat inventory unit not found." });
+    return;
+  }
+  const unit = await prisma.boatInventoryUnit.update({ where: { id: unitId }, data: parsed.data });
+  response.json(unit);
+});
+
+app.delete("/api/stores/:storeId/boat-inventory/:unitId", async (request, response) => {
+  if (!(await ensureOptionalBearerActor(request, response))) return;
+  const { storeId, unitId } = request.params as { storeId: string; unitId: string };
+  const deleted = await prisma.boatInventoryUnit.deleteMany({ where: { id: unitId, storeId } });
+  response.json({ ok: deleted.count > 0 });
+});
+
+function getBearerUserId(request: express.Request) {
+  const authHeader = request.headers.authorization;
+
+  if (!authHeader?.startsWith("Bearer ")) {
+    return null;
+  }
+
+  const token = authHeader.slice(7).trim();
+  return token || null;
+}
+
+function authLoginRateLimit(request: express.Request, response: express.Response, next: express.NextFunction) {
+  const now = Date.now();
+  const key = request.ip ?? "local";
+  const current = authLoginAttempts.get(key);
+  const nextEntry = !current || current.resetAt <= now
+    ? { count: 1, resetAt: now + authLoginWindowMs }
+    : { count: current.count + 1, resetAt: current.resetAt };
+
+  authLoginAttempts.set(key, nextEntry);
+
+  if (nextEntry.count > authLoginMaxAttempts) {
+    response.status(429).json({ message: "Too many login attempts. Please wait briefly and try again." });
+    return;
+  }
+
+  next();
+}
+
+async function ensureOptionalBearerActor(request: express.Request, response: express.Response) {
+  const userId = getBearerUserId(request);
+
+  if (!userId) {
+    return true;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: {
+      id: userId
+    },
+    select: {
+      id: true,
+      status: true
+    }
+  });
+
+  if (!user) {
+    response.status(401).json({ message: "Bearer user not found." });
+    return false;
+  }
+
+  if (user.status !== "Active") {
+    response.status(403).json({ message: "Bearer user is not active." });
+    return false;
+  }
+
+  return true;
+}
+
+function parseServiceDetailSnapshot(detailSnapshot: string | null) {
+  if (!detailSnapshot) {
+    return { jobs: [] };
+  }
+
+  try {
+    const parsed = JSON.parse(detailSnapshot) as { jobs?: unknown[] };
+    return {
+      ...parsed,
+      jobs: Array.isArray(parsed.jobs) ? parsed.jobs : []
+    };
+  } catch {
+    throw new RequestError(400, "Service order detail snapshot contains invalid JSON.");
+  }
+}
+
+function buildSnapshotServiceJobs(snapshot: { jobs: unknown[] }) {
+  return snapshot.jobs.map((entry, index) => {
+    const job = toRecord(entry);
+
+    return {
+      jobNumber: index + 1,
+      title: readString(job, "title") || `Job ${index + 1}`,
+      status: readString(job, "status") || "Open",
+      technician: readString(job, "technician"),
+      unitLabel: readString(job, "unitLabel"),
+      description: readString(job, "description"),
+      recommendations: readString(job, "recommendations"),
+      resolution: readString(job, "resolution"),
+      parts: readArray(job.parts).map((partEntry) => {
+        const part = toRecord(partEntry);
+        return {
+          partNumber: readString(part, "partNumber") || "UNKNOWN",
+          description: readString(part, "description"),
+          quantity: Math.max(1, Math.round(readNumber(part, "quantity")) || 1),
+          unitPriceCents: toCents(readNumber(part, "price"))
+        };
+      }),
+      laborLines: readArray(job.laborLines).map((lineEntry) => {
+        const line = toRecord(lineEntry);
+        return {
+          technician: readString(line, "technician") || readString(job, "technician") || "Unassigned",
+          hours: Math.max(0, Math.round(readNumber(line, "quantity"))),
+          rateCents: toCents(readNumber(line, "rate")),
+          status: readString(line, "closedDate") ? "Closed" : "Open"
+        };
+      }),
+      subletLines: readArray(job.subletLines).map((lineEntry) => {
+        const line = toRecord(lineEntry);
+        return {
+          vendor: readString(line, "vendor") || "Sublet",
+          description: readString(line, "description"),
+          amountCents: toCents(readNumber(line, "price")),
+          status: readString(line, "date") ? "Closed" : "Open"
+        };
+      })
+    };
+  });
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function readArray(value: unknown) {
+  return Array.isArray(value) ? value : [];
+}
+
+function readString(source: Record<string, unknown>, key: string) {
+  const value = source[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function readNumber(source: Record<string, unknown>, key: string) {
+  const value = source[key];
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value.replace(/[^0-9.-]/g, ""));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+}
+
+function toCents(value: number) {
+  return Math.max(0, Math.round(value * 100));
+}
 
 function formatMinutesAgo(date: Date) {
   const elapsedMinutes = Math.max(1, Math.round((Date.now() - date.getTime()) / 60_000));
@@ -4728,6 +5206,26 @@ function mapServiceOrderMutation(
       return {
         mode: mutation.mode,
         invoiceStatus: mutation.invoiceStatus
+      };
+    case "updateJobStatus":
+      return {
+        mode: mutation.mode,
+        jobId: mutation.jobId,
+        status: mutation.status
+      };
+    case "requestSignature":
+      return {
+        mode: mutation.mode,
+        docType: mutation.docType,
+        recipient: mutation.recipient,
+        message: mutation.message
+      };
+    case "recordPayment":
+      return {
+        mode: mutation.mode,
+        method: mutation.method,
+        amount: mutation.amount,
+        reference: mutation.reference
       };
   }
 }

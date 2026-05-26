@@ -293,9 +293,9 @@ export type ServiceOrderDetailMutation =
       unitLabel: string;
       description: string;
       technician: string;
-      jobCode: string;
-      recommendations: string;
-      resolution: string;
+      jobCode?: string;
+      recommendations?: string;
+      resolution?: string;
     }
   | {
       mode: "updateJob";
