@@ -664,6 +664,55 @@ const partsOrderLines = [
   }
 ];
 
+const roSeeds = [
+  { roNumber: "RO-10001", orderType: "Repair Order", customerName: "James Whitfield", stockNumber: "STK-2024-001", model: "Sea Ray 320 Sundancer", serviceWriter: "T. Morrison", roStatus: "In Progress", category: "Engine", maker: "Mercury", note: "Customer reported rough idle at low RPM", tone: "attention" },
+  { roNumber: "RO-10002", orderType: "Repair Order", customerName: "Linda Bouchard", stockNumber: "STK-2023-088", model: "Boston Whaler 330 Outrage", serviceWriter: "T. Morrison", roStatus: "Waiting Parts", category: "Electrical", maker: "Yamaha", note: "Depth finder intermittent failure", tone: "neutral" },
+  { roNumber: "RO-10003", orderType: "Estimate", customerName: "Kevin Marsh", stockNumber: "STK-2022-044", model: "Grady-White Canyon 271", serviceWriter: "S. Reyes", roStatus: "Open", category: "Hull", maker: "Suzuki", note: "Gel coat repair port side", tone: "neutral" },
+  { roNumber: "RO-10004", orderType: "Repair Order", customerName: "Patricia Dunne", stockNumber: "STK-2021-012", model: "Chaparral 287 SSX", serviceWriter: "S. Reyes", roStatus: "Tech Complete", category: "Winterization", maker: "MerCruiser", note: "Annual winterization package", tone: "stable" },
+  { roNumber: "RO-10005", orderType: "Repair Order", customerName: "Robert Sanchez", stockNumber: "STK-2024-055", model: "Malibu Wakesetter 24 MXZ", serviceWriter: "J. Park", roStatus: "Closed", category: "Upholstery", maker: "Indmar", note: "Seat repair starboard side lounge", tone: "stable" },
+  { roNumber: "RO-10006", orderType: "Repair Order", customerName: "Carol Hutchins", stockNumber: "STK-2023-071", model: "Lund 208 Adventure Sport", serviceWriter: "J. Park", roStatus: "Invoice Ready", category: "Trailer", maker: "Evinrude", note: "Trailer bearing replacement + lights", tone: "accent" }
+];
+
+const partsSeeds = [
+  { partNumber: "8M0123456", secondaryNumber: "", description: "Impeller Kit — Mercury 4-stroke 115hp", supplier: "Mercury Marine", category: "Engine Parts", orderType: "Special Order", quantity: 2, orderCost: 4800, source: "Purchase Order", tone: "accent" },
+  { partNumber: "5033362", secondaryNumber: "5033362-1", description: "Fuel Pump Assembly — Yamaha F150", supplier: "Yamaha Marine", category: "Engine Parts", orderType: "Warranty", quantity: 1, orderCost: 18900, source: "Warranty Order", tone: "neutral" },
+  { partNumber: "BW-8832100", secondaryNumber: "", description: "Boston Whaler Helm Console Bezel", supplier: "Brunswick Parts", category: "Helm & Steering", orderType: "Stock", quantity: 3, orderCost: 22500, source: "Stock Order", tone: "stable" },
+  { partNumber: "MC-47-16154", secondaryNumber: "47161541", description: "MerCruiser Thermostat Kit", supplier: "Mercury Marine", category: "Cooling System", orderType: "Stock", quantity: 12, orderCost: 1200, source: "Stock Order", tone: "stable" },
+  { partNumber: "YAM-6G1-13586", secondaryNumber: "", description: "Yamaha Water Pump Repair Kit", supplier: "Yamaha Marine", category: "Cooling System", orderType: "Special Order", quantity: 4, orderCost: 2850, source: "Purchase Order", tone: "accent" },
+  { partNumber: "SZ-17400-93J00", secondaryNumber: "", description: "Suzuki DF 150 Lower Unit Gasket", supplier: "Suzuki Marine", category: "Lower Unit", orderType: "Stock", quantity: 6, orderCost: 3150, source: "Stock Order", tone: "stable" },
+  { partNumber: "HJ-3855406T01", secondaryNumber: "3855406T02", description: "MerCruiser Exhaust Manifold 454", supplier: "Mercury Marine", category: "Exhaust", orderType: "Special Order", quantity: 1, orderCost: 52000, source: "Purchase Order", tone: "attention" },
+  { partNumber: "SEA-6LZ-W0078", secondaryNumber: "", description: "Seachoice Bilge Pump 1500 GPH", supplier: "Seachoice Products", category: "Bilge & Pumps", orderType: "Stock", quantity: 8, orderCost: 5200, source: "Stock Order", tone: "stable" }
+];
+
+const dealSeeds = [
+  { worksheet: "WKS-23001", stockNumber: "STK-NEW-2025-001", make: "Sea Ray", model: "320 Sundancer", cashPrice: 12895000, stage: "Finance", customerName: "Michael Torres", modelYear: 2025, vin: "SERV9109M25B", tone: "accent" },
+  { worksheet: "WKS-23002", stockNumber: "STK-NEW-2025-002", make: "Boston Whaler", model: "330 Outrage", cashPrice: 19500000, stage: "Desk", customerName: "Amanda Jensen", modelYear: 2025, vin: "BW9330M25A", tone: "neutral" },
+  { worksheet: "WKS-23003", stockNumber: "STK-USED-2023-001", make: "Grady-White", model: "Canyon 271", cashPrice: 8750000, stage: "Closed", customerName: "Sarah Lee", modelYear: 2023, vin: "GRGV2710M23C", tone: "stable" },
+  { worksheet: "WKS-23004", stockNumber: "STK-NEW-2025-003", make: "Malibu", model: "Wakesetter 24 MXZ", cashPrice: 11200000, stage: "Lead", customerName: "David Walsh", modelYear: 2025, vin: "MBU2410M25A", tone: "neutral" }
+];
+
+const boatInventorySeeds = [
+  { stockNumber: "STK-NEW-2025-001", vinHin: "SERV9109M25B", status: "Available", condition: "New", year: 2025, make: "Sea Ray", model: "320 Sundancer", lengthFt: 32, engine: "Twin MerCruiser 350 MAG", exteriorColor: "White/Blue", interiorColor: "Gray", location: "Showroom A", costCents: 9800000, priceCents: 12895000, notes: "Flagship model. Bimini top included." },
+  { stockNumber: "STK-NEW-2025-002", vinHin: "BW9330M25A", status: "Available", condition: "New", year: 2025, make: "Boston Whaler", model: "330 Outrage", lengthFt: 33, engine: "Triple Yamaha F300", exteriorColor: "White", interiorColor: "Navy", location: "Showroom B", costCents: 15200000, priceCents: 19500000, notes: "Top-of-line sport fishing. Full T-top." },
+  { stockNumber: "STK-USED-2023-001", vinHin: "GRGV2710M23C", status: "Available", condition: "Used", year: 2023, make: "Grady-White", model: "Canyon 271", lengthFt: 27, engine: "Twin Yamaha F200", exteriorColor: "White/Red", interiorColor: "White", location: "Lot C Row 2", costCents: 7100000, priceCents: 8750000, notes: "One owner. Low hours. Recent service." },
+  { stockNumber: "STK-TRADE-2022-001", vinHin: "SMK1862M22A", status: "Available", condition: "Trade-In", year: 2022, make: "Smoker Craft", model: "Angler 182", lengthFt: 18, engine: "Mercury 115 4-Stroke", exteriorColor: "Gray/White", interiorColor: "Black", location: "Lot D Row 1", costCents: 2200000, priceCents: 2800000, notes: "Trade-in. Minor gel coat repair needed." },
+  { stockNumber: "STK-NEW-2025-003", vinHin: "MBU2410M25A", status: "On Order", condition: "New", year: 2025, make: "Malibu", model: "Wakesetter 24 MXZ", lengthFt: 24, engine: "Indmar 6.2L Monsoon 450hp", exteriorColor: "Black/Gold", interiorColor: "Black", location: "On Order — ETA 30 days", costCents: 8800000, priceCents: 11200000, notes: "Customer deposit received. WKS-23004." }
+];
+
+const vendorSeeds = [
+  { name: "Mercury Marine Parts", contact: "John Wells", phone: "800-555-0191", email: "jwells@mercurymarine.com", terms: "Net 30", leadDays: 5, notes: "Primary engine parts supplier" },
+  { name: "Sea Ray Distribution", contact: "Lisa Park", phone: "800-555-0284", email: "lpark@searay.com", terms: "Net 15", leadDays: 7, notes: "Hull and deck components" },
+  { name: "West Marine Wholesale", contact: "Tom Rivera", phone: "800-555-0372", email: "trivera@westmarine.com", terms: "COD", leadDays: 2, notes: "Accessories and hardware" },
+  { name: "BRP Marine Parts", contact: "Sarah Chen", phone: "800-555-0445", email: "schen@brp.com", terms: "Net 30", leadDays: 10, notes: "Evinrude/Can-Am parts" }
+];
+
+const pricingRuleSeeds = [
+  { category: "Engine Parts", costMin: 0, costMax: 5000, markupPct: 40, retailMethod: "Cost + Markup", minMarginPct: 25 },
+  { category: "Engine Parts", costMin: 5000, costMax: 20000, markupPct: 32, retailMethod: "Cost + Markup", minMarginPct: 22 },
+  { category: "Accessories", costMin: 0, costMax: 10000, markupPct: 50, retailMethod: "Cost + Markup", minMarginPct: 30 },
+  { category: "OEM Hull Parts", costMin: 0, costMax: 999999, markupPct: 20, retailMethod: "MSRP", minMarginPct: 15 }
+];
+
 async function seed() {
   const groupIds = new Map<string, string>();
 
@@ -955,6 +1004,176 @@ async function seed() {
         orderCost: record.orderCost,
         source: record.source,
         tone: record.tone
+      }
+    });
+  }
+
+  const firstStoreId = storeIds.get("PBC-SRQ") ?? "";
+
+  for (const record of roSeeds) {
+    await prisma.serviceOrder.upsert({
+      where: { storeId_roNumber: { storeId: firstStoreId, roNumber: record.roNumber } },
+      update: {
+        orderType: record.orderType,
+        customerName: record.customerName,
+        stockNumber: record.stockNumber,
+        model: record.model,
+        serviceWriter: record.serviceWriter,
+        roStatus: record.roStatus,
+        category: record.category,
+        maker: record.maker,
+        note: record.note,
+        tone: record.tone
+      },
+      create: {
+        storeId: firstStoreId,
+        inDate: new Date(),
+        roNumber: record.roNumber,
+        orderType: record.orderType,
+        customerName: record.customerName,
+        stockNumber: record.stockNumber,
+        model: record.model,
+        serviceWriter: record.serviceWriter,
+        roStatus: record.roStatus,
+        category: record.category,
+        maker: record.maker,
+        note: record.note,
+        detailSnapshot: null,
+        tone: record.tone
+      }
+    });
+  }
+
+  for (const record of partsSeeds) {
+    await prisma.partsOrderLine.upsert({
+      where: { storeId_partNumber_source: { storeId: firstStoreId, partNumber: record.partNumber, source: record.source } },
+      update: {
+        secondaryNumber: record.secondaryNumber,
+        description: record.description,
+        supplier: record.supplier,
+        category: record.category,
+        orderType: record.orderType,
+        quantity: record.quantity,
+        orderCost: record.orderCost,
+        tone: record.tone
+      },
+      create: {
+        storeId: firstStoreId,
+        partNumber: record.partNumber,
+        secondaryNumber: record.secondaryNumber,
+        description: record.description,
+        supplier: record.supplier,
+        category: record.category,
+        orderType: record.orderType,
+        quantity: record.quantity,
+        orderCost: record.orderCost,
+        source: record.source,
+        tone: record.tone
+      }
+    });
+  }
+
+  for (const record of dealSeeds) {
+    await prisma.salesDeal.upsert({
+      where: { storeId_worksheet: { storeId: firstStoreId, worksheet: record.worksheet } },
+      update: {
+        stockNumber: record.stockNumber,
+        make: record.make,
+        model: record.model,
+        cashPrice: record.cashPrice,
+        stage: record.stage,
+        customerName: record.customerName,
+        modelYear: record.modelYear,
+        vin: record.vin,
+        tone: record.tone
+      },
+      create: {
+        storeId: firstStoreId,
+        openedAt: new Date(),
+        worksheet: record.worksheet,
+        stockNumber: record.stockNumber,
+        make: record.make,
+        model: record.model,
+        cashPrice: record.cashPrice,
+        stage: record.stage,
+        customerName: record.customerName,
+        modelYear: record.modelYear,
+        vin: record.vin,
+        tone: record.tone
+      }
+    });
+  }
+
+  for (const record of boatInventorySeeds) {
+    await prisma.boatInventoryUnit.upsert({
+      where: { storeId_stockNumber: { storeId: firstStoreId, stockNumber: record.stockNumber } },
+      update: {
+        vinHin: record.vinHin,
+        status: record.status,
+        condition: record.condition,
+        year: record.year,
+        make: record.make,
+        model: record.model,
+        lengthFt: record.lengthFt,
+        engine: record.engine,
+        exteriorColor: record.exteriorColor,
+        interiorColor: record.interiorColor,
+        location: record.location,
+        costCents: record.costCents,
+        priceCents: record.priceCents,
+        notes: record.notes
+      },
+      create: {
+        storeId: firstStoreId,
+        stockNumber: record.stockNumber,
+        vinHin: record.vinHin,
+        status: record.status,
+        condition: record.condition,
+        year: record.year,
+        make: record.make,
+        model: record.model,
+        lengthFt: record.lengthFt,
+        engine: record.engine,
+        exteriorColor: record.exteriorColor,
+        interiorColor: record.interiorColor,
+        location: record.location,
+        ageDays: 0,
+        costCents: record.costCents,
+        priceCents: record.priceCents,
+        photosJson: "[]",
+        notes: record.notes
+      }
+    });
+  }
+
+  for (const record of vendorSeeds) {
+    const existing = await prisma.vendor.findFirst({ where: { storeId: firstStoreId, name: record.name } });
+    if (!existing) {
+      await prisma.vendor.create({
+        data: {
+          storeId: firstStoreId,
+          name: record.name,
+          contact: record.contact,
+          phone: record.phone,
+          email: record.email,
+          terms: record.terms,
+          leadDays: record.leadDays,
+          notes: record.notes
+        }
+      });
+    }
+  }
+
+  for (const record of pricingRuleSeeds) {
+    await prisma.pricingRule.create({
+      data: {
+        storeId: firstStoreId,
+        category: record.category,
+        costMin: record.costMin,
+        costMax: record.costMax,
+        markupPct: record.markupPct,
+        retailMethod: record.retailMethod,
+        minMarginPct: record.minMarginPct
       }
     });
   }

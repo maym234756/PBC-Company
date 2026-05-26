@@ -310,6 +310,8 @@ export interface WebsiteWorkspaceRow {
   lastSyncLabel: string;
 }
 
+export type WebsiteWorkspaceView = "feed" | "customSettings";
+
 export type WorkspacePayload =
   | {
       workspaceId: "desktop";

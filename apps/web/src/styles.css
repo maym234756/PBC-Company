@@ -12377,6 +12377,10 @@ body.is-desktop-dragging {
   .legacy-info-card { background: #fff !important; border: 1px solid #ccc !important; box-shadow: none !important; }
   .legacy-chip { border: 1px solid #999 !important; }
   .legacy-service-tab-screen { page-break-before: avoid; }
+  .legacy-invoice-print-area { color: #000 !important; }
+  .legacy-invoice-print-area .legacy-chip { border: 1px solid #999 !important; color: #333 !important; background: transparent !important; }
+  .legacy-closeout-wizard { display: none !important; }
+  .legacy-payment-panel { display: none !important; }
 }
 
 /* ─── Feature 9: Responsive Breakpoints ─────────────────────────────── */
@@ -12955,3 +12959,10 @@ body.is-desktop-dragging {
 .legacy-global-search-api-results { border-top: 1px solid rgba(255,255,255,0.08); margin-top: 8px; padding-top: 8px; }
 .legacy-global-search-section-label { color: rgba(255,255,255,0.4); font-size: 0.72rem; margin-bottom: 4px; text-transform: uppercase; }
 .legacy-global-search-api-row { color: rgba(255,255,255,0.7); font-size: 0.82rem; padding: 2px 0; }
+
+.legacy-invoice-print-area { }
+.legacy-parts-po-panel { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; margin-top: 10px; padding: 12px; }
+.legacy-parts-po-header { align-items: center; display: flex; font-size: 0.83rem; font-weight: 700; gap: 8px; justify-content: space-between; margin-bottom: 10px; }
+.legacy-parts-po-table { border-collapse: collapse; font-size: 0.78rem; width: 100%; }
+.legacy-parts-po-table th { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.45); font-size: 0.7rem; font-weight: 700; padding: 5px 8px; text-align: left; text-transform: uppercase; }
+.legacy-parts-po-table td { border-top: 1px solid rgba(255,255,255,0.06); padding: 5px 8px; }
