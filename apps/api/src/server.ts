@@ -1449,6 +1449,8 @@ const navigation = [
   {
     label: "General Ledger",
     items: [
+      "Chart of Accounts",
+      "Profit & Loss",
       {
         label: "Financial Views",
         items: [

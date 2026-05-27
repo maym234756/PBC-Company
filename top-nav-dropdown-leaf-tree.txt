@@ -1,0 +1,868 @@
+PBC Marine Cloud - Top Nav Dropdown Leaf Tree Scaffold
+Source: apps\web\src\lightspeedReference.ts -> legacyFallbackNavigation + resolveWorkspaceFromMenuItem
+Top nav groups: 10
+Dropdown leaves: 451
+Explicit page-assigned leaves: 160
+Default page-assigned leaves: 288
+Action leaves with no page: 3
+Unassigned leaves: 0
+
+Legend:
+- Branch folders end with /
+- [PAGE: Name] = leaf has an explicit page/workspace assignment
+- [DEFAULT PAGE: Name] = leaf routes through the top-nav group default page/workspace
+- [ACTION: Name - no page] = command behavior, not a page route
+- [NO PAGE ASSIGNED] = no resolver page/action found
+
+Application/
+|-- View/
+|   |-- Workspace Surface/
+|   |   |-- Desktop Shell/
+|   |   |   |-- Desktop [PAGE: Desktop]
+|   |   |   `-- Open Windows [DEFAULT PAGE: Desktop]
+|   |   `-- Command Center/
+|   |       |-- Command Search [DEFAULT PAGE: Desktop]
+|   |       `-- Workspace Overview [DEFAULT PAGE: Desktop]
+|   |-- Operator Rails/
+|   |   |-- Productivity Rails/
+|   |   |   |-- Activity Snapshot [DEFAULT PAGE: Desktop]
+|   |   |   `-- Task Queue Monitor [DEFAULT PAGE: Desktop]
+|   |   `-- Inbox & Search/
+|   |       |-- Notification Center [DEFAULT PAGE: Desktop]
+|   |       `-- Search Results [DEFAULT PAGE: Desktop]
+|   `-- Store Scope/
+|       `-- Store Pulse/
+|           |-- Store Status Board [DEFAULT PAGE: Desktop]
+|           `-- Operator Status Board [DEFAULT PAGE: Executive Board]
+|-- Recent Documents/
+|   |-- Sales Documents/
+|   |   |-- Desk Files/
+|   |   |   |-- Sales Deal Jackets [DEFAULT PAGE: Desktop]
+|   |   |   `-- Pending Quotes [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |   `-- Delivery Files/
+|   |       `-- Delivery Packets [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |-- Service Documents/
+|   |   |-- Repair Intake/
+|   |   |   |-- Repair Orders [DEFAULT PAGE: Desktop]
+|   |   |   `-- Estimate Worksheets [PAGE: Estimates & Repair Orders]
+|   |   `-- Warranty Files/
+|   |       `-- Warranty Packets [DEFAULT PAGE: Estimates & Repair Orders]
+|   |-- Parts Documents/
+|   |   |-- Counter Files/
+|   |   |   |-- Parts Purchase Orders [DEFAULT PAGE: Desktop]
+|   |   |   `-- Special Order Slips [DEFAULT PAGE: Parts Ordering]
+|   |   `-- Receiving Controls/
+|   |       `-- Receiving Exceptions [DEFAULT PAGE: Parts Ordering]
+|   `-- Control Documents/
+|       `-- Operational Controls/
+|           |-- Audit Notes [DEFAULT PAGE: Desktop]
+|           |-- Exception Logs [DEFAULT PAGE: Audit Trail]
+|           `-- Workflow Checklists [DEFAULT PAGE: Audit Trail]
+|-- Recent Reports/
+|   |-- Executive Reports/
+|   |   |-- Leadership Pulse/
+|   |   |   |-- Executive Snapshot [DEFAULT PAGE: Desktop]
+|   |   |   `-- Cash Pulse [DEFAULT PAGE: Executive Board]
+|   |   `-- Store Scorecards/
+|   |       `-- Store Scorecard [DEFAULT PAGE: Executive Board]
+|   |-- Sales Reports/
+|   |   `-- Desk Metrics/
+|   |       |-- Sales Velocity [DEFAULT PAGE: Desktop]
+|   |       |-- Lead Source Mix [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |       `-- Desk Productivity [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |-- Service Reports/
+|   |   |-- Service Lane/
+|   |   |   |-- Service Promise Board [DEFAULT PAGE: Desktop]
+|   |   |   `-- Technician Load [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   `-- Risk Watch/
+|   |       `-- Comeback Watch [DEFAULT PAGE: Estimates & Repair Orders]
+|   `-- Parts Reports/
+|       |-- Parts Metrics/
+|       |   |-- Parts Fill Rate [DEFAULT PAGE: Desktop]
+|       |   `-- Vendor Performance [DEFAULT PAGE: Parts Ordering]
+|       `-- Aging Risk/
+|           `-- Obsolescence Watch [DEFAULT PAGE: Parts Ordering]
+|-- Workspace Tools/
+|   |-- Window Control/
+|   |   |-- Window Layout/
+|   |   |   |-- Pinned Windows [DEFAULT PAGE: Desktop]
+|   |   |   `-- Window Layout Presets [DEFAULT PAGE: Desktop]
+|   |   `-- Reset Actions/
+|   |       `-- Workspace Reset [DEFAULT PAGE: Desktop]
+|   |-- Alerts & Notices/
+|   |   |-- Operator Inbox/
+|   |   |   |-- Notifications [DEFAULT PAGE: Desktop]
+|   |   |   `-- Follow-Up Prompts [DEFAULT PAGE: Desktop]
+|   |   `-- Exception Review/
+|   |       `-- Exception Inbox [DEFAULT PAGE: Audit Trail]
+|   |-- Store Operations/
+|   |   `-- Store Operations Board/
+|   |       |-- Store Summary [DEFAULT PAGE: Desktop]
+|   |       |-- Store Roster [DEFAULT PAGE: Desktop]
+|   |       `-- Shift Notes [DEFAULT PAGE: Desktop]
+|   `-- Setup/
+|       |-- Personal Setup/
+|       |   |-- Preferences [DEFAULT PAGE: Desktop]
+|       |   `-- Personal Shortcuts [DEFAULT PAGE: Desktop]
+|       `-- Launch Setup/
+|           `-- Quick Launch Setup [DEFAULT PAGE: Desktop]
+|-- Favorites/
+|   |-- My Workspaces/
+|   |   `-- Pinned Workspaces/
+|   |       |-- Favorite Desktop [PAGE: Desktop]
+|   |       |-- Favorite Service Board [PAGE: Estimates & Repair Orders]
+|   |       |-- Favorite Parts Board [PAGE: Parts Ordering]
+|   |       `-- Favorite Sales Board [PAGE: Leads, Quotes & Deals]
+|   `-- My Dashboards/
+|       `-- Pinned Dashboards/
+|           |-- Favorite Executive Board [PAGE: Executive Board]
+|           |-- Favorite Website Feed [PAGE: Website Feed]
+|           `-- Favorite Audit Trail [PAGE: Audit Trail]
+|-- Switch Store [ACTION: Store Selector - no page]
+|-- Lock Screen [DEFAULT PAGE: Desktop]
+|-- Logout [ACTION: Sign Out - no page]
+`-- Exit [ACTION: Sign Out - no page]
+
+Parts/
+|-- Inventory Control/
+|   |-- Stock Visibility/
+|   |   |-- Lookup Tools/
+|   |   |   |-- Parts Inventory [PAGE: Parts Ordering]
+|   |   |   `-- Part Number Lookup [DEFAULT PAGE: Parts Ordering]
+|   |   `-- Cross-Reference Search/
+|   |       |-- Secondary Number Lookup [DEFAULT PAGE: Parts Ordering]
+|   |       `-- Description Search [DEFAULT PAGE: Parts Ordering]
+|   |-- Inventory Accuracy/
+|   |   |-- Count Verification/
+|   |   |   |-- Cycle Counts [DEFAULT PAGE: Parts Ordering]
+|   |   |   `-- Bin Location Review [DEFAULT PAGE: Parts Ordering]
+|   |   `-- Adjustment Control/
+|   |       |-- On-Hand Adjustments [DEFAULT PAGE: Parts Ordering]
+|   |       `-- Stock Status Review [DEFAULT PAGE: Parts Ordering]
+|   `-- Pricing & Availability/
+|       |-- Pricing Review/
+|       |   |-- Price Matrix Review [DEFAULT PAGE: Parts Ordering]
+|       |   `-- Stocking Class Review [DEFAULT PAGE: Parts Ordering]
+|       `-- Availability Watch/
+|           |-- Availability Watch [DEFAULT PAGE: Parts Ordering]
+|           `-- Substitute Parts [DEFAULT PAGE: Parts Ordering]
+|-- Purchasing/
+|   |-- Replenishment/
+|   |   |-- Daily Ordering/
+|   |   |   |-- Ordering [DEFAULT PAGE: Parts Ordering]
+|   |   |   `-- Purchase Order Queue [DEFAULT PAGE: Parts Ordering]
+|   |   `-- Urgent Movement/
+|   |       |-- Emergency Buy [DEFAULT PAGE: Parts Ordering]
+|   |       `-- Transfer Requests [DEFAULT PAGE: Parts Ordering]
+|   |-- Special Procurement/
+|   |   |-- Customer Orders/
+|   |   |   |-- Special Orders [DEFAULT PAGE: Parts Ordering]
+|   |   |   `-- Backorder Review [DEFAULT PAGE: Parts Ordering]
+|   |   `-- Direct Fulfillment/
+|   |       |-- Drop Ship Requests [DEFAULT PAGE: Parts Ordering]
+|   |       `-- Supplier Follow-Up [DEFAULT PAGE: Parts Ordering]
+|   `-- Vendor Management/
+|       |-- Supplier Coverage/
+|       |   |-- Preferred Vendor Matrix [DEFAULT PAGE: Parts Ordering]
+|       |   `-- Supplier Scorecards [DEFAULT PAGE: Parts Ordering]
+|       `-- Lead Time & Claims/
+|           |-- Vendor Lead Times [DEFAULT PAGE: Parts Ordering]
+|           `-- Open Vendor Claims [DEFAULT PAGE: Parts Ordering]
+|-- Receiving & Returns/
+|   |-- Dock Flow/
+|   |   |-- Receiving Queue/
+|   |   |   |-- Receiving [DEFAULT PAGE: Parts Ordering]
+|   |   |   `-- Receipt Match Queue [DEFAULT PAGE: Parts Ordering]
+|   |   `-- Dock Exceptions/
+|   |       |-- Vendor Discrepancies [DEFAULT PAGE: Parts Ordering]
+|   |       `-- Core Tracking [DEFAULT PAGE: Parts Ordering]
+|   |-- Returns/
+|   |   |-- Vendor Returns/
+|   |   |   |-- Vendor Returns [DEFAULT PAGE: Parts Ordering]
+|   |   |   `-- Warranty Returns [DEFAULT PAGE: Parts Ordering]
+|   |   `-- Authorizations/
+|   |       |-- Return Authorizations [DEFAULT PAGE: Parts Ordering]
+|   |       `-- Damaged Goods Hold [DEFAULT PAGE: Parts Ordering]
+|   `-- Exception Control/
+|       |-- Receiving Audit/
+|       |   |-- Packing Slip Variances [DEFAULT PAGE: Parts Ordering]
+|       |   `-- Receipt Audit Trail [DEFAULT PAGE: Parts Ordering]
+|       `-- Core Follow-Up/
+|           |-- Missing Core Follow-Up [DEFAULT PAGE: Parts Ordering]
+|           `-- Freight Damage Review [DEFAULT PAGE: Parts Ordering]
+|-- Counter & Tickets/
+|   |-- Customer Counter/
+|   |   |-- Counter Entry/
+|   |   |   |-- Cashiering [DEFAULT PAGE: Parts Ordering]
+|   |   |   `-- Counter Sale Entry [DEFAULT PAGE: Parts Ordering]
+|   |   `-- Pickup & Quotes/
+|   |       |-- Will Call Queue [DEFAULT PAGE: Parts Ordering]
+|   |       `-- Quote Builder [DEFAULT PAGE: Parts Ordering]
+|   |-- Service Support/
+|   |   |-- Technician Support/
+|   |   |   |-- Technician Parts Requests [DEFAULT PAGE: Parts Ordering]
+|   |   |   `-- Open Pick Tickets [DEFAULT PAGE: Parts Ordering]
+|   |   `-- Install Staging/
+|   |       |-- Install Prep Queue [DEFAULT PAGE: Parts Ordering]
+|   |       `-- Service Parts Staging [DEFAULT PAGE: Parts Ordering]
+|   `-- Ticket Controls/
+|       |-- Held Tickets/
+|       |   |-- Hold Tickets [DEFAULT PAGE: Parts Ordering]
+|       |   `-- Pending Invoice Review [DEFAULT PAGE: Parts Ordering]
+|       `-- Closeout & Refunds/
+|           |-- Counter Closeout [DEFAULT PAGE: Parts Ordering]
+|           `-- Refund Approvals [DEFAULT PAGE: Parts Ordering]
+|-- Lists & Reporting/
+|   |-- Operational Lists/
+|   |   |-- Printed Lists/
+|   |   |   |-- Lists [DEFAULT PAGE: Parts Ordering]
+|   |   |   |-- Bin Labels [DEFAULT PAGE: Parts Ordering]
+|   |   |   `-- Cycle Count Sheets [DEFAULT PAGE: Parts Ordering]
+|   |   `-- Update Queue/
+|   |       `-- Price Update Queue [DEFAULT PAGE: Parts Ordering]
+|   |-- Performance Reports/
+|   |   |-- Performance Pack/
+|   |   |   |-- Reports [DEFAULT PAGE: Parts Ordering]
+|   |   |   |-- Fill Rate Summary [DEFAULT PAGE: Parts Ordering]
+|   |   |   `-- Lost Sales Report [DEFAULT PAGE: Parts Ordering]
+|   |   `-- Obsolescence & Custom/
+|   |       |-- Obsolescence Report [DEFAULT PAGE: Parts Ordering]
+|   |       `-- Custom Reports [DEFAULT PAGE: Parts Ordering]
+|   |-- Financial Reports/
+|   |   |-- Margin Review/
+|   |   |   |-- Gross Margin Detail [DEFAULT PAGE: Parts Ordering]
+|   |   |   `-- Counter Closeout Summary [DEFAULT PAGE: Parts Ordering]
+|   |   `-- Returns & Spend/
+|   |       |-- Return Activity Report [DEFAULT PAGE: Parts Ordering]
+|   |       `-- Vendor Spend Analysis [DEFAULT PAGE: Parts Ordering]
+|   `-- Scheduled Output/
+|       |-- Report Sets/
+|       |   |-- Saved Report Sets [DEFAULT PAGE: Parts Ordering]
+|       |   `-- Scheduled Report Runs [DEFAULT PAGE: Parts Ordering]
+|       `-- Delivery History/
+|           |-- Report Delivery Queue [DEFAULT PAGE: Parts Ordering]
+|           `-- Export History [DEFAULT PAGE: Parts Ordering]
+|-- Administration & Setup/
+|   |-- Catalog Maintenance/
+|   |   |-- Catalog Updates/
+|   |   |   |-- Vendor Catalog Sync [DEFAULT PAGE: Parts Ordering]
+|   |   |   `-- Supersession Review [DEFAULT PAGE: Parts Ordering]
+|   |   `-- Assemblies/
+|   |       |-- Kit Assemblies [DEFAULT PAGE: Parts Ordering]
+|   |       `-- Accessory Bundles [DEFAULT PAGE: Parts Ordering]
+|   |-- Security & Policy/
+|   |   |-- Permission Controls/
+|   |   |   |-- Counter Permissions [DEFAULT PAGE: Parts Ordering]
+|   |   |   `-- Approval Limits [DEFAULT PAGE: Parts Ordering]
+|   |   `-- Overrides & Access/
+|   |       |-- Parts Overrides [DEFAULT PAGE: Parts Ordering]
+|   |       `-- Role Access Review [DEFAULT PAGE: Parts Ordering]
+|   `-- Department Setup/
+|       |-- Pricing Setup/
+|       |   |-- Tax & Fee Setup [DEFAULT PAGE: Parts Ordering]
+|       |   `-- Core Charge Table [DEFAULT PAGE: Parts Ordering]
+|       `-- Discount & Forms/
+|           |-- Discount Rules [DEFAULT PAGE: Parts Ordering]
+|           `-- Print Form Layouts [DEFAULT PAGE: Parts Ordering]
+|-- Utilities/
+|   |-- Barcode & Labels/
+|   |   |-- Label Printing/
+|   |   |   |-- Barcode Utilities [DEFAULT PAGE: Parts Ordering]
+|   |   |   `-- Label Reprint Queue [DEFAULT PAGE: Parts Ordering]
+|   |   `-- Shelf & Bin Labels/
+|   |       |-- Bin Label Designer [DEFAULT PAGE: Parts Ordering]
+|   |       `-- Shelf Tag Runs [DEFAULT PAGE: Parts Ordering]
+|   |-- Import & Export/
+|   |   |-- File Intake/
+|   |   |   |-- Import Staging [DEFAULT PAGE: Parts Ordering]
+|   |   |   `-- Vendor File Drops [DEFAULT PAGE: Parts Ordering]
+|   |   `-- Outbound Files/
+|   |       |-- Export Queue [DEFAULT PAGE: Parts Ordering]
+|   |       `-- Price File Updates [DEFAULT PAGE: Parts Ordering]
+|   `-- Housekeeping/
+|       |-- Archive & Purge/
+|       |   |-- Archive Closed Tickets [DEFAULT PAGE: Parts Ordering]
+|       |   `-- Purge Temp Holds [DEFAULT PAGE: Parts Ordering]
+|       `-- Merge & Reindex/
+|           |-- Merge Duplicate Parts [DEFAULT PAGE: Parts Ordering]
+|           `-- Rebuild Search Index [DEFAULT PAGE: Parts Ordering]
+`-- Favorites/
+    |-- My Parts Views/
+    |   |-- Favorite Boards/
+    |   |   |-- Favorite Parts Board [DEFAULT PAGE: Parts Ordering]
+    |   |   `-- Favorite Receiving Queue [DEFAULT PAGE: Parts Ordering]
+    |   `-- Favorite Queues/
+    |       |-- Favorite PO Queue [DEFAULT PAGE: Parts Ordering]
+    |       `-- Favorite Parts Reports [DEFAULT PAGE: Parts Ordering]
+    `-- My Shortcuts/
+        |-- Supplier Favorites/
+        |   |-- Favorite Vendor Scorecards [DEFAULT PAGE: Parts Ordering]
+        |   `-- Favorite Catalog Sync [DEFAULT PAGE: Parts Ordering]
+        `-- Performance Favorites/
+            |-- Favorite Fill Rate View [DEFAULT PAGE: Parts Ordering]
+            `-- Favorite Counter Closeout [DEFAULT PAGE: Parts Ordering]
+
+Service/
+|-- Order Intake/
+|   |-- Write-Up/
+|   |   |-- Service Intake/
+|   |   |   |-- New Estimate [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   |   `-- New Repair Order [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   `-- Open Orders/
+|   |       |-- Estimates & Repair Orders [PAGE: Estimates & Repair Orders]
+|   |       `-- Express Write-Up [DEFAULT PAGE: Estimates & Repair Orders]
+|   `-- Customer Arrival/
+|       |-- Arrival Queue/
+|       |   |-- Check-In Board [DEFAULT PAGE: Estimates & Repair Orders]
+|       |   `-- Unit Intake Photos [DEFAULT PAGE: Estimates & Repair Orders]
+|       `-- Promise & Pickup/
+|           |-- Promise Date Entry [DEFAULT PAGE: Estimates & Repair Orders]
+|           `-- Pickup Appointment Queue [DEFAULT PAGE: Estimates & Repair Orders]
+|-- Queue & Dispatch/
+|   |-- Status Queues/
+|   |   |-- Repair Queue/
+|   |   |   |-- Repair Order Queue [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   |   |-- Customer Reply [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   |   `-- Tech Complete [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   `-- Parts Queue/
+|   |       |-- Parts Received [DEFAULT PAGE: Estimates & Repair Orders]
+|   |       `-- Parts Hold [DEFAULT PAGE: Estimates & Repair Orders]
+|   `-- Shop Control/
+|       |-- Dispatch Planning/
+|       |   |-- Dispatch Board [DEFAULT PAGE: Estimates & Repair Orders]
+|       |   `-- Bay Schedule [DEFAULT PAGE: Estimates & Repair Orders]
+|       `-- Production Watch/
+|           |-- Work In Progress [DEFAULT PAGE: Estimates & Repair Orders]
+|           `-- Promise Date Watch [DEFAULT PAGE: Estimates & Repair Orders]
+|-- Workbench & Detail/
+|   |-- RO Workbench/
+|   |   |-- Order Detail/
+|   |   |   |-- Repair Order Detail [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   |   `-- Job Workbench [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   `-- Labor & Recommendations/
+|   |       |-- Labor Sessions [DEFAULT PAGE: Estimates & Repair Orders]
+|   |       `-- Recommendations Queue [DEFAULT PAGE: Estimates & Repair Orders]
+|   `-- Document Actions/
+|       |-- Output Queue/
+|       |   |-- Print Service Packet [DEFAULT PAGE: Estimates & Repair Orders]
+|       |   |-- Report Queue [DEFAULT PAGE: Estimates & Repair Orders]
+|       |   `-- Detail Review [DEFAULT PAGE: Estimates & Repair Orders]
+|       `-- Duplicate Control/
+|           `-- Duplicate RO [DEFAULT PAGE: Estimates & Repair Orders]
+|-- Technician & Shop/
+|   |-- Labor Control/
+|   |   |-- Time Tracking/
+|   |   |   |-- Technician Time Entry [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   |   `-- Clocked Hours Review [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   `-- Productivity Review/
+|   |       |-- Flat Rate Review [DEFAULT PAGE: Estimates & Repair Orders]
+|   |       `-- Technician Productivity [DEFAULT PAGE: Estimates & Repair Orders]
+|   `-- Quality Control/
+|       |-- Final Review/
+|       |   |-- Final Inspection [DEFAULT PAGE: Estimates & Repair Orders]
+|       |   `-- Delivery Prep Queue [DEFAULT PAGE: Estimates & Repair Orders]
+|       `-- Sea Trial Risk/
+|           |-- Sea Trial Checklist [DEFAULT PAGE: Estimates & Repair Orders]
+|           `-- Comeback Watch [DEFAULT PAGE: Estimates & Repair Orders]
+|-- Warranty & Claims/
+|   |-- Claim Processing/
+|   |   |-- Carrier Intake/
+|   |   |   |-- Warranty Claims [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   |   `-- Pre-Authorization Queue [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   `-- Submission Status/
+|   |       |-- Carrier Submission Queue [DEFAULT PAGE: Estimates & Repair Orders]
+|   |       `-- Claim Status Review [DEFAULT PAGE: Estimates & Repair Orders]
+|   `-- Recovery Tracking/
+|       |-- Recovery Review/
+|       |   |-- Warranty Receivables [DEFAULT PAGE: Estimates & Repair Orders]
+|       |   `-- Deductible Review [DEFAULT PAGE: Estimates & Repair Orders]
+|       `-- Delay Audit/
+|           |-- Delayed Claim Watch [DEFAULT PAGE: Estimates & Repair Orders]
+|           `-- Claim Audit Trail [DEFAULT PAGE: Estimates & Repair Orders]
+|-- Customer Communication/
+|   |-- Approvals & Replies/
+|   |   |-- Approval Queue/
+|   |   |   |-- Approval Needed Queue [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   |   `-- Customer Reply Monitor [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   `-- Pickup Updates/
+|   |       |-- Pickup Ready Queue [DEFAULT PAGE: Estimates & Repair Orders]
+|   |       `-- Status Update Log [DEFAULT PAGE: Estimates & Repair Orders]
+|   `-- Notifications/
+|       |-- Alert Inbox/
+|       |   |-- Notification Rail [DEFAULT PAGE: Estimates & Repair Orders]
+|       |   `-- Unread Service Alerts [DEFAULT PAGE: Estimates & Repair Orders]
+|       `-- Risk Follow-Up/
+|           |-- Promise Risk Alerts [DEFAULT PAGE: Estimates & Repair Orders]
+|           `-- Follow-Up Callbacks [DEFAULT PAGE: Estimates & Repair Orders]
+|-- Lists & Reporting/
+|   |-- Operational Lists/
+|   |   |-- Open Order Lists/
+|   |   |   |-- Lists [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   |   |-- Open Estimates List [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   |   `-- Open RO Aging [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   `-- Assignment Sheets/
+|   |       `-- Technician Assignment Sheet [DEFAULT PAGE: Estimates & Repair Orders]
+|   |-- Performance Reports/
+|   |   |-- Time & Promise/
+|   |   |   |-- Reports [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   |   |-- Elapsed Time Summary [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   |   `-- Promise-Date Performance [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   `-- Warranty Throughput/
+|   |       |-- Warranty Throughput [DEFAULT PAGE: Estimates & Repair Orders]
+|   |       `-- Custom Reports [DEFAULT PAGE: Estimates & Repair Orders]
+|   `-- Financial Reports/
+|       |-- Labor Performance/
+|       |   |-- Labor Sales Summary [DEFAULT PAGE: Estimates & Repair Orders]
+|       |   `-- Effective Labor Rate [DEFAULT PAGE: Estimates & Repair Orders]
+|       `-- Cost Review/
+|           |-- Comeback Cost Review [DEFAULT PAGE: Estimates & Repair Orders]
+|           `-- Sublet Analysis [DEFAULT PAGE: Estimates & Repair Orders]
+|-- Administration & Setup/
+|   |-- Department Setup/
+|   |   |-- Rate & Writers/
+|   |   |   |-- Labor Rate Setup [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   |   `-- Service Writer Assignments [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   `-- Codes & Forms/
+|   |       |-- Job Code Library [DEFAULT PAGE: Estimates & Repair Orders]
+|   |       `-- Print Form Layouts [DEFAULT PAGE: Estimates & Repair Orders]
+|   |-- Policy & Controls/
+|   |   |-- Approval Rules/
+|   |   |   |-- Approval Limits [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   |   `-- Promise Date Rules [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   `-- Warranty Access/
+|   |       |-- Warranty Policy Matrix [DEFAULT PAGE: Estimates & Repair Orders]
+|   |       `-- Role Access Review [DEFAULT PAGE: Estimates & Repair Orders]
+|   `-- Workflow Setup/
+|       |-- Status & Dispatch/
+|       |   |-- Status Rules [DEFAULT PAGE: Estimates & Repair Orders]
+|       |   `-- Dispatch Priorities [DEFAULT PAGE: Estimates & Repair Orders]
+|       `-- Alerts & Inspection/
+|           |-- Notification Triggers [DEFAULT PAGE: Estimates & Repair Orders]
+|           `-- Inspection Templates [DEFAULT PAGE: Estimates & Repair Orders]
+|-- Utilities/
+|   |-- Schedule & Capacity/
+|   |   |-- Capacity Planning/
+|   |   |   |-- Capacity Planner [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   |   `-- Bay Availability Matrix [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   `-- Loaner & Pickup/
+|   |       |-- Loaner Schedule [DEFAULT PAGE: Estimates & Repair Orders]
+|   |       `-- Pickup Calendar [DEFAULT PAGE: Estimates & Repair Orders]
+|   |-- Data & Cleanup/
+|   |   |-- Archive & Merge/
+|   |   |   |-- Archive Closed ROs [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   |   `-- Merge Duplicate Units [DEFAULT PAGE: Estimates & Repair Orders]
+|   |   `-- Renumber & Reindex/
+|   |       |-- Repair Order Renumbering [DEFAULT PAGE: Estimates & Repair Orders]
+|   |       `-- Rebuild Search Index [DEFAULT PAGE: Estimates & Repair Orders]
+|   `-- Imports & Exports/
+|       |-- Data Export/
+|       |   |-- Export Queue [DEFAULT PAGE: Estimates & Repair Orders]
+|       |   `-- Service Data Extracts [DEFAULT PAGE: Estimates & Repair Orders]
+|       `-- Sync Exchange/
+|           |-- Mobile Tech Sync [DEFAULT PAGE: Estimates & Repair Orders]
+|           `-- Vendor File Exchange [DEFAULT PAGE: Estimates & Repair Orders]
+`-- Favorites/
+    |-- My Service Views/
+    |   |-- Favorite Boards/
+    |   |   |-- Favorite RO Queue [DEFAULT PAGE: Estimates & Repair Orders]
+    |   |   `-- Favorite Dispatch Board [DEFAULT PAGE: Estimates & Repair Orders]
+    |   `-- Warranty & Reports/
+    |       |-- Favorite Warranty Board [DEFAULT PAGE: Estimates & Repair Orders]
+    |       `-- Favorite Service Reports [DEFAULT PAGE: Estimates & Repair Orders]
+    `-- My Shortcuts/
+        |-- Promise & Approval/
+        |   |-- Favorite Promise Watch [DEFAULT PAGE: Estimates & Repair Orders]
+        |   `-- Favorite Approval Queue [DEFAULT PAGE: Estimates & Repair Orders]
+        `-- Tech & Pickup/
+            |-- Favorite Tech Productivity [DEFAULT PAGE: Estimates & Repair Orders]
+            `-- Favorite Pickup Ready [DEFAULT PAGE: Estimates & Repair Orders]
+
+Inventory/
+`-- Units/
+    `-- Boat Stock/
+        |-- Boat Inventory [PAGE: Boat Inventory]
+        |-- Unit Inventory [DEFAULT PAGE: Boat Inventory]
+        `-- Boats In Stock [DEFAULT PAGE: Boat Inventory]
+
+Sales/
+|-- Lead Desk/
+|   |-- Prospect Capture/
+|   |   |-- Lead Intake/
+|   |   |   |-- New Lead [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |   |   `-- Showroom Ups [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |   `-- Remote Intake/
+|   |       |-- Phone Ups [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |       `-- Internet Lead Entry [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |-- Follow-Up Queues/
+|   |   |-- Open Pipeline/
+|   |   |   |-- Leads, Quotes & Deals [PAGE: Leads, Quotes & Deals]
+|   |   |   `-- Unsold Follow-Up [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |   `-- Appointments & Calls/
+|   |       |-- Appointment Board [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |       `-- CRM Call List [DEFAULT PAGE: Leads, Quotes & Deals]
+|   `-- Board Views/
+|       |-- Lead Views/
+|       |   |-- Lead Board [DEFAULT PAGE: Leads, Quotes & Deals]
+|       |   `-- Quote Board [DEFAULT PAGE: Leads, Quotes & Deals]
+|       `-- Deal Views/
+|           |-- Open Deal Board [DEFAULT PAGE: Leads, Quotes & Deals]
+|           `-- Deposit Board [DEFAULT PAGE: Leads, Quotes & Deals]
+|-- Quote & Deal Desk/
+|   |-- Quote Creation/
+|   |   |-- Quote Drafting/
+|   |   |   |-- New Quote [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |   |   `-- Payment Quote [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |   `-- Worksheet Review/
+|   |       |-- Quote Revisions [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |       `-- Worksheet Builder [DEFAULT PAGE: Leads, Quotes & Deals]
+|   `-- Deal Structuring/
+|       |-- Deal Entry/
+|       |   |-- New Deal [DEFAULT PAGE: Leads, Quotes & Deals]
+|       |   `-- Deal Jacket Review [DEFAULT PAGE: Leads, Quotes & Deals]
+|       `-- Trade & Deposit/
+|           |-- Trade Appraisal Desk [DEFAULT PAGE: Leads, Quotes & Deals]
+|           `-- Deposit Log [DEFAULT PAGE: Leads, Quotes & Deals]
+|-- Inventory & Availability/
+|   |-- Unit Visibility/
+|   |   |-- Inventory Lookup/
+|   |   |   |-- Major Unit Inventory [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |   |   `-- Major Unit Locator [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |   `-- Incoming & Aging/
+|   |       |-- Incoming Unit Schedule [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |       `-- Aged Inventory Watch [DEFAULT PAGE: Leads, Quotes & Deals]
+|   `-- Pricing & Promotion/
+|       |-- Promotion Controls/
+|       |   |-- Consumer Promos [DEFAULT PAGE: Leads, Quotes & Deals]
+|       |   `-- Rebate Matrix [DEFAULT PAGE: Leads, Quotes & Deals]
+|       `-- Package Pricing/
+|           |-- Package Builder [DEFAULT PAGE: Leads, Quotes & Deals]
+|           `-- MSRP Override Review [DEFAULT PAGE: Leads, Quotes & Deals]
+|-- F&I & Delivery/
+|   |-- Finance Workflow/
+|   |   |-- Deposit & Credit/
+|   |   |   |-- Take Deposit [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |   |   `-- Credit Application Queue [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |   |-- Funding Follow-Up/
+|   |   |   |-- Lender Follow-Up [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |   |   `-- Funding Pending [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |   `-- Compliance Review/
+|   |       `-- Compliance Packet [DEFAULT PAGE: Leads, Quotes & Deals]
+|   `-- Delivery Control/
+|       |-- Delivery Prep/
+|       |   |-- Delivery Checklist [DEFAULT PAGE: Leads, Quotes & Deals]
+|       |   `-- Sold Not Delivered [DEFAULT PAGE: Leads, Quotes & Deals]
+|       `-- We Owe & Calendar/
+|           |-- We Owe Log [DEFAULT PAGE: Leads, Quotes & Deals]
+|           `-- Delivery Calendar [DEFAULT PAGE: Leads, Quotes & Deals]
+|-- Customer & CRM/
+|   |-- Customer Pipeline/
+|   |   |-- Prospect Review/
+|   |   |   |-- Prospect 360 [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |   |   `-- Duplicate Customer Review [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |   `-- Recovery & Referral/
+|   |       |-- Lost Prospect Recovery [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |       `-- Referral Tracker [DEFAULT PAGE: Leads, Quotes & Deals]
+|   `-- Communication/
+|       |-- Campaign Outreach/
+|       |   |-- Email Campaign Queue [DEFAULT PAGE: Leads, Quotes & Deals]
+|       |   `-- Text Follow-Up Board [DEFAULT PAGE: Leads, Quotes & Deals]
+|       `-- Relationship Lists/
+|           |-- Birthday & Anniversary List [DEFAULT PAGE: Leads, Quotes & Deals]
+|           `-- CSI Outreach [DEFAULT PAGE: Leads, Quotes & Deals]
+|-- Reporting & Analysis/
+|   |-- Sales Performance/
+|   |   |-- Rep Performance/
+|   |   |   |-- Salesperson Insights [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |   |   `-- Closing Ratio Summary [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |   `-- Source & Gross/
+|   |       |-- Lead Source Mix [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |       `-- Gross Profit Summary [DEFAULT PAGE: Leads, Quotes & Deals]
+|   `-- Forecast & Aging/
+|       |-- Aging Review/
+|       |   |-- Quote Aging [DEFAULT PAGE: Leads, Quotes & Deals]
+|       |   `-- Appraisal Aging [DEFAULT PAGE: Leads, Quotes & Deals]
+|       `-- Forecast Reporting/
+|           |-- Deal Forecast [DEFAULT PAGE: Leads, Quotes & Deals]
+|           `-- Custom Sales Reports [DEFAULT PAGE: Leads, Quotes & Deals]
+|-- Administration & Setup/
+|   |-- Desk Setup/
+|   |   |-- Sales Desk/
+|   |   |   |-- Salesperson Assignment [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |   |   `-- Lead Source Setup [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |   `-- Quote Rules/
+|   |       |-- Quote Form Layouts [DEFAULT PAGE: Leads, Quotes & Deals]
+|   |       `-- Deal Status Rules [DEFAULT PAGE: Leads, Quotes & Deals]
+|   `-- Finance Controls/
+|       |-- Rate & Fee/
+|       |   |-- Rate Tables [DEFAULT PAGE: Leads, Quotes & Deals]
+|       |   `-- Doc Fee Setup [DEFAULT PAGE: Leads, Quotes & Deals]
+|       `-- Menu & Compliance/
+|           |-- Menu Template Library [DEFAULT PAGE: Leads, Quotes & Deals]
+|           `-- Compliance Forms [DEFAULT PAGE: Leads, Quotes & Deals]
+`-- Favorites/
+    |-- My Sales Views/
+    |   |-- Favorite Boards/
+    |   |   |-- Favorite Lead Queue [DEFAULT PAGE: Leads, Quotes & Deals]
+    |   |   `-- Favorite Deal Desk [DEFAULT PAGE: Leads, Quotes & Deals]
+    |   `-- Delivery & Reports/
+    |       |-- Favorite Delivery Board [DEFAULT PAGE: Leads, Quotes & Deals]
+    |       `-- Favorite Sales Reports [DEFAULT PAGE: Leads, Quotes & Deals]
+    `-- My Shortcuts/
+        |-- Funding & Appraisal/
+        |   |-- Favorite Funding Watch [DEFAULT PAGE: Leads, Quotes & Deals]
+        |   `-- Favorite Appraisal Log [DEFAULT PAGE: Leads, Quotes & Deals]
+        `-- Promotions & Sold/
+            |-- Favorite Promotions [DEFAULT PAGE: Leads, Quotes & Deals]
+            `-- Favorite Sold Board [DEFAULT PAGE: Leads, Quotes & Deals]
+
+Management Activity/
+|-- Leadership Dashboards/
+|   |-- Executive Views/
+|   |   |-- Desktop [PAGE: Desktop]
+|   |   |-- Executive Board [PAGE: Executive Board]
+|   |   |-- Daily Scorecard [DEFAULT PAGE: Executive Board]
+|   |   `-- Forecast Snapshot [DEFAULT PAGE: Executive Board]
+|   `-- Exception Watch/
+|       |-- Exception Monitor [DEFAULT PAGE: Executive Board]
+|       |-- Margin Risk Board [DEFAULT PAGE: Executive Board]
+|       |-- Cash Pulse [DEFAULT PAGE: Executive Board]
+|       `-- Funding Alerts [DEFAULT PAGE: Executive Board]
+|-- Department Activity/
+|   |-- Sales & F&I/
+|   |   |-- Sales Activity [DEFAULT PAGE: Executive Board]
+|   |   |-- Deal Funding Watch [DEFAULT PAGE: Executive Board]
+|   |   |-- Lead Response Monitor [DEFAULT PAGE: Executive Board]
+|   |   `-- Delivery Readiness [DEFAULT PAGE: Executive Board]
+|   `-- Service & Parts/
+|       |-- Service Throughput [DEFAULT PAGE: Executive Board]
+|       |-- Promise Date Watch [DEFAULT PAGE: Executive Board]
+|       |-- Parts Fill Rate [DEFAULT PAGE: Executive Board]
+|       `-- Backorder Risk [DEFAULT PAGE: Executive Board]
+|-- Digital & Workforce/
+|   |-- Website & CRM/
+|   |   |-- Website Activity [PAGE: Website Feed]
+|   |   |-- Lead Handoff Monitor [DEFAULT PAGE: Website Feed]
+|   |   |-- Campaign Response [DEFAULT PAGE: Website Feed]
+|   |   `-- Reputation Watch [DEFAULT PAGE: Website Feed]
+|   `-- Payroll & People/
+|       |-- Payroll Review [DEFAULT PAGE: Executive Board]
+|       |-- Time Clock Exceptions [DEFAULT PAGE: Executive Board]
+|       |-- Comp Plan Review [DEFAULT PAGE: Executive Board]
+|       `-- Staffing Coverage [DEFAULT PAGE: Executive Board]
+|-- Cross-Store & Audit/
+|   |-- Group Oversight/
+|   |   |-- Cross-Store View [DEFAULT PAGE: Executive Board]
+|   |   |-- Store Scorecards [DEFAULT PAGE: Executive Board]
+|   |   |-- Benchmark Queue [DEFAULT PAGE: Executive Board]
+|   |   `-- Action Tracker [DEFAULT PAGE: Executive Board]
+|   `-- Compliance & Close/
+|       |-- Audit Trail [PAGE: Audit Trail]
+|       |-- Policy Exceptions [DEFAULT PAGE: Audit Trail]
+|       |-- Approval Log [DEFAULT PAGE: Audit Trail]
+|       `-- Month-End Readiness [DEFAULT PAGE: Audit Trail]
+`-- Favorites/
+    |-- Leadership Views/
+    |   |-- Favorite Executive Board [DEFAULT PAGE: Executive Board]
+    |   |-- Favorite Exception Watch [DEFAULT PAGE: Executive Board]
+    |   |-- Favorite Website Pulse [DEFAULT PAGE: Website Feed]
+    |   `-- Favorite Payroll Audit [DEFAULT PAGE: Executive Board]
+    `-- Shortcuts/
+        |-- Favorite Forecast [DEFAULT PAGE: Executive Board]
+        |-- Favorite Cross-Store Compare [DEFAULT PAGE: Executive Board]
+        |-- Favorite Funding Alerts [DEFAULT PAGE: Executive Board]
+        `-- Favorite Approval Log [DEFAULT PAGE: Audit Trail]
+
+Receivables/
+|-- Customer Accounts/
+|   |-- Inquiry & Statements/
+|   |   |-- Account Review/
+|   |   |   |-- Customer Inquiry [DEFAULT PAGE: Executive Board]
+|   |   |   `-- Credit Hold Review [DEFAULT PAGE: Executive Board]
+|   |   `-- Statement Services/
+|   |       |-- Statement Requests [DEFAULT PAGE: Executive Board]
+|   |       `-- Balance Forward Review [DEFAULT PAGE: Executive Board]
+|   `-- Promise Tracking/
+|       `-- Promise Monitor/
+|           |-- Promise to Pay [DEFAULT PAGE: Executive Board]
+|           `-- Broken Promise Review [DEFAULT PAGE: Executive Board]
+|-- Collections Desk/
+|   |-- Collector Queue/
+|   |   `-- Active Collections/
+|   |       |-- Collections Queue [DEFAULT PAGE: Executive Board]
+|   |       `-- Delinquency Watch [DEFAULT PAGE: Executive Board]
+|   `-- Notes & Escalations/
+|       `-- Collector Notes/
+|           |-- Follow-Up Notes [DEFAULT PAGE: Executive Board]
+|           `-- Dispute Follow-Up [DEFAULT PAGE: Executive Board]
+|-- Payment Processing/
+|   |-- Batch Control/
+|   |   |-- Settlement Review/
+|   |   |   |-- Credit Card Batch Payments [DEFAULT PAGE: Executive Board]
+|   |   |   `-- Batch Deposit Match [DEFAULT PAGE: Executive Board]
+|   |   `-- ACH Review/
+|   |       |-- ACH Exceptions [DEFAULT PAGE: Executive Board]
+|   |       `-- NSF Watch [DEFAULT PAGE: Executive Board]
+|   `-- Risk Review/
+|       `-- Risk Signals/
+|           |-- Chargeback Watch [DEFAULT PAGE: Executive Board]
+|           `-- Merchant Reserve Review [DEFAULT PAGE: Executive Board]
+`-- Reporting & Close/
+    |-- Aging & Promise Reports/
+    |   |-- Aging Packets/
+    |   |   |-- Reports [DEFAULT PAGE: Executive Board]
+    |   |   `-- Aging Review [DEFAULT PAGE: Executive Board]
+    |   `-- Promise Coverage/
+    |       |-- Promise Tracker [DEFAULT PAGE: Executive Board]
+    |       `-- Broken Promise Summary [DEFAULT PAGE: Executive Board]
+    `-- Month-End Actions/
+        `-- AR Closeout/
+            |-- Month-End AR [DEFAULT PAGE: Executive Board]
+            |-- Finance Follow-Up [DEFAULT PAGE: Executive Board]
+            `-- Write-Off Review [DEFAULT PAGE: Executive Board]
+
+General Ledger/
+|-- Chart of Accounts [PAGE: Executive Board]
+|-- Profit & Loss [PAGE: Executive Board]
+|-- Financial Views/
+|   |-- Store Financials/
+|   |   `-- Performance Review/
+|   |       |-- Store Summary [DEFAULT PAGE: Executive Board]
+|   |       `-- Department P&L [DEFAULT PAGE: Executive Board]
+|   `-- Daily Flash/
+|       `-- Variance Pulse/
+|           |-- Flash Report [DEFAULT PAGE: Executive Board]
+|           `-- Expense Variance [DEFAULT PAGE: Executive Board]
+|-- Posting Control/
+|   |-- Deal & Funding/
+|   |   `-- Posting Queue/
+|   |       |-- Deal Posting [DEFAULT PAGE: Executive Board]
+|   |       `-- Funding to GL [DEFAULT PAGE: Executive Board]
+|   `-- Transit Review/
+|       `-- Exception Posting/
+|           |-- Contract-in-Transit [DEFAULT PAGE: Executive Board]
+|           `-- Funding Exception Review [DEFAULT PAGE: Executive Board]
+|-- Cash Control/
+|   |-- Deposit Review/
+|   |   `-- Deposit Audit/
+|   |       |-- Deposits [DEFAULT PAGE: Executive Board]
+|   |       `-- Deposit Exceptions [DEFAULT PAGE: Executive Board]
+|   `-- Clearing/
+|       `-- Variance Control/
+|           |-- Cash Clearing [DEFAULT PAGE: Executive Board]
+|           `-- Deposit Slip Match [DEFAULT PAGE: Executive Board]
+`-- Close & Reconcile/
+    |-- Period Close/
+    |   |-- Close Ownership/
+    |   |   |-- Month End [DEFAULT PAGE: Executive Board]
+    |   |   |-- Close Checklist [DEFAULT PAGE: Executive Board]
+    |   |   `-- Accrual Review [DEFAULT PAGE: Executive Board]
+    |   `-- Trial Balance/
+    |       `-- Trial Balance Review [DEFAULT PAGE: Executive Board]
+    `-- Reconciliation/
+        |-- Balance Sheet/
+        |   |-- Bank Reconciliation [DEFAULT PAGE: Executive Board]
+        |   `-- Schedule Review [DEFAULT PAGE: Executive Board]
+        `-- Journal Control/
+            |-- Journal Entry Queue [DEFAULT PAGE: Executive Board]
+            `-- Recurring Journal Review [DEFAULT PAGE: Executive Board]
+
+System/
+|-- Digital Operations/
+|   |-- Website Publishing/
+|   |   |-- Feed Delivery/
+|   |   |   |-- Website Feed [PAGE: Website Feed]
+|   |   |   `-- Feed Health [DEFAULT PAGE: Website Feed]
+|   |   `-- Publishing Exceptions/
+|   |       `-- Feed Retry Queue [DEFAULT PAGE: Website Feed]
+|   `-- Lead & Sync/
+|       |-- Lead Delivery/
+|       |   |-- Lead Form Routing [DEFAULT PAGE: Website Feed]
+|       |   `-- Sync Monitor [DEFAULT PAGE: Website Feed]
+|       `-- Retry & Recovery/
+|           `-- Lead Retry Queue [DEFAULT PAGE: Website Feed]
+|-- Access & Security/
+|   |-- User Access/
+|   |   |-- Role Coverage/
+|   |   |   |-- Users & Roles [DEFAULT PAGE: Executive Board]
+|   |   |   `-- Store Access Matrix [DEFAULT PAGE: Executive Board]
+|   |   `-- Provisioning/
+|   |       `-- MFA Reset Queue [DEFAULT PAGE: Executive Board]
+|   `-- Security Events/
+|       |-- Change Review/
+|       |   |-- Permission Changes [DEFAULT PAGE: Executive Board]
+|       |   `-- Login Watch [DEFAULT PAGE: Audit Trail]
+|       `-- Policy Controls/
+|           `-- Password Policy Review [DEFAULT PAGE: Audit Trail]
+|-- Automation & Configuration/
+|   |-- Workflow Automation/
+|   |   `-- Runtime Rules/
+|   |       |-- Workflow Rules [DEFAULT PAGE: Executive Board]
+|   |       |-- Notification Escalations [DEFAULT PAGE: Executive Board]
+|   |       `-- Background Jobs [DEFAULT PAGE: Executive Board]
+|   `-- Environment Controls/
+|       `-- Release Controls/
+|           |-- Feature Flags [DEFAULT PAGE: Executive Board]
+|           `-- Environment Review [DEFAULT PAGE: Executive Board]
+`-- Audit & Integrations/
+    |-- Audit Logs/
+    |   `-- System Audit/
+    |       |-- Audit Trail [DEFAULT PAGE: Audit Trail]
+    |       `-- Policy Change Log [DEFAULT PAGE: Audit Trail]
+    `-- Integration Endpoints/
+        |-- Connectors/
+        |   |-- API Connectors [DEFAULT PAGE: Executive Board]
+        |   `-- Vendor Endpoints [DEFAULT PAGE: Executive Board]
+        `-- Message Templates/
+            |-- Template Library [DEFAULT PAGE: Executive Board]
+            `-- Webhook Retry Log [DEFAULT PAGE: Executive Board]
+
+Help/
+|-- Quick Start/
+|   |-- First Day/
+|   |   |-- Core Orientation/
+|   |   |   |-- Operator Guide [DEFAULT PAGE: Desktop]
+|   |   |   `-- New Operator Checklist [DEFAULT PAGE: Desktop]
+|   |   `-- Ramp Plan/
+|   |       `-- First Week Plan [DEFAULT PAGE: Desktop]
+|   `-- Navigation/
+|       `-- Command Surface/
+|           |-- Shortcut Map [DEFAULT PAGE: Desktop]
+|           `-- Open Windows Guide [DEFAULT PAGE: Desktop]
+|-- Daily Operations/
+|   |-- Department Tips/
+|   |   `-- Department Coaching/
+|   |       |-- Service Tips [DEFAULT PAGE: Desktop]
+|   |       |-- Sales Tips [DEFAULT PAGE: Desktop]
+|   |       `-- Parts Tips [DEFAULT PAGE: Desktop]
+|   `-- Process Guides/
+|       |-- Daily Playbooks/
+|       |   |-- Workflow Walkthroughs [DEFAULT PAGE: Desktop]
+|       |   `-- Queue Triage Guide [DEFAULT PAGE: Desktop]
+|       `-- Closeout/
+|           `-- Month-End Walkthrough [DEFAULT PAGE: Desktop]
+|-- Release Center/
+|   |-- Release Notes/
+|   |   `-- Briefing/
+|   |       |-- Release Notes [DEFAULT PAGE: Desktop]
+|   |       `-- Upcoming Changes [DEFAULT PAGE: Desktop]
+|   |-- Issue Awareness/
+|   |   `-- Issue Watch/
+|   |       |-- Known Issues [DEFAULT PAGE: Desktop]
+|   |       `-- Fix Verification Checklist [DEFAULT PAGE: Audit Trail]
+|   `-- Demo & Training/
+|       `-- Training Assets/
+|           |-- Demo Scripts [DEFAULT PAGE: Desktop]
+|           `-- Release Webinar [DEFAULT PAGE: Desktop]
+`-- Support Desk/
+    |-- Support Access/
+    |   |-- Support Requests/
+    |   |   |-- Support [DEFAULT PAGE: Desktop]
+    |   |   `-- Open Ticket [DEFAULT PAGE: Desktop]
+    |   `-- Escalation/
+    |       `-- Escalation Playbook [DEFAULT PAGE: Audit Trail]
+    `-- Contacts & Training/
+        |-- Support Network/
+        |   |-- Contact Directory [DEFAULT PAGE: Desktop]
+        |   `-- Role-Based Training [DEFAULT PAGE: Desktop]
+        `-- Certification/
+            `-- Certification Tracker [DEFAULT PAGE: Desktop]

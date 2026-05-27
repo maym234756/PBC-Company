@@ -46,10 +46,13 @@ import { ErrorBoundary } from "../components/ErrorBoundary";
 import { EmptyState } from "../components/EmptyState";
 import { StoreSelectModal } from "../components/StoreSelectModal";
 import { BoatInventoryWorkspace } from "./BoatInventoryWorkspace";
+import { ChartOfAccountsWorkspace } from "./ChartOfAccountsWorkspace";
+import { ProfitLossWorkspace } from "./ProfitLossWorkspace";
 import { ReportCenterWorkspace, fiProductLibrary } from "./ReportCenterWorkspace";
 import { WebsiteWorkspace } from "./WebsiteWorkspace";
 import { TopTabs } from "../components/TopTabs";
 import {
+  hasExplicitWorkspaceAssignment,
   isWorkspaceId,
   legacyFallbackNavigation,
   quickLaunchButtons,
@@ -276,10 +279,54 @@ const QUICK_LAUNCH_ORDER_STORAGE_PREFIX = "marine-cloud-quick-launch-order";
 const QUICK_LAUNCH_ROUTE_STORAGE_PREFIX = "marine-cloud-quick-launch-routes";
 const QUICK_LAUNCH_SLOT_DRAG_MIME = "application/x-marine-quick-launch-slot";
 const OPEN_SERVICE_DETAIL_WINDOWS_STORAGE_PREFIX = "marine-cloud-open-service-detail-windows";
+const defaultPageOnlyDropdownGroups = new Set(["Management Activity", "Receivables"]);
+const generalLedgerVisibleLeafs = new Set(["Chart of Accounts", "Profit & Loss"]);
+const generalLedgerPinnedLeafs: NavigationMenuItem[] = ["Chart of Accounts", "Profit & Loss"];
 
 interface QuickLaunchDropState {
   position: "before" | "after";
   slot: string;
+}
+
+function isNavigationBranchItem(item: NavigationMenuItem): item is Exclude<NavigationMenuItem, string> & { items: NavigationMenuItem[] } {
+  return typeof item !== "string" && "items" in item && Array.isArray(item.items);
+}
+
+function getNavigationItemLabel(item: NavigationMenuItem) {
+  return typeof item === "string" ? item : item.label;
+}
+
+function navigationItemsContainLeaf(items: NavigationMenuItem[], leafLabel: string): boolean {
+  return items.some((item) => {
+    if (isNavigationBranchItem(item)) {
+      return navigationItemsContainLeaf(item.items, leafLabel);
+    }
+
+    return getNavigationItemLabel(item) === leafLabel;
+  });
+}
+
+function ensureGeneralLedgerPinnedLeafs(groups: NavigationGroup[]): NavigationGroup[] {
+  return groups.map((group) => {
+    if (group.label !== "General Ledger") {
+      return group;
+    }
+
+    const pinnedLeafLabels = new Set(generalLedgerPinnedLeafs.map(getNavigationItemLabel));
+    const missingLeafs = generalLedgerPinnedLeafs.filter((leaf) => !navigationItemsContainLeaf(group.items, getNavigationItemLabel(leaf)));
+
+    if (missingLeafs.length === 0) {
+      return group;
+    }
+
+    return {
+      ...group,
+      items: [
+        ...generalLedgerPinnedLeafs,
+        ...group.items.filter((item) => !pinnedLeafLabels.has(getNavigationItemLabel(item)))
+      ]
+    };
+  });
 }
 
 interface QuickLaunchRouteMetadata {
@@ -1050,6 +1097,12 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const activeSalesDealId = workspaceId === "sales" ? searchParams.get("activeDeal") : null;
   const partsWorkspaceView: PartsWorkspaceView = workspaceId === "parts" && searchParams.get("view") === "inventory" ? "inventory" : "ordering";
   const activePartsInventoryPartNumber = workspaceId === "parts" && partsWorkspaceView === "inventory" ? searchParams.get("inventoryPart") : null;
+  const activeGeneralLedgerPage: "chartOfAccounts" | "profitLoss" | null =
+    workspaceId === "analytics" && searchParams.get("view") === "chart-of-accounts"
+      ? "chartOfAccounts"
+      : workspaceId === "analytics" && searchParams.get("view") === "profit-loss"
+        ? "profitLoss"
+        : null;
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [workspace, setWorkspace] = useState<WorkspacePayload | null>(null);
   const [workspaceSnapshots, setWorkspaceSnapshots] = useState<{
@@ -1157,7 +1210,9 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const currentActivityKeyRef = useRef(`${activeStore.id}:${workspaceId}`);
   const quickLaunchDropHandledRef = useRef(false);
 
-  const menuGroups = dashboard?.navigation ?? legacyFallbackNavigation;
+  const menuGroups = ensureGeneralLedgerPinnedLeafs(dashboard?.navigation ?? legacyFallbackNavigation).filter(
+    (group) => !defaultPageOnlyDropdownGroups.has(group.label)
+  );
   const orderedQuickLaunchButtons = sortQuickLaunchButtonsByOrder(quickLaunchButtons, quickLaunchOrderSlots);
   const visibleQuickLaunchButtons = orderedQuickLaunchButtons.filter((button) => !hiddenQuickLaunchSlots.includes(button.slot));
   const hiddenQuickLaunchButtons = orderedQuickLaunchButtons.filter((button) => hiddenQuickLaunchSlots.includes(button.slot));
@@ -1165,10 +1220,8 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const headerSearchResults = searchHeaderCommands(buildHeaderSearchCommands(menuGroups), headerSearchTerm);
   const serviceRows = workspace?.workspaceId === "service" ? workspace.rows : [];
   const activeWorkspace = workspaceDefinitions[workspaceId];
-  const shouldRenderCommandLogRail =
-    workspaceId !== "service" && workspaceId !== "parts" && workspaceId !== "sales" && workspaceId !== "desktop" && workspaceId !== "website";
-  const shouldRenderTaskQueueRail =
-    workspaceId !== "service" && workspaceId !== "sales" && workspaceId !== "desktop" && workspaceId !== "website" && workspaceId !== "parts";
+  const shouldRenderCommandLogRail = false;
+  const shouldRenderTaskQueueRail = false;
   const shouldFetchActivityLog = shouldRenderCommandLogRail || workspaceId === "service" || workspaceId === "website";
   const shouldFetchTaskQueue = shouldRenderTaskQueueRail || workspaceId === "service" || workspaceId === "website";
   const availableOpenWorkspaceIds = workspaceOrder.filter((candidateWorkspaceId) => {
@@ -2451,6 +2504,28 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       return;
     }
 
+    if (groupLabel === "General Ledger" && (item === "Chart of Accounts" || item === "Profit & Loss")) {
+      const isProfitLossPage = item === "Profit & Loss";
+      setActiveWorkflow(null);
+      setPendingWorkspaceMenuIntent(null);
+      setToolbarNotice(`${item} ready.`);
+      addOpenWorkspace("analytics");
+      appendCommandLog(
+        {
+          label: "Workspace opened",
+          detail: `Executive Board via General Ledger / ${item}.`,
+          tone: "neutral"
+        },
+        {
+          optimistic: false,
+          workspaceId: "analytics"
+        }
+      );
+
+      navigate(`/dashboard/${activeStore.id}/analytics?view=${isProfitLossPage ? "profit-loss" : "chart-of-accounts"}`);
+      return;
+    }
+
     if (groupLabel === "Application") {
       const workspaceToolsTarget = resolveApplicationWorkspaceToolsTarget(item);
 
@@ -2550,31 +2625,19 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   }
 
   function isMenuItemVisible(groupLabel: string, item: string) {
+    if (defaultPageOnlyDropdownGroups.has(groupLabel)) {
+      return false;
+    }
+
+    if (groupLabel === "General Ledger") {
+      return generalLedgerVisibleLeafs.has(item) && hasExplicitWorkspaceAssignment(groupLabel, item);
+    }
+
     if (item === "Switch Store" || item === "Logout" || item === "Exit") {
       return true;
     }
 
-    if (groupLabel === "Application" && resolveApplicationWorkspaceToolsTarget(item)) {
-      return true;
-    }
-
-    if (groupLabel === "Parts" && (item === "Parts Inventory" || item === "Part Number Lookup")) {
-      return true;
-    }
-
-    if (resolveWorkspaceMenuIntent(groupLabel, item)) {
-      return true;
-    }
-
-    if (groupLabel === "Sales" && resolveSalesMenuIntent(item)) {
-      return true;
-    }
-
-    if (groupLabel === "Service" && resolveServiceMenuIntent(item)) {
-      return true;
-    }
-
-    return Boolean(resolveWorkspaceFromMenuItem(groupLabel, item));
+    return hasExplicitWorkspaceAssignment(groupLabel, item);
   }
 
   function isMenuItemPinnable(groupLabel: string, item: string) {
@@ -4574,6 +4637,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                         purchasePadRows,
                         workspaceView: partsWorkspaceView
                       },
+                      activeGeneralLedgerPage,
                       (roNumber, customerName) => { setPortalPreviewMode({ roNumber, customerName }); }
                     )
                     )}
@@ -5505,6 +5569,7 @@ function renderWorkspace(
     purchasePadRows: PartsWorkspaceRow[];
     workspaceView: PartsWorkspaceView;
   },
+  activeGeneralLedgerPage: "chartOfAccounts" | "profitLoss" | null,
   onOpenPortalPreview: (roNumber: string, customerName: string) => void
 ) {
   switch (activeWorkspaceId) {
@@ -5690,6 +5755,15 @@ function renderWorkspace(
     }
     case "analytics": {
       const rows = workspace?.workspaceId === "analytics" ? workspace.rows : [];
+
+      if (activeGeneralLedgerPage === "chartOfAccounts") {
+        return <ChartOfAccountsWorkspace />;
+      }
+
+      if (activeGeneralLedgerPage === "profitLoss") {
+        return <ProfitLossWorkspace />;
+      }
+
       return <AnalyticsWorkspace dashboard={dashboard} onOpenWorkspace={onOpenWorkspace} rows={rows} />;
     }
     case "audit": {

@@ -1423,6 +1423,8 @@ export const legacyFallbackNavigation: NavigationGroup[] = [
   {
     label: "General Ledger",
     items: [
+      "Chart of Accounts",
+      "Profit & Loss",
       {
         label: "Financial Views",
         items: [
@@ -1838,8 +1840,7 @@ export const quickLaunchButtons: QuickLaunchButton[] = [
   { slot: "0", label: "Switch Store", action: "switchStore" }
 ];
 
-export function resolveWorkspaceFromMenuItem(groupLabel: string, item: string): WorkspaceId | null {
-  const lookup: Record<string, WorkspaceId> = {
+const navigationMenuWorkspaceLookup: Record<string, WorkspaceId> = {
     "application:view": "desktop",
     "application:desktop": "desktop",
     "application:open windows": "desktop",
@@ -1948,6 +1949,8 @@ export function resolveWorkspaceFromMenuItem(groupLabel: string, item: string): 
     "receivables:month-end ar": "analytics",
     "receivables:finance follow-up": "analytics",
     "receivables:write-off review": "analytics",
+    "general ledger:chart of accounts": "analytics",
+    "general ledger:profit & loss": "analytics",
     "general ledger:store summary": "analytics",
     "general ledger:department p&l": "analytics",
     "general ledger:flash report": "analytics",
@@ -1999,8 +2002,13 @@ export function resolveWorkspaceFromMenuItem(groupLabel: string, item: string): 
     "help:release webinar": "desktop",
     "help:escalation playbook": "audit",
     "help:certification tracker": "desktop"
-  };
+};
 
+export function hasExplicitWorkspaceAssignment(groupLabel: string, item: string): boolean {
+  return `${groupLabel}:${item}`.toLowerCase() in navigationMenuWorkspaceLookup;
+}
+
+export function resolveWorkspaceFromMenuItem(groupLabel: string, item: string): WorkspaceId | null {
   const groupFallbackLookup: Record<string, WorkspaceId> = {
     application: "desktop",
     parts: "parts",
@@ -2017,7 +2025,7 @@ export function resolveWorkspaceFromMenuItem(groupLabel: string, item: string): 
   const lookupKey = `${groupLabel}:${item}`.toLowerCase();
   const groupKey = groupLabel.toLowerCase();
 
-  return lookup[lookupKey] ?? groupFallbackLookup[groupKey] ?? null;
+  return navigationMenuWorkspaceLookup[lookupKey] ?? groupFallbackLookup[groupKey] ?? null;
 }
 
 export function isWorkspaceId(value: string): value is WorkspaceId {

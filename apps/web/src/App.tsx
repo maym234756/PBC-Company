@@ -15,6 +15,11 @@ const LoginPage = lazy(async () => {
   return { default: module.LoginPage };
 });
 
+const LandingPage = lazy(async () => {
+  const module = await import("./pages/LandingPage");
+  return { default: module.LandingPage };
+});
+
 export default function App() {
   const [session, setSession] = useState<SessionState | null>(() => readSession());
 
@@ -37,8 +42,12 @@ export default function App() {
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route
-              element={<HomeRoute onSessionChange={setSession} session={session} />}
+              element={<LandingPage session={session} />}
               path="/"
+            />
+            <Route
+              element={<LoginRoute onSessionChange={setSession} session={session} />}
+              path="/login"
             />
             <Route
               element={<DashboardIndexRoute session={session} />}
@@ -49,7 +58,7 @@ export default function App() {
               path="/dashboard/:storeId/:workspaceId"
             />
             <Route
-              element={<Navigate replace to={session?.selectedStoreId ? `/dashboard/${session.selectedStoreId}/desktop` : "/"} />}
+              element={<Navigate replace to={session?.selectedStoreId ? `/dashboard/${session.selectedStoreId}/website` : "/"} />}
               path="*"
             />
           </Routes>
@@ -68,9 +77,9 @@ interface DashboardRouteProps {
   onSessionChange: (session: SessionState | null) => void;
 }
 
-function HomeRoute({ session, onSessionChange }: DashboardRouteProps) {
+function LoginRoute({ session, onSessionChange }: DashboardRouteProps) {
   if (session?.selectedStoreId) {
-    return <Navigate replace to={`/dashboard/${session.selectedStoreId}/desktop`} />;
+    return <Navigate replace to={`/dashboard/${session.selectedStoreId}/website`} />;
   }
 
   return <LoginPage onSessionReady={onSessionChange} />;
@@ -89,13 +98,13 @@ function DashboardIndexRoute({ session }: Pick<DashboardRouteProps, "session">) 
     return <Navigate replace to="/" />;
   }
 
-  return <Navigate replace to={`/dashboard/${nextStoreId}/desktop`} />;
+  return <Navigate replace to={`/dashboard/${nextStoreId}/website`} />;
 }
 
 function DashboardRoute({ session, onSessionChange }: DashboardRouteProps) {
   const navigate = useNavigate();
   const { storeId, workspaceId } = useParams<{ storeId: string; workspaceId: string }>();
-  const resolvedWorkspaceId: WorkspaceId = workspaceId && isWorkspaceId(workspaceId) ? workspaceId : "desktop";
+  const resolvedWorkspaceId: WorkspaceId = workspaceId && isWorkspaceId(workspaceId) ? workspaceId : "website";
 
   useEffect(() => {
     if (!session) {
@@ -105,12 +114,12 @@ function DashboardRoute({ session, onSessionChange }: DashboardRouteProps) {
     const matchedStore = session.stores.find((store) => store.id === storeId);
 
     if (!matchedStore && session.selectedStoreId) {
-      navigate(`/dashboard/${session.selectedStoreId}/desktop`, { replace: true });
+      navigate(`/dashboard/${session.selectedStoreId}/website`, { replace: true });
       return;
     }
 
     if (matchedStore && !isWorkspaceId(workspaceId ?? "")) {
-      navigate(`/dashboard/${matchedStore.id}/desktop`, { replace: true });
+      navigate(`/dashboard/${matchedStore.id}/website`, { replace: true });
       return;
     }
 
