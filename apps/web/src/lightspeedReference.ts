@@ -1242,74 +1242,12 @@ export const legacyFallbackNavigation: NavigationGroup[] = [
     ]
   },
   {
+    label: "CRM",
+    items: ["Communicate"]
+  },
+  {
     label: "Management Activity",
-    items: [
-      {
-        label: "Leadership Dashboards",
-        items: [
-          {
-            label: "Executive Views",
-            items: ["Desktop", "Executive Board", "Daily Scorecard", "Forecast Snapshot"]
-          },
-          {
-            label: "Exception Watch",
-            items: ["Exception Monitor", "Margin Risk Board", "Cash Pulse", "Funding Alerts"]
-          }
-        ]
-      },
-      {
-        label: "Department Activity",
-        items: [
-          {
-            label: "Sales & F&I",
-            items: ["Sales Activity", "Deal Funding Watch", "Lead Response Monitor", "Delivery Readiness"]
-          },
-          {
-            label: "Service & Parts",
-            items: ["Service Throughput", "Promise Date Watch", "Parts Fill Rate", "Backorder Risk"]
-          }
-        ]
-      },
-      {
-        label: "Digital & Workforce",
-        items: [
-          {
-            label: "Website & CRM",
-            items: ["Website Activity", "Lead Handoff Monitor", "Campaign Response", "Reputation Watch"]
-          },
-          {
-            label: "Payroll & People",
-            items: ["Payroll Review", "Time Clock Exceptions", "Comp Plan Review", "Staffing Coverage"]
-          }
-        ]
-      },
-      {
-        label: "Cross-Store & Audit",
-        items: [
-          {
-            label: "Group Oversight",
-            items: ["Cross-Store View", "Store Scorecards", "Benchmark Queue", "Action Tracker"]
-          },
-          {
-            label: "Compliance & Close",
-            items: ["Audit Trail", "Policy Exceptions", "Approval Log", "Month-End Readiness"]
-          }
-        ]
-      },
-      {
-        label: "Favorites",
-        items: [
-          {
-            label: "Leadership Views",
-            items: ["Favorite Executive Board", "Favorite Exception Watch", "Favorite Website Pulse", "Favorite Payroll Audit"]
-          },
-          {
-            label: "Shortcuts",
-            items: ["Favorite Forecast", "Favorite Cross-Store Compare", "Favorite Funding Alerts", "Favorite Approval Log"]
-          }
-        ]
-      }
-    ]
+        items: ["Managements Activitie's", "Cashier Accountability", "Cashier Reconciliation"]
   },
   {
     label: "Receivables",
@@ -1832,7 +1770,6 @@ export const quickLaunchButtons: QuickLaunchButton[] = [
   { slot: "2", label: "Estimates & Repair Orders", workspaceId: "service" },
   { slot: "3", label: "Parts Ordering", workspaceId: "parts" },
   { slot: "4", label: "Sales Board", workspaceId: "sales" },
-  { slot: "5", label: "Exec Board", workspaceId: "analytics" },
   { slot: "6", label: "Website Feed", workspaceId: "website" },
   { slot: "7", label: "Payroll Review", workspaceId: "analytics" },
   { slot: "8", label: "Receivables", workspaceId: "analytics" },
@@ -1912,8 +1849,12 @@ const navigationMenuWorkspaceLookup: Record<string, WorkspaceId> = {
     "sales:new quote": "sales",
     "sales:new deal": "sales",
     "sales:leads, quotes & deals": "sales",
+    "crm:communicate": "sales",
     "management activity:desktop": "desktop",
     "management activity:executive board": "analytics",
+    "management activity:managements activitie's": "analytics",
+    "management activity:cashier accountability": "analytics",
+    "management activity:cashier reconciliation": "analytics",
     "management activity:exception monitor": "analytics",
     "management activity:website activity": "website",
     "management activity:payroll review": "analytics",
@@ -2015,6 +1956,7 @@ export function resolveWorkspaceFromMenuItem(groupLabel: string, item: string): 
     inventory: "boatInventory",
     service: "service",
     sales: "sales",
+    crm: "sales",
     "management activity": "analytics",
     receivables: "analytics",
     "general ledger": "analytics",

@@ -5,6 +5,7 @@ import { resolveWorkspaceFromMenuItem } from "../src/lightspeedReference.ts";
 import {
   resolveApplicationWorkspaceToolsTarget,
   resolveApplicationMenuIntent,
+  resolveCrmMenuIntent,
   resolveGeneralLedgerMenuIntent,
   resolveHelpMenuIntent,
   resolveManagementMenuIntent,
@@ -41,6 +42,26 @@ test("management intents preserve the visible menu label but submit the canonica
   assert.equal(intent.workflowOverrides?.commandLabel, "Forecast Snapshot");
   assert.equal(intent.workflowOverrides?.submitAction, "Management Forecast");
   assert.equal(intent.initialValues?.forecastFocus, "Store posture");
+});
+
+test("management activity leaf stays page-routed instead of opening a workflow intent", () => {
+  const intent = resolveManagementMenuIntent("Managements Activitie's");
+
+  assert.equal(intent, null);
+  assert.equal(resolveWorkspaceMenuIntent("Management Activity", "Managements Activitie's"), null);
+  assert.equal(resolveWorkspaceFromMenuItem("Management Activity", "Managements Activitie's"), "analytics");
+  assert.equal(resolveWorkspaceMenuIntent("Management Activity", "Cashier Accountability"), null);
+  assert.equal(resolveWorkspaceMenuIntent("Management Activity", "Cashier Reconciliation"), null);
+  assert.equal(resolveWorkspaceFromMenuItem("Management Activity", "Cashier Accountability"), "analytics");
+  assert.equal(resolveWorkspaceFromMenuItem("Management Activity", "Cashier Reconciliation"), "analytics");
+});
+
+test("crm communicate leaf stays page-routed into the sales communication center", () => {
+  const intent = resolveCrmMenuIntent("Communicate");
+
+  assert.equal(intent, null);
+  assert.equal(resolveWorkspaceMenuIntent("CRM", "Communicate"), null);
+  assert.equal(resolveWorkspaceFromMenuItem("CRM", "Communicate"), "sales");
 });
 
 test("management website intents keep the dedicated UI builder but submit the legacy backend website action", () => {

@@ -1269,6 +1269,15 @@ export function resolveSystemMenuIntent(item: string): WorkspaceMenuIntent | nul
   }
 }
 
+export function resolveCrmMenuIntent(item: string): WorkspaceMenuIntent | null {
+  switch (item) {
+    case "Communicate":
+      return null;
+    default:
+      return null;
+  }
+}
+
 export function resolveSalesMenuIntent(item: string): WorkspaceMenuIntent | null {
   switch (item) {
     case "New Lead":
@@ -2429,6 +2438,8 @@ export function resolveWorkspaceMenuIntent(groupLabel: string, item: string): Wo
       return resolvePartsMenuIntent(item);
     case "Sales":
       return resolveSalesMenuIntent(item);
+    case "CRM":
+      return resolveCrmMenuIntent(item);
     case "Service":
       return resolveServiceMenuIntent(item);
     case "Management Activity":

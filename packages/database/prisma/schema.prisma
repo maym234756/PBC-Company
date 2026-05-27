@@ -61,6 +61,12 @@ model Store {
   pricingRules    PricingRule[]
   approvalRequests ApprovalRequest[]
   boatInventoryUnits BoatInventoryUnit[]
+  crmContacts      CrmContact[]
+  crmConversations CrmConversation[]
+  crmMessages      CrmMessage[]
+  crmReviews       CrmReview[]
+  crmPayments      CrmPayment[]
+  crmActivities    CrmActivity[]
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 }
@@ -461,4 +467,155 @@ model ApprovalRequest {
   updatedAt    DateTime @updatedAt
 
   @@index([storeId, status, createdAt])
+}
+
+model CrmContact {
+  id               String           @id @default(cuid())
+  name             String
+  owner            String
+  location         String
+  phone            String           @default("")
+  email            String           @default("")
+  company          String           @default("")
+  stage            String           @default("Lead")
+  tagsJson         String           @default("[]")
+  consentText      String           @default("Pending")
+  consentEmail     String           @default("Pending")
+  lastTouchLabel   String           @default("Just now")
+  lastTouchAt      DateTime         @default(now())
+  lastChannel      String           @default("SMS")
+  nextAction       String           @default("")
+  healthScore      Int              @default(72)
+  openBalance      Int              @default(0)
+  opportunityValue Int              @default(0)
+  reviewScore      Float            @default(0)
+  integrationId    String           @default("")
+  dealReference    String           @default("")
+  storeId          String
+  store            Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  conversations    CrmConversation[]
+  messages         CrmMessage[]
+  reviews          CrmReview[]
+  payments         CrmPayment[]
+  activities       CrmActivity[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([storeId, lastTouchAt])
+  @@index([storeId, phone])
+  @@index([storeId, name])
+}
+
+model CrmConversation {
+  id             String       @id @default(cuid())
+  channel        String       @default("SMS")
+  subject        String
+  preview        String       @default("")
+  queueLabel     String       @default("Open Conversations")
+  assignment     String
+  status         String       @default("Open")
+  unreadCount    Int          @default(0)
+  lastTouchLabel String       @default("Just now")
+  lastTouchAt    DateTime     @default(now())
+  storeId        String
+  store          Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  contactId      String
+  contact        CrmContact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  messages       CrmMessage[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([storeId, lastTouchAt])
+  @@index([contactId, lastTouchAt])
+}
+
+model CrmMessage {
+  id             String          @id @default(cuid())
+  twilioSid      String?         @unique
+  author         String
+  body           String
+  timeLabel      String          @default("Just now")
+  direction      String
+  status         String          @default("Queued")
+  channel        String          @default("SMS")
+  source         String          @default("Communicate")
+  storeId        String
+  store          Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  contactId      String
+  contact        CrmContact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  conversationId String
+  conversation   CrmConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([conversationId, createdAt])
+  @@index([contactId, createdAt])
+  @@index([storeId, createdAt])
+}
+
+model CrmReview {
+  id            String     @id @default(cuid())
+  author        String
+  platform      String
+  rating        Int
+  postedAtLabel String
+  postedAt      DateTime
+  body          String
+  owner         String
+  state         String
+  storeId       String
+  store         Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  contactId     String
+  contact       CrmContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([storeId, postedAt])
+  @@index([contactId, postedAt])
+}
+
+model CrmPayment {
+  id             String     @id @default(cuid())
+  createdAtLabel String
+  recordedAt     DateTime
+  customer       String
+  confirmation   String
+  invoice        String
+  amount         Int
+  type           String
+  status         String
+  reconciled     Boolean    @default(false)
+  owner          String
+  detail         String
+  storeId        String
+  store          Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  contactId      String
+  contact        CrmContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([storeId, recordedAt])
+  @@index([contactId, recordedAt])
+}
+
+model CrmActivity {
+  id           String     @id @default(cuid())
+  kind         String
+  title        String
+  detail       String
+  owner        String
+  source       String
+  timeLabel    String
+  priority     String
+  state        String
+  occurredAt   DateTime
+  storeId      String
+  store        Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  contactId    String
+  contact      CrmContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([storeId, occurredAt])
+  @@index([contactId, occurredAt])
 }

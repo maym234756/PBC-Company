@@ -103,6 +103,38 @@ async function assertWorkspaceToolsPanel(
 }
 
 test.describe("top navigation smoke", () => {
+  test("opens the new management activity leaf from the Management Activity menu", async ({ page, request }) => {
+    await openWorkspace(page, request);
+
+    await menuButton(page, "Management Activity").click();
+    await expect(menuButton(page, "Managements Activitie's")).toBeVisible();
+    await expect(menuButton(page, "Cashier Accountability")).toBeVisible();
+    await expect(menuButton(page, "Cashier Reconciliation")).toBeVisible();
+    await menuButton(page, "Managements Activitie's").click();
+
+    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/analytics\?view=management-activities$/);
+    await expect(page.getByRole("heading", { name: "Management Activities", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Needs Attention/, exact: false })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Show Filters/, exact: false })).toBeVisible();
+    await expect(page.getByText("Oldest Issue", { exact: false })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Age", exact: true })).toBeVisible();
+    await expect(page.locator(".workflow-panel")).toHaveCount(0);
+  });
+
+  test("opens cashier accountability from the Management Activity menu", async ({ page, request }) => {
+    await openWorkspace(page, request);
+
+    await menuButton(page, "Management Activity").click();
+    await expect(menuButton(page, "Cashier Accountability")).toBeVisible();
+    await menuButton(page, "Cashier Accountability").click();
+
+    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/analytics\?view=cashier-accountability$/);
+    await expect(page.getByRole("heading", { name: "Cashier Accountability", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Find Matching Data/, exact: false })).toBeVisible();
+    await expect(page.getByText("Matching Operators", { exact: true })).toBeVisible();
+    await expect(page.locator(".workflow-panel")).toHaveCount(0);
+  });
+
   test("opens statement requests from Receivables with a distinct queued action", async ({ page, request }) => {
     await openWorkspace(page, request);
 
@@ -123,26 +155,6 @@ test.describe("top navigation smoke", () => {
       primaryAction: "Send Statement"
     });
     await submitWorkflow(page, "Statement request queued.");
-  });
-
-  test("opens payroll review from the Management Activity menu", async ({ page, request }) => {
-    await openWorkspace(page, request);
-
-    await menuButton(page, "Management Activity").click();
-    await expect(menuButton(page, "Digital & Workforce")).toBeVisible();
-    await menuButton(page, "Digital & Workforce").hover();
-    await expect(menuButton(page, "Payroll & People")).toBeVisible();
-    await menuButton(page, "Payroll & People").hover();
-    await expect(menuButton(page, "Payroll Review")).toBeVisible();
-    await menuButton(page, "Payroll Review").click();
-
-    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/analytics$/);
-    await assertWorkflowPanel(page, {
-      title: "Payroll Review",
-      fields: ["Exception Lens", "Review Owner", "Escalation Path"],
-      primaryAction: "Run Payroll Audit"
-    });
-    await submitWorkflow(page, "Management exception review queued.");
   });
 
   test("opens receivables inquiry from the Receivables menu", async ({ page, request }) => {

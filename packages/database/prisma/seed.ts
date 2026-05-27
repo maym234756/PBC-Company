@@ -1,6 +1,7 @@
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import path from "node:path";
 import { PrismaClient } from "../src/generated/client.js";
+import { seedCrmCommunicateFixtures } from "./crmCommunicateSeed.js";
 
 const databaseUrl = `file:${path.resolve(import.meta.dirname, "dev.db").replace(/\\/g, "/")}`;
 
@@ -1177,6 +1178,12 @@ async function seed() {
       }
     });
   }
+
+  await seedCrmCommunicateFixtures(
+    prisma,
+    stores.map((store) => ({ code: store.code, name: store.name })),
+    storeIds
+  );
 }
 
 function createRelativeDate(daysAgo: number) {

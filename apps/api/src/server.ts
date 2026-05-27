@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { prisma } from "@marine-cloud/database";
 import cors from "cors";
+import dotenv from "dotenv";
 import express from "express";
 import { z } from "zod";
 import {
@@ -15,7 +18,30 @@ import {
   type ServiceOrderWorkspaceRow
 } from "./serviceOrderDetail.js";
 import { buildServiceWorkspaceNotifications } from "./serviceNotifications.js";
+import {
+  createCrmCommunicateThread,
+  getCrmCommunicatePayload,
+  recordInboundTwilioMessage,
+  recordTwilioMessageStatus,
+  sendCrmConversationSms,
+  updateCrmContactQuickInfo
+} from "./crmCommunicate.js";
+import {
+  TWILIO_INBOUND_WEBHOOK_PATH,
+  TWILIO_STATUS_WEBHOOK_PATH,
+  buildTwilioMessagePayload,
+  getTwilioAuthorizationHeader,
+  getTwilioMessagesEndpoint,
+  getTwilioMessagingConfig,
+  getTwilioMissingConfig,
+  getTwilioWebhookUrl,
+  validateTwilioRequestSignature
+} from "./twilioMessaging.js";
 import { resolveWorkflowActionPlan } from "./workflowActionPlans.js";
+
+const serverModuleDirectory = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(serverModuleDirectory, "../../../.env") });
+dotenv.config({ path: path.resolve(serverModuleDirectory, "../.env"), override: true });
 
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
@@ -1268,74 +1294,12 @@ const navigation = [
     ]
   },
   {
+    label: "CRM",
+    items: ["Communicate"]
+  },
+  {
     label: "Management Activity",
-    items: [
-      {
-        label: "Leadership Dashboards",
-        items: [
-          {
-            label: "Executive Views",
-            items: ["Desktop", "Executive Board", "Daily Scorecard", "Forecast Snapshot"]
-          },
-          {
-            label: "Exception Watch",
-            items: ["Exception Monitor", "Margin Risk Board", "Cash Pulse", "Funding Alerts"]
-          }
-        ]
-      },
-      {
-        label: "Department Activity",
-        items: [
-          {
-            label: "Sales & F&I",
-            items: ["Sales Activity", "Deal Funding Watch", "Lead Response Monitor", "Delivery Readiness"]
-          },
-          {
-            label: "Service & Parts",
-            items: ["Service Throughput", "Promise Date Watch", "Parts Fill Rate", "Backorder Risk"]
-          }
-        ]
-      },
-      {
-        label: "Digital & Workforce",
-        items: [
-          {
-            label: "Website & CRM",
-            items: ["Website Activity", "Lead Handoff Monitor", "Campaign Response", "Reputation Watch"]
-          },
-          {
-            label: "Payroll & People",
-            items: ["Payroll Review", "Time Clock Exceptions", "Comp Plan Review", "Staffing Coverage"]
-          }
-        ]
-      },
-      {
-        label: "Cross-Store & Audit",
-        items: [
-          {
-            label: "Group Oversight",
-            items: ["Cross-Store View", "Store Scorecards", "Benchmark Queue", "Action Tracker"]
-          },
-          {
-            label: "Compliance & Close",
-            items: ["Audit Trail", "Policy Exceptions", "Approval Log", "Month-End Readiness"]
-          }
-        ]
-      },
-      {
-        label: "Favorites",
-        items: [
-          {
-            label: "Leadership Views",
-            items: ["Favorite Executive Board", "Favorite Exception Watch", "Favorite Website Pulse", "Favorite Payroll Audit"]
-          },
-          {
-            label: "Shortcuts",
-            items: ["Favorite Forecast", "Favorite Cross-Store Compare", "Favorite Funding Alerts", "Favorite Approval Log"]
-          }
-        ]
-      }
-    ]
+    items: ["Managements Activitie's", "Cashier Accountability", "Cashier Reconciliation"]
   },
   {
     label: "Receivables",
@@ -1836,6 +1800,13 @@ const activityFilterSchema = z.object({
   actorUserId: z.string().trim().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(50).optional()
 });
+const cashierAccountabilityReportQuerySchema = z.object({
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+}).refine(({ startDate, endDate }) => startDate <= endDate, {
+  message: "Start date must be on or before the end date.",
+  path: ["endDate"]
+});
 const taskFilterSchema = activityFilterSchema;
 const taskStatusUpdateSchema = z.object({
   status: taskStatusSchema,
@@ -2173,6 +2144,68 @@ const boatInventoryUnitMutationSchema = z.object({
   notes: z.string().trim().max(2000).default("")
 });
 const boatInventoryUnitUpdateSchema = boatInventoryUnitMutationSchema.partial();
+const twilioSendMessageSchema = z.object({
+  to: z.string().trim().min(1).max(40),
+  body: z.string().trim().min(1).max(1600),
+  mediaUrl: z.string().trim().url().optional(),
+  statusCallbackUrl: z.string().trim().url().optional()
+});
+const crmThreadCreateSchema = z.object({
+  actorName: z.string().trim().min(1).max(120),
+  name: z.string().trim().min(1).max(120),
+  phone: z.string().trim().min(1).max(40),
+  email: z.string().trim().email().max(160).optional().or(z.literal(""))
+});
+const crmContactUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  phone: z.string().trim().min(1).max(40).optional(),
+  email: z.string().trim().email().max(160).optional().or(z.literal("")),
+  stage: z.string().trim().min(1).max(80).optional()
+});
+const crmSmsSendSchema = z.object({
+  actorName: z.string().trim().min(1).max(120),
+  body: z.string().trim().min(1).max(1600)
+});
+
+function parseJsonResponseBody(bodyText: string) {
+  if (!bodyText.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(bodyText) as Record<string, unknown>;
+  } catch {
+    return { raw: bodyText };
+  }
+}
+
+function rejectInvalidTwilioWebhook(request: express.Request, response: express.Response, path: string) {
+  const config = getTwilioMessagingConfig(process.env);
+  const missing = getTwilioMissingConfig(config, "webhook");
+
+  if (missing.length > 0) {
+    response.status(503).json({ message: "Twilio webhook configuration is incomplete.", missing });
+    return true;
+  }
+
+  const signature = request.header("X-Twilio-Signature");
+  const webhookUrl = getTwilioWebhookUrl(config, path);
+
+  if (
+    !webhookUrl ||
+    !validateTwilioRequestSignature({
+      authToken: config.authToken,
+      params: request.body as Record<string, unknown>,
+      signature,
+      url: webhookUrl
+    })
+  ) {
+    response.status(403).json({ message: "Invalid Twilio webhook signature." });
+    return true;
+  }
+
+  return false;
+}
 
 const defaultTaskSlaPolicyCatalog = [
   { workspaceId: "desktop", action: "Designer", slaMinutes: 90 },
@@ -2227,6 +2260,192 @@ app.use("/api/auth/login", authLoginRateLimit);
 
 app.get("/api/health", (_request, response) => {
   response.json({ status: "ok" });
+});
+
+app.get("/api/crm/twilio/config", (_request, response) => {
+  const config = getTwilioMessagingConfig(process.env);
+  const missingForSend = getTwilioMissingConfig(config, "send");
+  const missingForReceive = getTwilioMissingConfig(config, "webhook");
+
+  response.json({
+    accountSidConfigured: Boolean(config.accountSid),
+    authTokenConfigured: Boolean(config.authToken),
+    apiKeyConfigured: Boolean(config.apiKey),
+    apiSecretConfigured: Boolean(config.apiSecret),
+    phoneNumber: config.phoneNumber || null,
+    messagingServiceSid: config.messagingServiceSid || null,
+    webhookBaseUrl: config.webhookBaseUrl || null,
+    defaultStoreCode: config.defaultStoreCode || null,
+    inboundWebhookUrl: getTwilioWebhookUrl(config, TWILIO_INBOUND_WEBHOOK_PATH),
+    statusWebhookUrl: getTwilioWebhookUrl(config, TWILIO_STATUS_WEBHOOK_PATH),
+    readyToSend: missingForSend.length === 0,
+    readyToReceive: missingForReceive.length === 0,
+    missingForSend,
+    missingForReceive
+  });
+});
+
+app.post("/api/crm/messages/send", async (request, response) => {
+  const parsed = twilioSendMessageSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter a valid Twilio send payload." });
+    return;
+  }
+
+  const config = getTwilioMessagingConfig(process.env);
+  const missing = getTwilioMissingConfig(config, "send");
+
+  if (missing.length > 0) {
+    response.status(503).json({ message: "Twilio outbound messaging is not configured.", missing });
+    return;
+  }
+
+  try {
+    const twilioResponse = await fetch(getTwilioMessagesEndpoint(config), {
+      method: "POST",
+      headers: {
+        Authorization: getTwilioAuthorizationHeader(config),
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: buildTwilioMessagePayload(config, parsed.data).toString()
+    });
+    const bodyText = await twilioResponse.text();
+    const twilioBody = parseJsonResponseBody(bodyText);
+
+    if (!twilioResponse.ok) {
+      response.status(502).json({
+        message: "Twilio rejected the outbound message.",
+        twilioStatus: twilioResponse.status,
+        twilio: twilioBody
+      });
+      return;
+    }
+
+    response.status(201).json({
+      message: "Message accepted by Twilio.",
+      sid: twilioBody && "sid" in twilioBody ? twilioBody.sid : null,
+      status: twilioBody && "status" in twilioBody ? twilioBody.status : null,
+      to: twilioBody && "to" in twilioBody ? twilioBody.to : parsed.data.to,
+      from: twilioBody && "from" in twilioBody ? twilioBody.from : config.phoneNumber || null,
+      messagingServiceSid:
+        twilioBody && "messaging_service_sid" in twilioBody
+          ? twilioBody.messaging_service_sid
+          : config.messagingServiceSid || null
+    });
+  } catch (error) {
+    response.status(502).json({
+      message: "Unable to reach Twilio.",
+      error: error instanceof Error ? error.message : "Unknown error"
+    });
+  }
+});
+
+app.get("/api/stores/:storeId/crm/communicate", async (request, response) => {
+  const payload = await getCrmCommunicatePayload(request.params.storeId);
+
+  if (!payload) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  response.json(payload);
+});
+
+app.post("/api/stores/:storeId/crm/threads", async (request, response) => {
+  const parsed = crmThreadCreateSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter a valid customer name and phone number." });
+    return;
+  }
+
+  const result = await createCrmCommunicateThread(request.params.storeId, parsed.data);
+
+  if (!result) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  response.status(201).json({
+    message: `New message thread ready for ${parsed.data.name.trim()}.`,
+    ...result
+  });
+});
+
+app.patch("/api/stores/:storeId/crm/contacts/:contactId", async (request, response) => {
+  const parsed = crmContactUpdateSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter a valid customer quick-info update." });
+    return;
+  }
+
+  const result = await updateCrmContactQuickInfo(request.params.storeId, request.params.contactId, parsed.data);
+
+  if (!result) {
+    response.status(404).json({ message: "Contact not found." });
+    return;
+  }
+
+  response.json({ message: "Customer quick info saved.", ...result });
+});
+
+app.post("/api/stores/:storeId/crm/conversations/:conversationId/messages/send", async (request, response) => {
+  const parsed = crmSmsSendSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter a valid outbound SMS payload." });
+    return;
+  }
+
+  const result = await sendCrmConversationSms(request.params.storeId, request.params.conversationId, parsed.data);
+
+  if (!result) {
+    response.status(404).json({ message: "Conversation not found." });
+    return;
+  }
+
+  if ("missing" in result) {
+    response.status(503).json({ message: "Twilio outbound messaging is not configured.", missing: result.missing });
+    return;
+  }
+
+  if ("errorStatus" in result) {
+    response.status(502).json({
+      message: "Twilio rejected the outbound message.",
+      twilioStatus: result.errorStatus,
+      twilio: result.errorBody
+    });
+    return;
+  }
+
+  response.status(201).json({ message: "SMS sent from Communicate.", ...result });
+});
+
+app.post(TWILIO_INBOUND_WEBHOOK_PATH, express.urlencoded({ extended: false }), async (request, response) => {
+  if (rejectInvalidTwilioWebhook(request, response, TWILIO_INBOUND_WEBHOOK_PATH)) {
+    return;
+  }
+
+  const result = await recordInboundTwilioMessage(request.body as Record<string, unknown>);
+
+  if (!result.ok && !result.ignored) {
+    response.status(503).json({ message: result.message ?? "Unable to persist inbound Twilio message." });
+    return;
+  }
+
+  response.type("text/xml").send("<Response></Response>");
+});
+
+app.post(TWILIO_STATUS_WEBHOOK_PATH, express.urlencoded({ extended: false }), async (request, response) => {
+  if (rejectInvalidTwilioWebhook(request, response, TWILIO_STATUS_WEBHOOK_PATH)) {
+    return;
+  }
+
+  await recordTwilioMessageStatus(request.body as Record<string, unknown>);
+
+  response.status(204).send();
 });
 
 app.post("/api/auth/login", async (request, response) => {
@@ -3405,6 +3624,132 @@ app.get("/api/stores/:storeId/activity", async (request, response) => {
   });
 
   response.json(activity.map(formatStoreActivityEntry));
+});
+
+app.get("/api/stores/:storeId/reports/cashier-accountability", async (request, response) => {
+  const parsedQuery = cashierAccountabilityReportQuerySchema.safeParse(request.query);
+
+  if (!parsedQuery.success) {
+    response.status(400).json({ message: "Enter a valid cashier accountability date range." });
+    return;
+  }
+
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    select: {
+      id: true,
+      name: true
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  const startAt = parseDateInput(parsedQuery.data.startDate);
+  const endExclusive = addDays(parseDateInput(parsedQuery.data.endDate), 1);
+  const activities = await prisma.storeActivity.findMany({
+    where: {
+      storeId: store.id,
+      createdAt: {
+        gte: startAt,
+        lt: endExclusive
+      }
+    },
+    orderBy: {
+      createdAt: "desc"
+    },
+    select: {
+      id: true,
+      workspaceId: true,
+      label: true,
+      detail: true,
+      tone: true,
+      actorUserId: true,
+      actorName: true,
+      actorInitial: true,
+      createdAt: true,
+      actorUser: {
+        select: {
+          title: true
+        }
+      }
+    }
+  });
+
+  const operatorSummary = new Map<string, {
+    operatorKey: string;
+    actorUserId: string | null;
+    name: string;
+    initial: string;
+    title: string;
+    activityCount: number;
+    activeDates: Set<string>;
+    latestActivityAt: string;
+    latestActivityLabel: string;
+  }>();
+
+  const entries = activities.map((activity) => {
+    const operatorKey = activity.actorUserId ?? `actor:${activity.actorName.toLowerCase()}`;
+    const occurredAtIso = activity.createdAt.toISOString();
+    const occurredDateKey = occurredAtIso.slice(0, 10);
+    const existingOperator = operatorSummary.get(operatorKey);
+
+    if (existingOperator) {
+      existingOperator.activityCount += 1;
+      existingOperator.activeDates.add(occurredDateKey);
+    } else {
+      operatorSummary.set(operatorKey, {
+        operatorKey,
+        actorUserId: activity.actorUserId,
+        name: activity.actorName,
+        initial: activity.actorInitial,
+        title: activity.actorUser?.title ?? "Store Operator",
+        activityCount: 1,
+        activeDates: new Set([occurredDateKey]),
+        latestActivityAt: occurredAtIso,
+        latestActivityLabel: activity.label
+      });
+    }
+
+    return {
+      id: activity.id,
+      operatorKey,
+      actorUserId: activity.actorUserId,
+      actorName: activity.actorName,
+      actorInitial: activity.actorInitial,
+      actorTitle: activity.actorUser?.title ?? "Store Operator",
+      workspaceId: activity.workspaceId as z.infer<typeof workspaceSchema>,
+      label: activity.label,
+      detail: activity.detail,
+      tone: activity.tone as z.infer<typeof activityToneSchema>,
+      occurredAt: occurredAtIso
+    };
+  });
+
+  response.json({
+    storeId: store.id,
+    storeName: store.name,
+    startDate: parsedQuery.data.startDate,
+    endDate: parsedQuery.data.endDate,
+    operators: Array.from(operatorSummary.values())
+      .map((operator) => ({
+        operatorKey: operator.operatorKey,
+        actorUserId: operator.actorUserId,
+        name: operator.name,
+        initial: operator.initial,
+        title: operator.title,
+        activityCount: operator.activityCount,
+        activeDateCount: operator.activeDates.size,
+        latestActivityAt: operator.latestActivityAt,
+        latestActivityLabel: operator.latestActivityLabel
+      }))
+      .sort((left, right) => right.activityCount - left.activityCount || left.name.localeCompare(right.name)),
+    entries
+  });
 });
 
 app.get("/api/stores/:storeId/tasks", async (request, response) => {
@@ -4941,6 +5286,17 @@ function formatStoreActivityEntry(activity: {
     actorName: activity.actorName,
     actorInitial: activity.actorInitial
   };
+}
+
+function parseDateInput(value: string) {
+  const [year, month, day] = value.split("-").map((segment) => Number(segment));
+  return new Date(year, month - 1, day);
+}
+
+function addDays(value: Date, dayCount: number) {
+  const nextValue = new Date(value);
+  nextValue.setDate(nextValue.getDate() + dayCount);
+  return nextValue;
 }
 
 function formatStoreTaskEntry(task: {

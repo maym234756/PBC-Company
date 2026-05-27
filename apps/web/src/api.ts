@@ -39,6 +39,41 @@ export interface WorkflowActionResponse {
   taskEntry?: TaskQueueEntry;
 }
 
+export interface CashierAccountabilityReportOperator {
+  operatorKey: string;
+  actorUserId: string | null;
+  name: string;
+  initial: string;
+  title: string;
+  activityCount: number;
+  activeDateCount: number;
+  latestActivityAt: string;
+  latestActivityLabel: string;
+}
+
+export interface CashierAccountabilityReportEntry {
+  id: string;
+  operatorKey: string;
+  actorUserId: string | null;
+  actorName: string;
+  actorInitial: string;
+  actorTitle: string;
+  workspaceId: WorkspaceId;
+  label: string;
+  detail: string;
+  tone: CommandTone;
+  occurredAt: string;
+}
+
+export interface CashierAccountabilityReportResponse {
+  storeId: string;
+  storeName: string;
+  startDate: string;
+  endDate: string;
+  operators: CashierAccountabilityReportOperator[];
+  entries: CashierAccountabilityReportEntry[];
+}
+
 export interface SalesDealDepositEntry {
   id: string;
   invoice: string;
@@ -464,6 +499,138 @@ export interface TaskSlaPolicyActionResponse {
   activityEntry: ActivityLogEntry;
 }
 
+export interface CrmContactProfile {
+  id: string;
+  name: string;
+  owner: string;
+  location: string;
+  phone: string;
+  email: string;
+  company: string;
+  stage: string;
+  tags: string[];
+  consentText: string;
+  consentEmail: string;
+  lastTouch: string;
+  lastChannel: string;
+  nextAction: string;
+  healthScore: number;
+  openBalance: number;
+  opportunityValue: number;
+  reviewScore: number;
+  integrationId: string;
+  dealReference: string;
+}
+
+export interface CrmConversationMessage {
+  id: string;
+  author: string;
+  body: string;
+  timeLabel: string;
+  direction: "inbound" | "outbound";
+  status: string;
+}
+
+export interface CrmConversationThread {
+  id: string;
+  contactId: string;
+  channel: "SMS" | "Email";
+  subject: string;
+  preview: string;
+  queueLabel: string;
+  assignment: string;
+  status: "Open" | "Pending" | "Escalated";
+  unreadCount: number;
+  lastTouch: string;
+  messages: CrmConversationMessage[];
+}
+
+export interface CrmReviewItem {
+  id: string;
+  contactId: string;
+  author: string;
+  platform: string;
+  rating: number;
+  postedAt: string;
+  body: string;
+  owner: string;
+  state: "Needs Response" | "Responded";
+}
+
+export interface CrmPaymentRecord {
+  id: string;
+  contactId: string;
+  createdAt: string;
+  customer: string;
+  confirmation: string;
+  invoice: string;
+  amount: number;
+  type: string;
+  status: "Pending" | "Link Sent" | "Paid" | "Refunded" | "Promise to Pay";
+  reconciled: boolean;
+  owner: string;
+  detail: string;
+}
+
+export interface CrmActivityEntry {
+  id: string;
+  contactId: string;
+  kind: "SMS" | "Email" | "Call" | "Task" | "Review" | "Payment" | "Quote";
+  title: string;
+  detail: string;
+  owner: string;
+  source: string;
+  timeLabel: string;
+  priority: "Low" | "Normal" | "High";
+  state: "Open" | "Done";
+}
+
+export interface CrmCommunicatePayload {
+  contacts: CrmContactProfile[];
+  conversations: CrmConversationThread[];
+  reviews: CrmReviewItem[];
+  payments: CrmPaymentRecord[];
+  activities: CrmActivityEntry[];
+}
+
+export interface CreateCrmThreadRequest {
+  actorName: string;
+  name: string;
+  phone: string;
+  email?: string;
+}
+
+export interface CreateCrmThreadResponse {
+  message: string;
+  contactId: string;
+  conversationId: string;
+}
+
+export interface UpdateCrmContactQuickInfoRequest {
+  name?: string;
+  phone?: string;
+  email?: string;
+  stage?: string;
+}
+
+export interface UpdateCrmContactQuickInfoResponse {
+  message: string;
+  contactId: string;
+}
+
+export interface SendCrmConversationSmsRequest {
+  actorName: string;
+  body: string;
+}
+
+export interface SendCrmConversationSmsResponse {
+  message: string;
+  contactId: string;
+  conversationId: string;
+  sid: string | null;
+  status: string;
+}
+
 const defaultApiBaseUrl =
   typeof window === "undefined"
     ? "http://localhost:4000/api"
@@ -484,6 +651,12 @@ export async function getDashboard(storeId: string) {
 
 export async function getWorkspace(storeId: string, workspaceId: WorkspaceId) {
   return request<WorkspacePayload>(`/stores/${storeId}/workspaces/${workspaceId}`);
+}
+
+export async function getCashierAccountabilityReport(storeId: string, startDate: string, endDate: string) {
+  const params = new URLSearchParams({ startDate, endDate });
+
+  return request<CashierAccountabilityReportResponse>(`/stores/${storeId}/reports/cashier-accountability?${params.toString()}`);
 }
 
 export async function getActivityLog(storeId: string, workspaceId: WorkspaceId, actorUserId?: string, limit?: number) {
@@ -710,6 +883,31 @@ export interface GlobalSearchResult {
 
 export async function globalSearch(storeId: string, query: string): Promise<GlobalSearchResult> {
   return request<GlobalSearchResult>(`/stores/${storeId}/search?q=${encodeURIComponent(query)}`);
+}
+
+export async function getCrmCommunicate(storeId: string) {
+  return request<CrmCommunicatePayload>(`/stores/${storeId}/crm/communicate`);
+}
+
+export async function createCrmThread(storeId: string, payload: CreateCrmThreadRequest) {
+  return request<CreateCrmThreadResponse>(`/stores/${storeId}/crm/threads`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateCrmContactQuickInfo(storeId: string, contactId: string, payload: UpdateCrmContactQuickInfoRequest) {
+  return request<UpdateCrmContactQuickInfoResponse>(`/stores/${storeId}/crm/contacts/${contactId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function sendCrmConversationSms(storeId: string, conversationId: string, payload: SendCrmConversationSmsRequest) {
+  return request<SendCrmConversationSmsResponse>(`/stores/${storeId}/crm/conversations/${conversationId}/messages/send`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
 }
 
 async function request<T>(path: string, init?: RequestInit) {

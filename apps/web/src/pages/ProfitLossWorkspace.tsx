@@ -1,10 +1,54 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 
 // ── types ────────────────────────────────────────────────────────────────────
 type PLViewMode = "report" | "charts" | "forecast";
 type PLChartType = "trend" | "waterfall" | "department";
+type PLReportLayoutMode = "focus" | "board" | "multiReport";
 type PLVarianceMode = "actual" | "priorYear" | "budget";
 type PLScenarioId = "current" | "board" | "conservative" | "summerPush";
+type PLForecastReport = "scenarioLab" | "scenarioCompare" | "monthlyOutlook";
+type PLChartMetricWidgetId =
+  | "revenueRunRate"
+  | "grossProfitRunRate"
+  | "netIncomeRunRate"
+  | "forecastRevenueDelta"
+  | "forecastNetDelta"
+  | "grossMargin"
+  | "netMargin"
+  | "expenseLoad"
+  | "scenarioConfidence"
+  | "peakForecastMonth"
+  | "topStore"
+  | "departmentLeader"
+  | "revenueBudgetGap"
+  | "netBudgetGap"
+  | "cogsLoad"
+  | "nextNinetyRevenue"
+  | "nextNinetyNet"
+  | "storeMarginSpread"
+  | "activeAnomalyCount"
+  | "snapshotVaultCount"
+  | "bestScenarioNet"
+  | "topDepartmentMargin";
+type PLWidgetId =
+  | "trendExplorer"
+  | "marginWalk"
+  | "departmentMix"
+  | "storeLeaderboard"
+  | "forecastDelta"
+  | "variancePulse"
+  | "departmentScoreboard"
+  | "scenarioBridge"
+  | "monthlyOutlookStudio"
+  | "scenarioCommandCenter"
+  | "storeMarginMatrix"
+  | "anomalyLedger"
+  | "contributorSpotlight"
+  | "snapshotVault";
+type WidgetLibrarySection = "data" | "visuals";
+type WidgetDeliveryModalMode = "send" | "schedule";
+type WidgetStoreScope = "current" | "all" | "custom";
+type WidgetScheduleCadence = "weekly" | "threePerWeek" | "monthly" | "custom";
 type ProfitLossDepartment = "Sales" | "Parts" | "Service" | "Administration";
 type ProfitLossGroup = "Income" | "Cost of Sales" | "Gross Profit" | "Expenses" | "Net Income";
 
@@ -109,6 +153,75 @@ interface ForecastSnapshotRecord {
   revenueTotal: number;
   netTotal: number;
   confidence: number;
+}
+
+interface GmailDeliveryProfile {
+  address: string;
+  connectedAt: string;
+}
+
+interface WidgetScheduleRecord {
+  id: string;
+  widgetIds: PLWidgetId[];
+  recipient: string;
+  gmailAccount: string;
+  cadence: WidgetScheduleCadence;
+  weekday: string;
+  weekdays: string[];
+  monthlyDay: number;
+  customRule: string;
+  storeScope: WidgetStoreScope;
+  storeIds: string[];
+  department: string;
+  month: string;
+  year: string;
+  savedAt: string;
+}
+
+interface StorePerformanceSnapshot {
+  storeId: string;
+  storeName: string;
+  revenue: number;
+  grossProfit: number;
+  netIncome: number;
+  netMarginPct: number;
+}
+
+interface DepartmentPerformanceSnapshot {
+  department: ProfitLossDepartment;
+  revenue: number;
+  grossProfit: number;
+  netIncome: number;
+  grossMarginPct: number;
+  netMarginPct: number;
+}
+
+interface ScenarioCompareRow {
+  id: PLScenarioId;
+  label: string;
+  summary: string;
+  revenueTotal: number;
+  grossMarginPct: number;
+  netTotal: number;
+  deltaVsBaseline: number;
+  confidence: number;
+}
+
+interface ForecastMonthlyOutlookRow {
+  label: string;
+  revenue: number;
+  grossProfit: number;
+  netIncome: number;
+  baselineRevenue: number;
+  baselineNetIncome: number;
+  revenueDelta: number;
+  netDelta: number;
+  grossMarginPct: number;
+  netMarginPct: number;
+  revenueStepPct: number;
+  paceTone: "up" | "down" | "neutral";
+  paceLabel: string;
+  focus: string;
 }
 
 interface ProfitLossStoreProfile {
@@ -298,6 +411,7 @@ const accountTransactionTemplates: Record<string, ProfitLossTransactionTemplate[
 
 const departments = ["Consolidated Statement", "Sales", "Parts", "Service", "Administration"];
 const reportMonths = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const profitLossDepartments: ProfitLossDepartment[] = ["Sales", "Parts", "Service", "Administration"];
 const profitLossGroupOrder: ProfitLossGroup[] = ["Income", "Cost of Sales", "Gross Profit", "Expenses", "Net Income"];
 
 // seasonal multipliers for marine dealership (index 0 = January)
@@ -305,6 +419,156 @@ const SEASONAL = [0.63, 0.69, 0.80, 0.91, 1.00, 1.18, 1.42, 1.30, 1.12, 0.95, 0.
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const BASE_MONTH_INDEX = 4;
 const SNAPSHOT_STORAGE_KEY = "profit-loss-forecast-snapshots-v1";
+const REPORT_SCHEDULE_STORAGE_KEY = "profit-loss-widget-schedules-v1";
+const GMAIL_DELIVERY_STORAGE_KEY = "profit-loss-gmail-profile-v1";
+const weekdayOptions = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const customScheduleRuleOptions = [
+  "Every first business day",
+  "Every last business day",
+  "15th and month end",
+  "Quarter close packet",
+  "Month-end leadership recap"
+];
+const MAX_CHART_DATA_WIDGETS = 4;
+const MAX_CHART_VISUAL_WIDGETS = 8;
+const MAX_WIDGET_PREVIEW_ITEMS = 4;
+const chartMetricWidgetOrder: PLChartMetricWidgetId[] = [
+  "revenueRunRate",
+  "grossProfitRunRate",
+  "netIncomeRunRate",
+  "forecastRevenueDelta",
+  "forecastNetDelta",
+  "grossMargin",
+  "netMargin",
+  "expenseLoad",
+  "scenarioConfidence",
+  "peakForecastMonth",
+  "topStore",
+  "departmentLeader",
+  "revenueBudgetGap",
+  "netBudgetGap",
+  "cogsLoad",
+  "nextNinetyRevenue",
+  "nextNinetyNet",
+  "storeMarginSpread",
+  "activeAnomalyCount",
+  "snapshotVaultCount",
+  "bestScenarioNet",
+  "topDepartmentMargin"
+];
+const defaultChartMetricWidgetIds: PLChartMetricWidgetId[] = ["revenueRunRate", "grossProfitRunRate", "netIncomeRunRate", "forecastRevenueDelta"];
+const chartWidgetOrder: PLWidgetId[] = [
+  "trendExplorer",
+  "marginWalk",
+  "departmentMix",
+  "storeLeaderboard",
+  "forecastDelta",
+  "variancePulse",
+  "departmentScoreboard",
+  "scenarioBridge",
+  "monthlyOutlookStudio",
+  "scenarioCommandCenter",
+  "storeMarginMatrix",
+  "anomalyLedger",
+  "contributorSpotlight",
+  "snapshotVault"
+];
+const defaultChartVisualWidgetIds: PLWidgetId[] = [
+  "trendExplorer",
+  "marginWalk",
+  "departmentMix",
+  "storeLeaderboard",
+  "forecastDelta",
+  "variancePulse",
+  "departmentScoreboard",
+  "scenarioBridge"
+];
+const chartWidgetDefinitions: Record<PLWidgetId, { fileStem: string; shortTitle: string; subtitle: string; title: string }> = {
+  trendExplorer: {
+    fileStem: "trend-explorer",
+    shortTitle: "Trend",
+    subtitle: "Revenue, gross profit, and net income across actuals and forecast.",
+    title: "Trend Explorer"
+  },
+  marginWalk: {
+    fileStem: "margin-walk",
+    shortTitle: "Walk",
+    subtitle: "Bridge revenue to net income with a quick executive narrative.",
+    title: "Margin Walk"
+  },
+  departmentMix: {
+    fileStem: "department-mix",
+    shortTitle: "Mix",
+    subtitle: "Stacked department contribution over the recent six-month frame.",
+    title: "Department Mix"
+  },
+  storeLeaderboard: {
+    fileStem: "store-leaderboard",
+    shortTitle: "Stores",
+    subtitle: "Revenue-weighted ranking for the current scope.",
+    title: "Store Leaderboard"
+  },
+  forecastDelta: {
+    fileStem: "forecast-delta",
+    shortTitle: "Delta",
+    subtitle: "Scenario revenue pacing versus the baseline forecast window.",
+    title: "Forecast Delta"
+  },
+  variancePulse: {
+    fileStem: "variance-pulse",
+    shortTitle: "Variance",
+    subtitle: "Accounting pulse across budget and prior-year pressure points.",
+    title: "Variance Pulse"
+  },
+  departmentScoreboard: {
+    fileStem: "department-scoreboard",
+    shortTitle: "Dept",
+    subtitle: "CEO scorecards for department scale, margin, and drop-through.",
+    title: "Department Scoreboard"
+  },
+  scenarioBridge: {
+    fileStem: "scenario-bridge",
+    shortTitle: "Bridge",
+    subtitle: "Show how volume, margin, and expense assumptions reshape net income.",
+    title: "Scenario Bridge"
+  },
+  monthlyOutlookStudio: {
+    fileStem: "monthly-outlook-studio",
+    shortTitle: "Outlook",
+    subtitle: "Forward-month revenue and net pacing for the next operating window.",
+    title: "Monthly Outlook Studio"
+  },
+  scenarioCommandCenter: {
+    fileStem: "scenario-command-center",
+    shortTitle: "Scenario",
+    subtitle: "Board-level view of scenario outcomes, confidence, and lift.",
+    title: "Scenario Command Center"
+  },
+  storeMarginMatrix: {
+    fileStem: "store-margin-matrix",
+    shortTitle: "Matrix",
+    subtitle: "Heatmap-style store margin and earnings concentration.",
+    title: "Store Margin Matrix"
+  },
+  anomalyLedger: {
+    fileStem: "anomaly-ledger",
+    shortTitle: "Alerts",
+    subtitle: "Top P&L anomalies and owner focus areas in one panel.",
+    title: "Anomaly Ledger"
+  },
+  contributorSpotlight: {
+    fileStem: "contributor-spotlight",
+    shortTitle: "Drivers",
+    subtitle: "Largest GL drivers with top contributing stores.",
+    title: "Contributor Spotlight"
+  },
+  snapshotVault: {
+    fileStem: "snapshot-vault",
+    shortTitle: "Vault",
+    subtitle: "Saved forecast runs and current board packet candidates.",
+    title: "Snapshot Vault"
+  }
+};
 const forecastScenarios: ForecastScenario[] = [
   {
     id: "current",
@@ -360,6 +624,22 @@ function fmtK(value: number) {
   if (Math.abs(value) >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
   if (Math.abs(value) >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
   return `$${value}`;
+}
+
+function formatSignedPercent(value: number, digits = 1) {
+  return `${value >= 0 ? "+" : "-"}${Math.abs(value).toFixed(digits)}%`;
+}
+
+function formatSignedCompactCurrency(value: number) {
+  return `${value >= 0 ? "+" : "-"}${fmtK(Math.abs(value))}`;
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function sanitizeFilePart(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
 function getPriorYearAmount(value: number, priorYear?: number) {
@@ -603,7 +883,7 @@ function buildDepartmentRevenueHistory(storeIds: string[], endYear: number, endM
     const parts = lines.filter((line) => line.account && line.group === "Income" && line.department === "Parts").reduce((sum, line) => sum + line.may2026, 0);
     const service = lines.filter((line) => line.account && line.group === "Income" && line.department === "Service").reduce((sum, line) => sum + line.may2026, 0);
     return {
-      label: MONTH_SHORT[monthIndex],
+      label: buildMonthLabel(monthIndex, year),
       sales,
       parts,
       service
@@ -627,6 +907,47 @@ function loadForecastSnapshots(): ForecastSnapshotRecord[] {
 function persistForecastSnapshots(snapshots: ForecastSnapshotRecord[]) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(SNAPSHOT_STORAGE_KEY, JSON.stringify(snapshots));
+}
+
+function loadGmailDeliveryProfile(): GmailDeliveryProfile | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(GMAIL_DELIVERY_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed.address === "string" ? parsed as GmailDeliveryProfile : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistGmailDeliveryProfile(profile: GmailDeliveryProfile | null) {
+  if (typeof window === "undefined") return;
+  if (!profile) {
+    window.localStorage.removeItem(GMAIL_DELIVERY_STORAGE_KEY);
+    return;
+  }
+
+  window.localStorage.setItem(GMAIL_DELIVERY_STORAGE_KEY, JSON.stringify(profile));
+}
+
+function loadWidgetSchedules(): WidgetScheduleRecord[] {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const raw = window.localStorage.getItem(REPORT_SCHEDULE_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed as WidgetScheduleRecord[] : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistWidgetSchedules(schedules: WidgetScheduleRecord[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(REPORT_SCHEDULE_STORAGE_KEY, JSON.stringify(schedules));
 }
 
 // simple linear regression — returns slope + intercept
@@ -704,20 +1025,6 @@ function buildScenarioBridge(history: MonthlyPoint[], adjustments: ScenarioAdjus
   ];
 }
 
-function buildForecastInsights(baseForecast: MonthlyPoint[], scenarioForecast: MonthlyPoint[], scenario: ForecastScenario, adjustments: ScenarioAdjustments): string[] {
-  const peakMonth = scenarioForecast.reduce((best, point) => (point.revenue > best.revenue ? point : best), scenarioForecast[0]);
-  const revenueDelta = sumMetric(scenarioForecast, "revenue") - sumMetric(baseForecast, "revenue");
-  const netDelta = sumMetric(scenarioForecast, "netIncome") - sumMetric(baseForecast, "netIncome");
-  const marginText = `${adjustments.grossMarginBps >= 0 ? "+" : ""}${adjustments.grossMarginBps} bps margin`;
-  const expenseText = `${adjustments.expensePct >= 0 ? "+" : ""}${adjustments.expensePct.toFixed(1)}% expense load`;
-
-  return [
-    `${scenario.label} keeps focus on ${scenario.summary.toLowerCase()}`,
-    `Projected revenue moves ${revenueDelta >= 0 ? "up" : "down"} ${fmtK(Math.abs(revenueDelta))}; peak month is ${peakMonth.label} at ${fmtK(peakMonth.revenue)}.`,
-    `Net income ${netDelta >= 0 ? "improves" : "softens"} ${fmtK(Math.abs(netDelta))} versus baseline with ${marginText} and ${expenseText}.`
-  ];
-}
-
 function getForecastConfidence(adjustments: ScenarioAdjustments) {
   const intensity = Math.abs(adjustments.revenuePct) * 1.4 + Math.abs(adjustments.grossMarginBps) / 60 + Math.abs(adjustments.expensePct) * 1.2;
   const score = Math.round(clamp(92 - intensity, 50, 92));
@@ -737,14 +1044,6 @@ function anomalyMap(lines: ProfitLossLine[]): Map<string, { pct: number; directi
     if (Math.abs(pct) >= 15) result.set(line.account, { pct, direction: pct > 0 ? "up" : "down" });
   }
   return result;
-}
-
-function marginScore(netIncomePct: number): { score: number; label: string; color: string } {
-  if (netIncomePct >= 15) return { score: 90, label: "Excellent", color: "#22c55e" };
-  if (netIncomePct >= 8) return { score: 70, label: "Healthy", color: "#0d9488" };
-  if (netIncomePct >= 3) return { score: 50, label: "Moderate", color: "#f59e0b" };
-  if (netIncomePct >= 0) return { score: 30, label: "Low", color: "#f97316" };
-  return { score: 10, label: "Loss", color: "#ef4444" };
 }
 
 function buildCommentary(lines: ProfitLossLine[], month: string, anomalies: Map<string, { pct: number; direction: "up" | "down" }>): string[] {
@@ -826,17 +1125,30 @@ function exportCSV(lines: ProfitLossLine[], month: string, year: string) {
 }
 
 // ── SVG chart layout constants ────────────────────────────────────────────────
-const W = 680, H = 240, PAD_L = 56, PAD_R = 16, PAD_T = 16, PAD_B = 36;
+const W = 760, H = 300, PAD_L = 60, PAD_R = 18, PAD_T = 18, PAD_B = 64;
 const CW = W - PAD_L - PAD_R;
 const CH = H - PAD_T - PAD_B;
+
+function getChartTooltipX(anchorX: number | null, tooltipWidth: number) {
+  if (anchorX === null) {
+    return PAD_L;
+  }
+
+  return anchorX > W - PAD_R - tooltipWidth - 8
+    ? anchorX - tooltipWidth - 10
+    : anchorX + 10;
+}
 
 // ── TrendChart ────────────────────────────────────────────────────────────────
 interface TrendChartProps { history: MonthlyPoint[]; forecast: MonthlyPoint[] }
 
 function TrendChart({ history, forecast }: TrendChartProps) {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const combined = [...history, ...forecast];
   const maxRev = Math.max(...combined.map((p) => p.revenue));
   const minNI = Math.min(...combined.map((p) => p.netIncome));
+  const axisLabelY = H - 24;
+  const legendY = H - 8;
   const xv = (i: number) => PAD_L + lerp(i, 0, combined.length - 1, 0, CW);
   const yv = (v: number) => PAD_T + lerp(v, minNI, maxRev, CH, 0);
   const revPts = combined.map<[number, number]>((p, i) => [xv(i), yv(p.revenue)]);
@@ -845,6 +1157,22 @@ function TrendChart({ history, forecast }: TrendChartProps) {
   const divX = xv(history.length - 0.5);
   const yTicks = 4;
   const yStep = (maxRev - minNI) / yTicks;
+  const hoverPoint = hoverIndex !== null ? combined[hoverIndex] : null;
+  const hoverIsForecast = hoverIndex !== null && hoverIndex >= history.length;
+  const hoverX = hoverIndex !== null ? xv(hoverIndex) : null;
+  const tooltipWidth = 156;
+  const tooltipHeight = 82;
+  const tooltipX = getChartTooltipX(hoverX, tooltipWidth);
+  const tooltipY = PAD_T + 8;
+
+  function handleChartHover(event: ReactMouseEvent<SVGRectElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (bounds.width === 0) return;
+
+    const ratio = clamp((event.clientX - bounds.left) / bounds.width, 0, 1);
+    const nextIndex = Math.round(ratio * Math.max(combined.length - 1, 0));
+    setHoverIndex(nextIndex);
+  }
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="pl-chart-svg">
@@ -865,10 +1193,54 @@ function TrendChart({ history, forecast }: TrendChartProps) {
       <path d={polyline(revPts.slice(history.length - 1))} fill="none" stroke="#3b82f6" strokeWidth="2" strokeDasharray="5,3" opacity="0.7" />
       <path d={polyline(gpPts)} fill="none" stroke="#22c55e" strokeWidth="1.5" />
       <path d={polyline(niPts)} fill="none" stroke="#f59e0b" strokeWidth="1.5" />
-      {combined.map((p, i) => i % 2 === 0 ? (
-        <text key={i} x={xv(i)} y={H - 6} textAnchor="middle" className="pl-chart-xa">{p.label}</text>
-      ) : null)}
-      <g transform={`translate(${PAD_L},${H - 8})`}>
+      <rect
+        x={PAD_L}
+        y={PAD_T}
+        width={CW}
+        height={CH}
+        fill="transparent"
+        style={{ cursor: "crosshair" }}
+        onMouseMove={handleChartHover}
+        onMouseLeave={() => setHoverIndex(null)}
+      />
+      {hoverPoint && hoverX !== null && (
+        <>
+          <line x1={hoverX} y1={PAD_T} x2={hoverX} y2={PAD_T + CH} stroke="#94a3b8" strokeWidth="1.5" strokeDasharray="4,4" />
+          <circle cx={hoverX} cy={yv(hoverPoint.revenue)} r="4.5" fill="#ffffff" stroke="#3b82f6" strokeWidth="2.5" />
+          <circle cx={hoverX} cy={yv(hoverPoint.grossProfit)} r="4" fill="#ffffff" stroke="#22c55e" strokeWidth="2" />
+          <circle cx={hoverX} cy={yv(hoverPoint.netIncome)} r="4" fill="#ffffff" stroke="#f59e0b" strokeWidth="2" />
+          <g pointerEvents="none" transform={`translate(${tooltipX},${tooltipY})`}>
+            <rect width={tooltipWidth} height={tooltipHeight} rx="10" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" opacity="0.98" />
+            <text x="12" y="18" fill="#0f172a" fontSize="11" fontWeight="800">{hoverPoint.label}</text>
+            <text x="12" y="32" fill="#64748b" fontSize="9.5">{hoverIsForecast ? "Forecast" : "Actuals"}</text>
+            <line x1="12" y1="39" x2={tooltipWidth - 12} y2="39" stroke="#e2e8f0" strokeWidth="1" />
+            <text x="12" y="54" fill="#3b82f6" fontSize="10" fontWeight="700">Revenue</text>
+            <text x={tooltipWidth - 12} y="54" fill="#0f172a" fontSize="10" fontWeight="700" textAnchor="end">{fmtK(hoverPoint.revenue)}</text>
+            <text x="12" y="67" fill="#22c55e" fontSize="10" fontWeight="700">Gross Profit</text>
+            <text x={tooltipWidth - 12} y="67" fill="#0f172a" fontSize="10" fontWeight="700" textAnchor="end">{fmtK(hoverPoint.grossProfit)}</text>
+            <text x="12" y="80" fill="#f59e0b" fontSize="10" fontWeight="700">Net Income</text>
+            <text x={tooltipWidth - 12} y="80" fill="#0f172a" fontSize="10" fontWeight="700" textAnchor="end">{fmtK(hoverPoint.netIncome)}</text>
+          </g>
+        </>
+      )}
+      {combined.map((p, i) => {
+        const monthOnly = p.label.slice(0, 3);
+        const showFullLabel = i === 0 || i === history.length || p.label.startsWith("Jan ");
+
+        return (
+        <text
+          key={p.label}
+          x={xv(i)}
+          y={axisLabelY}
+          textAnchor="middle"
+          className="pl-chart-xa"
+          fontSize="9"
+        >
+          {showFullLabel ? p.label : monthOnly}
+        </text>
+        );
+      })}
+      <g transform={`translate(${PAD_L},${legendY})`}>
         {[{ color: "#3b82f6", label: "Revenue" }, { color: "#22c55e", label: "Gross Profit" }, { color: "#f59e0b", label: "Net Income" }].map((item, i) => (
           <g key={item.label} transform={`translate(${i * 130},0)`}>
             <line x1={0} y1={-2} x2={16} y2={-2} stroke={item.color} strokeWidth="2" />
@@ -884,6 +1256,7 @@ function TrendChart({ history, forecast }: TrendChartProps) {
 interface WaterfallChartProps { revenue: number; grossProfit: number; netIncome: number }
 
 function WaterfallChart({ revenue, grossProfit, netIncome }: WaterfallChartProps) {
+  const [hoverBarIndex, setHoverBarIndex] = useState<number | null>(null);
   const bars = [
     { label: "Revenue", end: revenue, start: 0, type: "total" as const },
     { label: "COGS", end: grossProfit, start: revenue, type: "neg" as const },
@@ -895,6 +1268,21 @@ function WaterfallChart({ revenue, grossProfit, netIncome }: WaterfallChartProps
   const gap = 8;
   const yv = (v: number) => PAD_T + lerp(v, 0, revenue, CH, 0);
   const fillMap = { pos: "#22c55e", neg: "#ef4444", total: "#3b82f6" };
+  const hoverBar = hoverBarIndex !== null ? bars[hoverBarIndex] : null;
+  const hoverX = hoverBarIndex !== null ? PAD_L + hoverBarIndex * barW + barW / 2 : null;
+  const tooltipWidth = 160;
+  const tooltipHeight = 86;
+  const tooltipX = getChartTooltipX(hoverX, tooltipWidth);
+  const tooltipY = PAD_T + 8;
+
+  function handleChartHover(event: ReactMouseEvent<SVGRectElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (bounds.width === 0) return;
+
+    const ratio = clamp((event.clientX - bounds.left) / bounds.width, 0, 1);
+    const nextIndex = Math.round(ratio * Math.max(bars.length - 1, 0));
+    setHoverBarIndex(nextIndex);
+  }
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="pl-chart-svg">
@@ -908,15 +1296,37 @@ function WaterfallChart({ revenue, grossProfit, netIncome }: WaterfallChartProps
           </g>
         );
       })}
+      {hoverBarIndex !== null && (
+        <rect
+          x={PAD_L + hoverBarIndex * barW}
+          y={PAD_T}
+          width={barW}
+          height={CH}
+          fill="#dbeafe"
+          opacity="0.4"
+          rx="8"
+        />
+      )}
       {bars.map((bar, i) => {
         const x = PAD_L + i * barW + gap / 2;
         const w = barW - gap;
         const y1 = yv(Math.max(bar.start, bar.end));
         const y2 = yv(Math.min(bar.start, bar.end));
         const nextBar = bars[i + 1];
+        const isActive = hoverBarIndex === i;
         return (
           <g key={bar.label}>
-            <rect x={x} y={y1} width={w} height={Math.max(y2 - y1, 2)} fill={fillMap[bar.type]} rx="2" opacity="0.85" />
+            <rect
+              x={x}
+              y={y1}
+              width={w}
+              height={Math.max(y2 - y1, 2)}
+              fill={fillMap[bar.type]}
+              rx="2"
+              opacity={isActive ? "1" : "0.85"}
+              stroke={isActive ? "#0f172a" : "none"}
+              strokeWidth={isActive ? "1.5" : "0"}
+            />
             <text x={x + w / 2} y={y1 - 4} textAnchor="middle" className="pl-chart-xa" fontSize="9">{fmtK(bar.end)}</text>
             <text x={x + w / 2} y={H - 6} textAnchor="middle" className="pl-chart-xa">{bar.label}</text>
             {nextBar && (
@@ -925,6 +1335,30 @@ function WaterfallChart({ revenue, grossProfit, netIncome }: WaterfallChartProps
           </g>
         );
       })}
+      <rect
+        x={PAD_L}
+        y={PAD_T}
+        width={CW}
+        height={CH}
+        fill="transparent"
+        style={{ cursor: "crosshair" }}
+        onMouseMove={handleChartHover}
+        onMouseLeave={() => setHoverBarIndex(null)}
+      />
+      {hoverBar && hoverX !== null && (
+        <g pointerEvents="none" transform={`translate(${tooltipX},${tooltipY})`}>
+          <rect width={tooltipWidth} height={tooltipHeight} rx="10" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" opacity="0.98" />
+          <text x="12" y="18" fill="#0f172a" fontSize="11" fontWeight="800">{hoverBar.label}</text>
+          <text x="12" y="32" fill="#64748b" fontSize="9.5">{hoverBar.type === "total" ? "Reported total" : "Bridge step"}</text>
+          <line x1="12" y1="39" x2={tooltipWidth - 12} y2="39" stroke="#e2e8f0" strokeWidth="1" />
+          <text x="12" y="55" fill="#64748b" fontSize="10" fontWeight="700">Start</text>
+          <text x={tooltipWidth - 12} y="55" fill="#0f172a" fontSize="10" fontWeight="700" textAnchor="end">{fmtK(hoverBar.start)}</text>
+          <text x="12" y="69" fill="#2563eb" fontSize="10" fontWeight="700">End</text>
+          <text x={tooltipWidth - 12} y="69" fill="#0f172a" fontSize="10" fontWeight="700" textAnchor="end">{fmtK(hoverBar.end)}</text>
+          <text x="12" y="83" fill="#475569" fontSize="10" fontWeight="700">Change</text>
+          <text x={tooltipWidth - 12} y="83" fill="#0f172a" fontSize="10" fontWeight="700" textAnchor="end">{fmtK(hoverBar.end - hoverBar.start)}</text>
+        </g>
+      )}
     </svg>
   );
 }
@@ -933,12 +1367,30 @@ function WaterfallChart({ revenue, grossProfit, netIncome }: WaterfallChartProps
 interface DeptChartProps { data: DeptPoint[] }
 
 function DeptChart({ data }: DeptChartProps) {
+  const [hoverBarIndex, setHoverBarIndex] = useState<number | null>(null);
   const totals = data.map((d) => d.sales + d.parts + d.service);
   const maxV = Math.max(...totals);
   const barW = Math.floor(CW / data.length);
   const gap = 10;
+  const axisLabelY = H - 26;
+  const legendY = H - 8;
   const yv = (v: number) => PAD_T + lerp(v, 0, maxV, CH, 0);
   const colors = { sales: "#3b82f6", parts: "#a855f7", service: "#22c55e" };
+  const hoverPoint = hoverBarIndex !== null ? data[hoverBarIndex] : null;
+  const hoverX = hoverBarIndex !== null ? PAD_L + hoverBarIndex * barW + barW / 2 : null;
+  const tooltipWidth = 168;
+  const tooltipHeight = 96;
+  const tooltipX = getChartTooltipX(hoverX, tooltipWidth);
+  const tooltipY = PAD_T + 8;
+
+  function handleChartHover(event: ReactMouseEvent<SVGRectElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (bounds.width === 0) return;
+
+    const ratio = clamp((event.clientX - bounds.left) / bounds.width, 0, 1);
+    const nextIndex = Math.round(ratio * Math.max(data.length - 1, 0));
+    setHoverBarIndex(nextIndex);
+  }
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="pl-chart-svg">
@@ -952,11 +1404,23 @@ function DeptChart({ data }: DeptChartProps) {
           </g>
         );
       })}
+      {hoverBarIndex !== null && (
+        <rect
+          x={PAD_L + hoverBarIndex * barW}
+          y={PAD_T}
+          width={barW}
+          height={CH}
+          fill="#dbeafe"
+          opacity="0.4"
+          rx="8"
+        />
+      )}
       {data.map((d, i) => {
         const x = PAD_L + i * barW + gap / 2;
         const w = barW - gap;
         const total = d.sales + d.parts + d.service;
         const layers = [{ key: "sales" as const, value: d.sales }, { key: "parts" as const, value: d.parts }, { key: "service" as const, value: d.service }];
+        const isActive = hoverBarIndex === i;
         let cumulative = 0;
         return (
           <g key={d.label}>
@@ -964,14 +1428,53 @@ function DeptChart({ data }: DeptChartProps) {
               const y1 = yv(cumulative + value);
               const y2 = yv(cumulative);
               cumulative += value;
-              return <rect key={key} x={x} y={y1} width={w} height={Math.max(y2 - y1, 2)} fill={colors[key]} opacity="0.85" rx="1" />;
+              return (
+                <rect
+                  key={key}
+                  x={x}
+                  y={y1}
+                  width={w}
+                  height={Math.max(y2 - y1, 2)}
+                  fill={colors[key]}
+                  opacity={isActive ? "1" : "0.85"}
+                  rx="1"
+                  stroke={isActive ? "#ffffff" : "none"}
+                  strokeWidth={isActive ? "1" : "0"}
+                />
+              );
             })}
             <text x={x + w / 2} y={yv(total) - 4} textAnchor="middle" className="pl-chart-xa" fontSize="9">{fmtK(total)}</text>
-            <text x={x + w / 2} y={H - 6} textAnchor="middle" className="pl-chart-xa">{d.label}</text>
+            <text x={x + w / 2} y={axisLabelY} textAnchor="middle" className="pl-chart-xa" fontSize="8.5">{d.label}</text>
           </g>
         );
       })}
-      <g transform={`translate(${PAD_L},${H - 8})`}>
+      <rect
+        x={PAD_L}
+        y={PAD_T}
+        width={CW}
+        height={CH}
+        fill="transparent"
+        style={{ cursor: "crosshair" }}
+        onMouseMove={handleChartHover}
+        onMouseLeave={() => setHoverBarIndex(null)}
+      />
+      {hoverPoint && hoverX !== null && (
+        <g pointerEvents="none" transform={`translate(${tooltipX},${tooltipY})`}>
+          <rect width={tooltipWidth} height={tooltipHeight} rx="10" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" opacity="0.98" />
+          <text x="12" y="18" fill="#0f172a" fontSize="11" fontWeight="800">{hoverPoint.label}</text>
+          <text x="12" y="32" fill="#64748b" fontSize="9.5">Department contribution mix</text>
+          <line x1="12" y1="39" x2={tooltipWidth - 12} y2="39" stroke="#e2e8f0" strokeWidth="1" />
+          <text x="12" y="55" fill="#3b82f6" fontSize="10" fontWeight="700">Sales</text>
+          <text x={tooltipWidth - 12} y="55" fill="#0f172a" fontSize="10" fontWeight="700" textAnchor="end">{fmtK(hoverPoint.sales)}</text>
+          <text x="12" y="69" fill="#a855f7" fontSize="10" fontWeight="700">Parts</text>
+          <text x={tooltipWidth - 12} y="69" fill="#0f172a" fontSize="10" fontWeight="700" textAnchor="end">{fmtK(hoverPoint.parts)}</text>
+          <text x="12" y="83" fill="#22c55e" fontSize="10" fontWeight="700">Service</text>
+          <text x={tooltipWidth - 12} y="83" fill="#0f172a" fontSize="10" fontWeight="700" textAnchor="end">{fmtK(hoverPoint.service)}</text>
+          <text x="12" y="97" fill="#475569" fontSize="10" fontWeight="700">Total</text>
+          <text x={tooltipWidth - 12} y="97" fill="#0f172a" fontSize="10" fontWeight="700" textAnchor="end">{fmtK(hoverPoint.sales + hoverPoint.parts + hoverPoint.service)}</text>
+        </g>
+      )}
+      <g transform={`translate(${PAD_L},${legendY})`}>
         {[{ color: colors.sales, label: "Sales" }, { color: colors.parts, label: "Parts" }, { color: colors.service, label: "Service" }].map((item, i) => (
           <g key={item.label} transform={`translate(${i * 90},0)`}>
             <rect x={0} y={-8} width={12} height={8} fill={item.color} opacity="0.85" />
@@ -983,23 +1486,108 @@ function DeptChart({ data }: DeptChartProps) {
   );
 }
 
-// ── Margin Score Ring ─────────────────────────────────────────────────────────
-interface MarginScoreRingProps { score: number; label: string; pct: number }
+interface ForecastDeltaChartProps {
+  baseline: MonthlyPoint[];
+  scenario: MonthlyPoint[];
+  scenarioLabel: string;
+}
 
-function MarginScoreRing({ score, label, pct }: MarginScoreRingProps) {
-  const r = 12, cx = 15, cy = 15;
-  const circ = 2 * Math.PI * r;
-  const dash = (score / 100) * circ;
+function ForecastDeltaChart({ baseline, scenario, scenarioLabel }: ForecastDeltaChartProps) {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const combined = scenario.map((point, index) => ({
+    baseline: baseline[index]?.revenue ?? 0,
+    label: point.label,
+    scenario: point.revenue
+  }));
+  const maxV = Math.max(1, ...combined.flatMap((point) => [point.baseline, point.scenario]));
+  const minV = Math.min(...combined.flatMap((point) => [point.baseline, point.scenario]));
+  const upperBound = maxV === minV ? maxV + 1 : maxV;
+  const yTicks = 4;
+  const yStep = (upperBound - minV) / yTicks;
+  const axisLabelY = H - 24;
+  const legendY = H - 8;
+  const xv = (index: number) => PAD_L + lerp(index, 0, Math.max(combined.length - 1, 1), 0, CW);
+  const yv = (value: number) => PAD_T + lerp(value, minV, upperBound, CH, 0);
+  const baselinePoints = combined.map<[number, number]>((point, index) => [xv(index), yv(point.baseline)]);
+  const scenarioPoints = combined.map<[number, number]>((point, index) => [xv(index), yv(point.scenario)]);
+  const hoverPoint = hoverIndex !== null ? combined[hoverIndex] : null;
+  const hoverX = hoverIndex !== null ? xv(hoverIndex) : null;
+  const tooltipWidth = 168;
+  const tooltipHeight = 84;
+  const tooltipX = getChartTooltipX(hoverX, tooltipWidth);
+  const tooltipY = PAD_T + 8;
+
+  function handleChartHover(event: ReactMouseEvent<SVGRectElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (bounds.width === 0) return;
+
+    const ratio = clamp((event.clientX - bounds.left) / bounds.width, 0, 1);
+    const nextIndex = Math.round(ratio * Math.max(combined.length - 1, 0));
+    setHoverIndex(nextIndex);
+  }
+
   return (
-    <div className={`pl-score-ring-wrap is-${label.toLowerCase()}`} title={`Margin Score: ${score} — ${label}`}>
-      <svg width={30} height={30} viewBox="0 0 30 30">
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="3" />
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="currentColor" strokeWidth="3"
-          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" transform={`rotate(-90 ${cx} ${cy})`} />
-        <text x={cx} y={cy + 3} textAnchor="middle" fontSize="8" fontWeight="700" fill="#fff">{pct.toFixed(0)}%</text>
-      </svg>
-      <span>{label}</span>
-    </div>
+    <svg viewBox={`0 0 ${W} ${H}`} className="pl-chart-svg">
+      {Array.from({ length: yTicks + 1 }, (_, index) => {
+        const value = minV + yStep * index;
+        const y = yv(value);
+        return (
+          <g key={index}>
+            <line x1={PAD_L} y1={y} x2={W - PAD_R} y2={y} stroke="#e5e7eb" strokeWidth="1" />
+            <text x={PAD_L - 4} y={y + 4} textAnchor="end" className="pl-chart-ya">{fmtK(value)}</text>
+          </g>
+        );
+      })}
+      <path d={polyline(baselinePoints)} fill="none" stroke="#94a3b8" strokeDasharray="5,4" strokeWidth="2" />
+      <path d={polyline(scenarioPoints)} fill="none" stroke="#2563eb" strokeWidth="2.4" />
+      <rect
+        x={PAD_L}
+        y={PAD_T}
+        width={CW}
+        height={CH}
+        fill="transparent"
+        style={{ cursor: "crosshair" }}
+        onMouseMove={handleChartHover}
+        onMouseLeave={() => setHoverIndex(null)}
+      />
+      {hoverPoint && hoverX !== null && (
+        <>
+          <line x1={hoverX} y1={PAD_T} x2={hoverX} y2={PAD_T + CH} stroke="#94a3b8" strokeWidth="1.5" strokeDasharray="4,4" />
+          <circle cx={hoverX} cy={yv(hoverPoint.baseline)} r="4" fill="#ffffff" stroke="#94a3b8" strokeWidth="2" />
+          <circle cx={hoverX} cy={yv(hoverPoint.scenario)} r="4.5" fill="#ffffff" stroke="#2563eb" strokeWidth="2.5" />
+          <g pointerEvents="none" transform={`translate(${tooltipX},${tooltipY})`}>
+            <rect width={tooltipWidth} height={tooltipHeight} rx="10" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" opacity="0.98" />
+            <text x="12" y="18" fill="#0f172a" fontSize="11" fontWeight="800">{hoverPoint.label}</text>
+            <text x="12" y="32" fill="#64748b" fontSize="9.5">Scenario pacing versus baseline</text>
+            <line x1="12" y1="39" x2={tooltipWidth - 12} y2="39" stroke="#e2e8f0" strokeWidth="1" />
+            <text x="12" y="55" fill="#94a3b8" fontSize="10" fontWeight="700">Baseline</text>
+            <text x={tooltipWidth - 12} y="55" fill="#0f172a" fontSize="10" fontWeight="700" textAnchor="end">{fmtK(hoverPoint.baseline)}</text>
+            <text x="12" y="69" fill="#2563eb" fontSize="10" fontWeight="700">{scenarioLabel}</text>
+            <text x={tooltipWidth - 12} y="69" fill="#0f172a" fontSize="10" fontWeight="700" textAnchor="end">{fmtK(hoverPoint.scenario)}</text>
+            <text x="12" y="83" fill="#475569" fontSize="10" fontWeight="700">Delta</text>
+            <text x={tooltipWidth - 12} y="83" fill="#0f172a" fontSize="10" fontWeight="700" textAnchor="end">{fmtK(hoverPoint.scenario - hoverPoint.baseline)}</text>
+          </g>
+        </>
+      )}
+      {combined.map((point, index) => (
+        <g key={point.label}>
+          <circle cx={xv(index)} cy={yv(point.scenario)} r="4" fill="#ffffff" stroke="#2563eb" strokeWidth="2" />
+          <text x={xv(index)} y={axisLabelY} textAnchor="middle" className="pl-chart-xa" fontSize="8.5">
+            {point.label.slice(0, 3)}
+          </text>
+        </g>
+      ))}
+      <g transform={`translate(${PAD_L},${legendY})`}>
+        <g>
+          <line x1={0} y1={-2} x2={16} y2={-2} stroke="#94a3b8" strokeWidth="2" strokeDasharray="5,4" />
+          <text x={20} y={0} className="pl-chart-legend">Baseline</text>
+        </g>
+        <g transform="translate(124,0)">
+          <line x1={0} y1={-2} x2={16} y2={-2} stroke="#2563eb" strokeWidth="2.4" />
+          <text x={20} y={0} className="pl-chart-legend">{scenarioLabel}</text>
+        </g>
+      </g>
+    </svg>
   );
 }
 
@@ -1014,13 +1602,39 @@ export function ProfitLossWorkspace() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<ProfitLossGroup>>(() => new Set());
   const [selectedAccount, setSelectedAccount] = useState<ProfitLossLine | null>(null);
   const [viewMode, setViewMode] = useState<PLViewMode>("report");
-  const [chartType, setChartType] = useState<PLChartType>("trend");
+  const [chartLayoutMode, setChartLayoutMode] = useState<PLReportLayoutMode>("board");
+  const [visibleChartMetricWidgetIds, setVisibleChartMetricWidgetIds] = useState<PLChartMetricWidgetId[]>(defaultChartMetricWidgetIds);
+  const [visibleChartVisualWidgetIds, setVisibleChartVisualWidgetIds] = useState<PLWidgetId[]>(defaultChartVisualWidgetIds);
+  const [featuredChartWidgetId, setFeaturedChartWidgetId] = useState<PLWidgetId>(defaultChartVisualWidgetIds[0]);
+  const [chartWidgetLibrarySection, setChartWidgetLibrarySection] = useState<WidgetLibrarySection | null>(null);
   const [showCommentary, setShowCommentary] = useState(true);
   const [selectedScenarioId, setSelectedScenarioId] = useState<PLScenarioId>("current");
+  const [forecastLayoutMode, setForecastLayoutMode] = useState<PLReportLayoutMode>("board");
+  const [forecastReport, setForecastReport] = useState<PLForecastReport>("scenarioLab");
   const [revenueLiftPct, setRevenueLiftPct] = useState(0);
   const [marginShiftBps, setMarginShiftBps] = useState(0);
   const [expenseShiftPct, setExpenseShiftPct] = useState(0);
   const [savedSnapshots, setSavedSnapshots] = useState<ForecastSnapshotRecord[]>(() => loadForecastSnapshots());
+  const widgetPanelRefs = useRef<Partial<Record<PLWidgetId, HTMLElement | null>>>({});
+  const [selectedWidgetIds, setSelectedWidgetIds] = useState<PLWidgetId[]>([]);
+  const [deliveryNotice, setDeliveryNotice] = useState("");
+  const [deliveryModalMode, setDeliveryModalMode] = useState<WidgetDeliveryModalMode | null>(null);
+  const [gmailProfile, setGmailProfile] = useState<GmailDeliveryProfile | null>(() => loadGmailDeliveryProfile());
+  const [gmailDraftAddress, setGmailDraftAddress] = useState(() => loadGmailDeliveryProfile()?.address ?? "");
+  const [deliveryRecipient, setDeliveryRecipient] = useState(() => loadGmailDeliveryProfile()?.address ?? "");
+  const [deliveryWidgetIds, setDeliveryWidgetIds] = useState<PLWidgetId[]>([]);
+  const [deliveryStoreScope, setDeliveryStoreScope] = useState<WidgetStoreScope>("current");
+  const [deliveryCustomStoreIds, setDeliveryCustomStoreIds] = useState<string[]>([]);
+  const [deliveryNote, setDeliveryNote] = useState("");
+  const [includePdfExports, setIncludePdfExports] = useState(true);
+  const [scheduleCadence, setScheduleCadence] = useState<WidgetScheduleCadence>("weekly");
+  const [scheduleWeekday, setScheduleWeekday] = useState("Tuesday");
+  const [scheduleWeekdays, setScheduleWeekdays] = useState<string[]>(["Monday", "Wednesday", "Friday"]);
+  const [scheduleMonthlyDay, setScheduleMonthlyDay] = useState("1");
+  const [scheduleCustomRule, setScheduleCustomRule] = useState(customScheduleRuleOptions[0]);
+  const [savedWidgetSchedules, setSavedWidgetSchedules] = useState<WidgetScheduleRecord[]>(() => loadWidgetSchedules());
+  const [isExportingWidgetId, setIsExportingWidgetId] = useState<PLWidgetId | null>(null);
+  const [isSendingWidgetReport, setIsSendingWidgetReport] = useState(false);
 
   const selectedStoreCount = selectedStoreIds.size;
   const selectedStoreIdList = useMemo(() => Array.from(selectedStoreIds), [selectedStoreIds]);
@@ -1064,16 +1678,15 @@ export function ProfitLossWorkspace() {
   const grossProfit = getGroupTotal(statementLines, "Gross Profit");
   const netIncome = getGroupTotal(statementLines, "Net Income");
   const expenses = getGroupTotal(statementLines, "Expenses");
+  const costOfSales = getGroupTotal(statementLines, "Cost of Sales");
   const netMarginPct = revenue > 0 ? (netIncome / revenue) * 100 : 0;
   const grossMarginPct = revenue > 0 ? (grossProfit / revenue) * 100 : 0;
-  const score = useMemo(() => marginScore(netMarginPct), [netMarginPct]);
   const anomalies = useMemo(() => anomalyMap(statementLines), [statementLines]);
   const baselineForecast = useMemo(() => buildForecast(scopedHistoryData, { revenuePct: 0, grossMarginBps: 0, expensePct: 0 }, selectedMonthIndex, selectedYearNumber), [scopedHistoryData, selectedMonthIndex, selectedYearNumber]);
   const forecast = useMemo(() => buildForecast(scopedHistoryData, scenarioAdjustments, selectedMonthIndex, selectedYearNumber), [scopedHistoryData, scenarioAdjustments, selectedMonthIndex, selectedYearNumber]);
   const commentary = useMemo(() => buildCommentary(statementLines, selectedMonth, anomalies), [statementLines, selectedMonth, anomalies]);
   const variancePulseRows = useMemo(() => buildVariancePulseRows(statementLines), [statementLines]);
   const scenarioBridge = useMemo(() => buildScenarioBridge(scopedHistoryData, scenarioAdjustments, selectedMonthIndex, selectedYearNumber), [scopedHistoryData, scenarioAdjustments, selectedMonthIndex, selectedYearNumber]);
-  const forecastInsights = useMemo(() => buildForecastInsights(baselineForecast, forecast, activeScenario, scenarioAdjustments), [activeScenario, baselineForecast, forecast, scenarioAdjustments]);
   const forecastConfidence = useMemo(() => getForecastConfidence(scenarioAdjustments), [scenarioAdjustments]);
 
   const priorRevenue = statementLines.find((line) => line.group === "Income" && line.isTotal)?.priorYear ?? getPriorYearAmount(revenue);
@@ -1081,10 +1694,631 @@ export function ProfitLossWorkspace() {
   const priorNetIncome = statementLines.find((line) => line.group === "Net Income" && line.isTotal)?.priorYear ?? getPriorYearAmount(netIncome);
   const priorExpenses = statementLines.find((line) => line.group === "Expenses" && line.isTotal)?.priorYear ?? getPriorYearAmount(expenses);
   const selectedAccountLine = selectedAccount?.account ? statementLines.find((line) => line.account === selectedAccount.account) ?? null : null;
+  const baselineRevenueTotal = sumMetric(baselineForecast, "revenue");
+  const baselineNetTotal = sumMetric(baselineForecast, "netIncome");
+  const trailingMonths = scopedHistoryData.slice(-3);
+  const trailingRevenueRunRate = average(trailingMonths.map((point) => point.revenue));
+  const trailingGrossRunRate = average(trailingMonths.map((point) => point.grossProfit));
+  const trailingNetRunRate = average(trailingMonths.map((point) => point.netIncome));
+  const storePerformance = useMemo<StorePerformanceSnapshot[]>(() => {
+    return selectedStoreIdList
+      .map((storeId) => {
+        const store = profitLossStores.find((entry) => entry.id === storeId);
+        const scoped = buildScopedStatement([storeId], selectedYearNumber, selectedMonthIndex, selectedDepartment);
+        const storeRevenue = getGroupTotal(scoped, "Income");
+        const storeGrossProfit = getGroupTotal(scoped, "Gross Profit");
+        const storeNetIncome = getGroupTotal(scoped, "Net Income");
+
+        return {
+          storeId,
+          storeName: store?.name ?? storeId,
+          revenue: storeRevenue,
+          grossProfit: storeGrossProfit,
+          netIncome: storeNetIncome,
+          netMarginPct: storeRevenue > 0 ? (storeNetIncome / storeRevenue) * 100 : 0
+        };
+      })
+      .sort((left, right) => right.revenue - left.revenue);
+  }, [selectedDepartment, selectedMonthIndex, selectedStoreIdList, selectedYearNumber]);
+  const latestDepartmentMixPoint = scopedDeptData[scopedDeptData.length - 1] ?? null;
+  const leadingStoreSlice = storePerformance.slice(0, 3);
+  const departmentPerformance = useMemo<DepartmentPerformanceSnapshot[]>(() => {
+    return profitLossDepartments
+      .map((department) => {
+        const scoped = buildScopedStatement(selectedStoreIdList, selectedYearNumber, selectedMonthIndex, department);
+        const departmentRevenue = getGroupTotal(scoped, "Income");
+        const departmentGrossProfit = getGroupTotal(scoped, "Gross Profit");
+        const departmentNetIncome = getGroupTotal(scoped, "Net Income");
+
+        return {
+          department,
+          revenue: departmentRevenue,
+          grossProfit: departmentGrossProfit,
+          netIncome: departmentNetIncome,
+          grossMarginPct: departmentRevenue > 0 ? (departmentGrossProfit / departmentRevenue) * 100 : 0,
+          netMarginPct: departmentRevenue > 0 ? (departmentNetIncome / departmentRevenue) * 100 : 0
+        };
+      })
+      .sort((left, right) => right.revenue - left.revenue);
+  }, [selectedMonthIndex, selectedStoreIdList, selectedYearNumber]);
+  const scenarioCompareRows = useMemo<ScenarioCompareRow[]>(() => {
+    return forecastScenarios.map((scenario) => {
+      const projected = buildForecast(
+        scopedHistoryData,
+        {
+          revenuePct: scenario.revenuePct,
+          grossMarginBps: scenario.grossMarginBps,
+          expensePct: scenario.expensePct
+        },
+        selectedMonthIndex,
+        selectedYearNumber
+      );
+      const projectedRevenue = sumMetric(projected, "revenue");
+      const projectedGrossProfit = sumMetric(projected, "grossProfit");
+      const projectedNetIncome = sumMetric(projected, "netIncome");
+      const confidence = getForecastConfidence({
+        revenuePct: scenario.revenuePct,
+        grossMarginBps: scenario.grossMarginBps,
+        expensePct: scenario.expensePct
+      });
+
+      return {
+        id: scenario.id,
+        label: scenario.label,
+        summary: scenario.summary,
+        revenueTotal: projectedRevenue,
+        grossMarginPct: projectedRevenue > 0 ? (projectedGrossProfit / projectedRevenue) * 100 : 0,
+        netTotal: projectedNetIncome,
+        deltaVsBaseline: projectedNetIncome - baselineNetTotal,
+        confidence: confidence.score
+      };
+    });
+  }, [baselineNetTotal, scopedHistoryData, selectedMonthIndex, selectedYearNumber]);
+  const monthlyOutlookRows = useMemo<ForecastMonthlyOutlookRow[]>(() => {
+    return forecast.map((point, index) => {
+      const baselinePoint = baselineForecast[index];
+      const previousPoint = index === 0 ? scopedHistoryData[scopedHistoryData.length - 1] : forecast[index - 1];
+      const baselineRevenue = baselinePoint?.revenue ?? 0;
+      const baselineNetIncome = baselinePoint?.netIncome ?? 0;
+      const revenueDelta = point.revenue - baselineRevenue;
+      const netDelta = point.netIncome - baselineNetIncome;
+      const grossMarginForPoint = point.revenue > 0 ? (point.grossProfit / point.revenue) * 100 : 0;
+      const netMarginForPoint = point.revenue > 0 ? (point.netIncome / point.revenue) * 100 : 0;
+      const revenueStepPct = previousPoint && previousPoint.revenue !== 0 ? ((point.revenue - previousPoint.revenue) / Math.abs(previousPoint.revenue)) * 100 : 0;
+
+      let paceTone: "up" | "down" | "neutral" = "neutral";
+      let paceLabel = "Flat to plan";
+      let focus = "Stable plan month with limited separation from baseline.";
+
+      if (Math.abs(revenueDelta) < 1000 && Math.abs(netDelta) < 1000) {
+        if (revenueStepPct >= 4) {
+          paceTone = "up";
+          paceLabel = "Seasonal lift";
+          focus = "Volume is stepping up month over month while the baseline stays intact.";
+        } else if (revenueStepPct <= -4) {
+          paceTone = "down";
+          paceLabel = "Seasonal ease";
+          focus = "Volume softens sequentially here, so pricing and backlog discipline matter more.";
+        }
+      } else if (revenueDelta >= 0 && netDelta >= 0) {
+        if (revenueStepPct <= -10) {
+          paceTone = "neutral";
+          paceLabel = "Cooling";
+          focus = "Still above baseline, but sequential pace is easing after the peak window.";
+        } else {
+          paceTone = "up";
+          paceLabel = "Above plan";
+          focus = "Revenue and drop-through both clear baseline for this month.";
+        }
+      } else if (revenueDelta >= 0 && netDelta < 0) {
+        paceTone = "down";
+        paceLabel = "Margin watch";
+        focus = "Top line is ahead, but net conversion is slipping behind baseline.";
+      } else if (revenueDelta < 0 && netDelta >= 0) {
+        paceTone = "neutral";
+        paceLabel = "Quality mix";
+        focus = "Lower volume still holds acceptable earnings quality versus baseline.";
+      } else {
+        paceTone = "down";
+        paceLabel = "Below plan";
+        focus = "Revenue and net are both tracking below baseline and need intervention.";
+      }
+
+      return {
+        label: point.label,
+        revenue: point.revenue,
+        grossProfit: point.grossProfit,
+        netIncome: point.netIncome,
+        baselineRevenue,
+        baselineNetIncome,
+        revenueDelta,
+        netDelta,
+        grossMarginPct: grossMarginForPoint,
+        netMarginPct: netMarginForPoint,
+        revenueStepPct,
+        paceTone,
+        paceLabel,
+        focus
+      };
+    });
+  }, [baselineForecast, forecast, scopedHistoryData]);
 
   useEffect(() => {
     persistForecastSnapshots(savedSnapshots);
   }, [savedSnapshots]);
+
+  useEffect(() => {
+    persistWidgetSchedules(savedWidgetSchedules);
+  }, [savedWidgetSchedules]);
+
+  useEffect(() => {
+    persistGmailDeliveryProfile(gmailProfile);
+  }, [gmailProfile]);
+
+  useEffect(() => {
+    if (!visibleChartVisualWidgetIds.includes(featuredChartWidgetId)) {
+      setFeaturedChartWidgetId(visibleChartVisualWidgetIds[0] ?? defaultChartVisualWidgetIds[0]);
+    }
+  }, [featuredChartWidgetId, visibleChartVisualWidgetIds]);
+
+  useEffect(() => {
+    setSelectedWidgetIds((current) => {
+      const next = current.filter((widgetId) => visibleChartVisualWidgetIds.includes(widgetId));
+      return next.length === current.length ? current : next;
+    });
+    setDeliveryWidgetIds((current) => {
+      const next = current.filter((widgetId) => visibleChartVisualWidgetIds.includes(widgetId));
+      return next.length === current.length ? current : next;
+    });
+  }, [visibleChartVisualWidgetIds]);
+
+  function buildDefaultDeliverySubject(widgetIds: PLWidgetId[]) {
+    if (widgetIds.length === 0) {
+      return `Profit & Loss Widget Pack · ${selectedMonth} ${selectedYear}`;
+    }
+
+    const widgetLabel = widgetIds.length === 1
+      ? chartWidgetDefinitions[widgetIds[0]].title
+      : `${widgetIds.length} Profit & Loss widgets`;
+
+    return `${widgetLabel} · ${selectedMonth} ${selectedYear} · ${selectedDepartment}`;
+  }
+
+  function resolveDeliveryStoreIds(scope = deliveryStoreScope, customStoreIds = deliveryCustomStoreIds) {
+    if (scope === "all") {
+      return profitLossStores.map((store) => store.id);
+    }
+
+    if (scope === "custom") {
+      return customStoreIds;
+    }
+
+    return selectedStoreIdList;
+  }
+
+  function getDeliveryStoreLabel(storeIds: string[]) {
+    if (storeIds.length === profitLossStores.length) return "All Stores";
+    if (storeIds.length === 0) return "No stores selected";
+    if (storeIds.length === 1) return getStoreName(storeIds[0]);
+    return `${storeIds.length} Stores`;
+  }
+
+  function describeScheduleCadence(record: Pick<WidgetScheduleRecord, "cadence" | "customRule" | "monthlyDay" | "weekday" | "weekdays">) {
+    if (record.cadence === "threePerWeek") {
+      return `${record.weekdays.join(" / ")} each week`;
+    }
+
+    if (record.cadence === "monthly") {
+      return `Day ${record.monthlyDay} each month`;
+    }
+
+    if (record.cadence === "custom") {
+      return record.customRule || "Custom cadence";
+    }
+
+    return `Every ${record.weekday}`;
+  }
+
+  function closeChartWidgetLibraryModal() {
+    setChartWidgetLibrarySection(null);
+  }
+
+  function resetChartWidgetLibrary(section: WidgetLibrarySection) {
+    if (section === "data") {
+      setVisibleChartMetricWidgetIds(defaultChartMetricWidgetIds);
+      return;
+    }
+
+    setVisibleChartVisualWidgetIds(defaultChartVisualWidgetIds);
+    setFeaturedChartWidgetId(defaultChartVisualWidgetIds[0]);
+  }
+
+  function toggleChartMetricWidget(widgetId: PLChartMetricWidgetId) {
+    setVisibleChartMetricWidgetIds((current) => {
+      if (current.includes(widgetId)) {
+        return current.length === 1 ? current : current.filter((candidate) => candidate !== widgetId);
+      }
+
+      if (current.length >= MAX_CHART_DATA_WIDGETS) {
+        return current;
+      }
+
+      return [...current, widgetId];
+    });
+  }
+
+  function toggleChartVisualWidget(widgetId: PLWidgetId) {
+    setVisibleChartVisualWidgetIds((current) => {
+      if (current.includes(widgetId)) {
+        return current.length === 1 ? current : current.filter((candidate) => candidate !== widgetId);
+      }
+
+      if (current.length >= MAX_CHART_VISUAL_WIDGETS) {
+        return current;
+      }
+
+      return [...current, widgetId];
+    });
+  }
+
+  function toggleWidgetSelection(widgetId: PLWidgetId) {
+    setSelectedWidgetIds((current) => current.includes(widgetId)
+      ? current.filter((candidate) => candidate !== widgetId)
+      : [...current, widgetId]
+    );
+  }
+
+  function toggleDeliveryWidget(widgetId: PLWidgetId) {
+    setDeliveryWidgetIds((current) => current.includes(widgetId)
+      ? current.filter((candidate) => candidate !== widgetId)
+      : [...current, widgetId]
+    );
+  }
+
+  function toggleDeliveryCustomStore(storeId: string) {
+    setDeliveryCustomStoreIds((current) => current.includes(storeId)
+      ? current.filter((candidate) => candidate !== storeId)
+      : [...current, storeId]
+    );
+  }
+
+  function toggleScheduleWeekday(weekday: string) {
+    setScheduleWeekdays((current) => current.includes(weekday)
+      ? current.filter((candidate) => candidate !== weekday)
+      : [...current, weekday]
+    );
+  }
+
+  function openWidgetDeliveryModal(mode: WidgetDeliveryModalMode, widgetId: PLWidgetId) {
+    const initialWidgetIds = selectedWidgetIds.length > 0
+      ? Array.from(new Set(selectedWidgetIds.includes(widgetId) ? selectedWidgetIds : [...selectedWidgetIds, widgetId]))
+      : [widgetId];
+
+    setDeliveryWidgetIds(initialWidgetIds);
+    setDeliveryStoreScope("current");
+    setDeliveryCustomStoreIds(selectedStoreIdList);
+    setDeliveryRecipient(gmailProfile?.address ?? deliveryRecipient);
+    setGmailDraftAddress(gmailProfile?.address ?? gmailDraftAddress);
+    setDeliveryNote("");
+    setIncludePdfExports(true);
+    setDeliveryModalMode(mode);
+  }
+
+  function closeWidgetDeliveryModal() {
+    setDeliveryModalMode(null);
+  }
+
+  function connectGmailProfile() {
+    const normalized = gmailDraftAddress.trim().toLowerCase();
+
+    if (!normalized) {
+      setDeliveryNotice("Enter a Gmail address before saving the delivery profile.");
+      return;
+    }
+
+    if (!/^[^\s@]+@(gmail\.com|googlemail\.com)$/i.test(normalized)) {
+      setDeliveryNotice("Use a Gmail address for the Gmail compose handoff.");
+      return;
+    }
+
+    setGmailProfile({
+      address: normalized,
+      connectedAt: new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+    });
+    setDeliveryRecipient((current) => current || normalized);
+    setDeliveryNotice(`Gmail delivery profile saved for ${normalized}.`);
+  }
+
+  async function exportWidgetToPdf(widgetId: PLWidgetId, options: { quiet?: boolean } = {}) {
+    const widgetNode = widgetPanelRefs.current[widgetId];
+
+    if (!widgetNode) {
+      setDeliveryNotice(`${chartWidgetDefinitions[widgetId].title} is not visible. Switch to Board layout before exporting that widget.`);
+      return false;
+    }
+
+    setIsExportingWidgetId(widgetId);
+
+    try {
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
+
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf")
+      ]);
+      const canvas = await html2canvas(widgetNode, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        useCORS: true
+      });
+      const imageData = canvas.toDataURL("image/png");
+      const orientation = canvas.width >= canvas.height ? "landscape" : "portrait";
+      const pdf = new jsPDF({ format: "a4", orientation, unit: "pt" });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 22;
+      const scale = Math.min((pageWidth - margin * 2) / canvas.width, (pageHeight - margin * 2) / canvas.height);
+      const renderWidth = canvas.width * scale;
+      const renderHeight = canvas.height * scale;
+      const renderX = (pageWidth - renderWidth) / 2;
+
+      pdf.addImage(imageData, "PNG", renderX, margin, renderWidth, renderHeight, undefined, "FAST");
+      pdf.save(`${chartWidgetDefinitions[widgetId].fileStem}-${sanitizeFilePart(selectedMonth)}-${selectedYear}.pdf`);
+
+      if (!options.quiet) {
+        setDeliveryNotice(`${chartWidgetDefinitions[widgetId].title} PDF downloaded.`);
+      }
+
+      return true;
+    } catch {
+      setDeliveryNotice(`Could not export ${chartWidgetDefinitions[widgetId].title} to PDF.`);
+      return false;
+    } finally {
+      setIsExportingWidgetId(null);
+    }
+  }
+
+  function buildWidgetSummaryLines(widgetId: PLWidgetId) {
+    if (widgetId === "trendExplorer") {
+      return [
+        `Current month revenue ${formatCurrency(revenue)}, gross profit ${formatCurrency(grossProfit)}, and net income ${formatCurrency(netIncome)}.`,
+        `Three-month revenue run rate is ${fmtK(trailingRevenueRunRate)} with a forecast revenue delta of ${formatSignedCompactCurrency(forecastRevenueDelta)}.`
+      ];
+    }
+
+    if (widgetId === "marginWalk") {
+      return [
+        `Revenue ${formatCurrency(revenue)}, cost of sales ${formatCurrency(costOfSales)}, gross profit ${formatCurrency(grossProfit)}, expenses ${formatCurrency(expenses)}, and net income ${formatCurrency(netIncome)}.`
+      ];
+    }
+
+    if (widgetId === "departmentMix") {
+      if (!latestDepartmentMixPoint) {
+        return ["Department mix becomes available after the chart history loads."];
+      }
+
+      return [
+        `${latestDepartmentMixPoint.label} mix: Sales ${fmtK(latestDepartmentMixPoint.sales)}, Parts ${fmtK(latestDepartmentMixPoint.parts)}, Service ${fmtK(latestDepartmentMixPoint.service)}.`
+      ];
+    }
+
+    if (widgetId === "forecastDelta") {
+      return [
+        `${activeScenario.label} is ${formatSignedCompactCurrency(forecastRevenueDelta)} on revenue and ${formatSignedCompactCurrency(forecastNetDelta)} on net versus baseline.`,
+        `Peak forecast month is ${peakForecastMonth.label} at ${fmtK(peakForecastMonth.revenue)}.`
+      ];
+    }
+
+    if (widgetId === "variancePulse") {
+      const largestBudgetMove = [...variancePulseRows].sort((left, right) => Math.abs(right.budgetPct) - Math.abs(left.budgetPct))[0];
+      const largestPriorMove = [...variancePulseRows].sort((left, right) => Math.abs(right.priorPct) - Math.abs(left.priorPct))[0];
+
+      return [
+        `Largest budget move is ${largestBudgetMove.group} at ${formatSignedPercent(largestBudgetMove.budgetPct)} versus budget.`,
+        `Largest prior-year move is ${largestPriorMove.group} at ${formatSignedPercent(largestPriorMove.priorPct)} versus prior year.`
+      ];
+    }
+
+    if (widgetId === "departmentScoreboard") {
+      return departmentPerformance.slice(0, 3).map((department) => (
+        `${department.department}: ${fmtK(department.revenue)} revenue, ${department.grossMarginPct.toFixed(1)}% gross margin, ${department.netMarginPct.toFixed(1)}% net margin.`
+      ));
+    }
+
+    if (widgetId === "scenarioBridge") {
+      return [
+        `Scenario net lands at ${fmtK(forecastNetTotal)} after ${scenarioBridge.map((point) => `${point.label} ${point.tone === "neutral" ? fmtK(point.value) : formatSignedCompactCurrency(point.value)}`).join(", ")}.`
+      ];
+    }
+
+    if (widgetId === "monthlyOutlookStudio") {
+      return monthlyOutlookRows.slice(0, 3).map((row) => (
+        `${row.label}: ${fmtK(row.revenue)} revenue, ${fmtK(row.netIncome)} net, ${formatSignedCompactCurrency(row.netDelta)} vs baseline.`
+      ));
+    }
+
+    if (widgetId === "scenarioCommandCenter") {
+      return scenarioCompareRows.map((row) => (
+        `${row.label}: ${fmtK(row.netTotal)} net, ${formatSignedCompactCurrency(row.deltaVsBaseline)} vs baseline, ${row.confidence}/100 confidence.`
+      )).slice(0, 3);
+    }
+
+    if (widgetId === "storeMarginMatrix") {
+      return [
+        `Top store margin spread is ${storeMarginSpread.toFixed(1)} points from ${topStore?.storeName ?? "top store"} to ${worstStore?.storeName ?? "bottom store"}.`,
+        `Top store ${topStore?.storeName ?? "n/a"} is running ${topStore?.netMarginPct.toFixed(1) ?? "0.0"}% net on ${topStore ? fmtK(topStore.revenue) : "$0"} revenue.`
+      ];
+    }
+
+    if (widgetId === "anomalyLedger") {
+      return anomalyHighlights.slice(0, 3).map((item) => (
+        `${item.line.description}: ${item.direction === "up" ? "+" : "-"}${Math.abs(item.pct).toFixed(1)}% vs prior year at ${formatCurrency(item.line.may2026)}.`
+      ));
+    }
+
+    if (widgetId === "contributorSpotlight") {
+      return topContributionLines.slice(0, 2).map((line) => {
+        const leadStores = [...(line.contributors ?? [])].sort((left, right) => right.actual - left.actual).slice(0, 2);
+        return `${line.description}: ${leadStores.map((contributor) => `${contributor.storeName} ${fmtK(contributor.actual)}`).join("; ")}.`;
+      });
+    }
+
+    if (widgetId === "snapshotVault") {
+      return savedSnapshots.length > 0
+        ? savedSnapshots.slice(0, 3).map((snapshot) => `${snapshot.label}: ${fmtK(snapshot.revenueTotal)} revenue, ${fmtK(snapshot.netTotal)} net, confidence ${snapshot.confidence}/100.`)
+        : [`Live board: ${activeScenario.label} with ${fmtK(forecastRevenueTotal)} revenue and ${fmtK(forecastNetTotal)} net.`];
+    }
+
+    if (leadingStoreSlice.length === 0) {
+      return ["No store leaderboard is available for the current scope."];
+    }
+
+    return [
+      `Top stores: ${leadingStoreSlice.map((store) => `${store.storeName} ${fmtK(store.revenue)} / ${store.netMarginPct.toFixed(1)}%`).join("; ")}.`
+    ];
+  }
+
+  async function sendWidgetReport() {
+    const recipient = deliveryRecipient.trim();
+    const gmailAddress = (gmailProfile?.address ?? gmailDraftAddress).trim();
+
+    if (!isValidEmail(recipient)) {
+      setDeliveryNotice("Enter a valid recipient email before opening a Gmail draft.");
+      return;
+    }
+
+    if (!gmailAddress) {
+      setDeliveryNotice("Save a Gmail delivery profile before sending a report.");
+      return;
+    }
+
+    if (deliveryWidgetIds.length === 0) {
+      setDeliveryNotice("Select at least one widget to send.");
+      return;
+    }
+
+    const storeIds = resolveDeliveryStoreIds();
+
+    if (storeIds.length === 0) {
+      setDeliveryNotice("Pick at least one store for this report.");
+      return;
+    }
+
+    setIsSendingWidgetReport(true);
+
+    try {
+      if (includePdfExports) {
+        for (const widgetId of deliveryWidgetIds) {
+          const exported = await exportWidgetToPdf(widgetId, { quiet: true });
+          if (!exported) {
+            return;
+          }
+        }
+      }
+
+      const bodyLines = [
+        `${selectedMonth} ${selectedYear} Profit & Loss widget pack`,
+        `Department: ${selectedDepartment}`,
+        `Stores: ${getDeliveryStoreLabel(storeIds)}`,
+        deliveryNote.trim() ? `Note: ${deliveryNote.trim()}` : "",
+        "",
+        ...deliveryWidgetIds.flatMap((widgetId) => [chartWidgetDefinitions[widgetId].title, ...buildWidgetSummaryLines(widgetId), ""]),
+        includePdfExports ? "PDF files were downloaded in the browser and can be attached manually in Gmail." : ""
+      ].filter(Boolean);
+
+      const gmailUrl = new URL("https://mail.google.com/mail/");
+      gmailUrl.searchParams.set("view", "cm");
+      gmailUrl.searchParams.set("fs", "1");
+      gmailUrl.searchParams.set("tf", "1");
+      gmailUrl.searchParams.set("to", recipient);
+      gmailUrl.searchParams.set("su", buildDefaultDeliverySubject(deliveryWidgetIds));
+      gmailUrl.searchParams.set("body", bodyLines.join("\n"));
+
+      window.open(gmailUrl.toString(), "_blank", "noopener,noreferrer");
+      setDeliveryNotice(`Gmail draft opened for ${recipient}.${includePdfExports ? " PDFs were downloaded for manual attachment." : ""}`);
+      setDeliveryModalMode(null);
+    } finally {
+      setIsSendingWidgetReport(false);
+    }
+  }
+
+  function saveWidgetSchedule() {
+    const recipient = deliveryRecipient.trim();
+    const gmailAddress = (gmailProfile?.address ?? gmailDraftAddress).trim();
+    const storeIds = resolveDeliveryStoreIds();
+
+    if (!isValidEmail(recipient)) {
+      setDeliveryNotice("Enter a valid email for scheduled delivery.");
+      return;
+    }
+
+    if (!gmailAddress) {
+      setDeliveryNotice("Save a Gmail delivery profile before scheduling reports.");
+      return;
+    }
+
+    if (deliveryWidgetIds.length === 0) {
+      setDeliveryNotice("Select at least one widget for the schedule.");
+      return;
+    }
+
+    if (deliveryStoreScope === "custom" && storeIds.length === 0) {
+      setDeliveryNotice("Choose at least one store for the custom store scope.");
+      return;
+    }
+
+    if (scheduleCadence === "threePerWeek" && scheduleWeekdays.length === 0) {
+      setDeliveryNotice("Pick at least one weekday for the 3x weekly schedule.");
+      return;
+    }
+
+    const record: WidgetScheduleRecord = {
+      id: `widget-schedule-${Date.now()}`,
+      widgetIds: deliveryWidgetIds,
+      recipient,
+      gmailAccount: gmailAddress,
+      cadence: scheduleCadence,
+      weekday: scheduleWeekday,
+      weekdays: scheduleWeekdays,
+      monthlyDay: Number(scheduleMonthlyDay) || 1,
+      customRule: scheduleCustomRule.trim(),
+      storeScope: deliveryStoreScope,
+      storeIds,
+      department: selectedDepartment,
+      month: selectedMonth,
+      year: selectedYear,
+      savedAt: new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+    };
+
+    setSavedWidgetSchedules((current) => [record, ...current].slice(0, 8));
+    setDeliveryNotice(`Schedule saved for ${recipient}. ${describeScheduleCadence(record)}.`);
+    setDeliveryModalMode(null);
+  }
+
+  function deleteWidgetSchedule(scheduleId: string) {
+    setSavedWidgetSchedules((current) => current.filter((schedule) => schedule.id !== scheduleId));
+    setDeliveryNotice("Saved schedule removed.");
+  }
+
+  function renderWidgetActions(widgetId: PLWidgetId) {
+    const isSelected = selectedWidgetIds.includes(widgetId);
+
+    return (
+      <div className="pl-widget-actions">
+        <label className="pl-widget-select-toggle">
+          <input checked={isSelected} onChange={() => toggleWidgetSelection(widgetId)} type="checkbox" />
+          <span>Select</span>
+        </label>
+        <button className="pl-widget-action-button" disabled={isExportingWidgetId !== null} onClick={() => void exportWidgetToPdf(widgetId)} type="button">
+          {isExportingWidgetId === widgetId ? "PDF…" : "PDF"}
+        </button>
+        <button className="pl-widget-action-button" onClick={() => openWidgetDeliveryModal("send", widgetId)} type="button">Send Report</button>
+        <button className="pl-widget-action-button" onClick={() => openWidgetDeliveryModal("schedule", widgetId)} type="button">Schedule</button>
+      </div>
+    );
+  }
 
   function applyScenarioPreset(scenarioId: PLScenarioId) {
     const scenario = forecastScenarios.find((entry) => entry.id === scenarioId);
@@ -1097,6 +2331,8 @@ export function ProfitLossWorkspace() {
 
   function handleGeneratePacket() {
     applyScenarioPreset("board");
+    setForecastLayoutMode("multiReport");
+    setForecastReport("scenarioCompare");
     setViewMode("forecast");
     setShowCommentary(true);
   }
@@ -1229,14 +2465,975 @@ export function ProfitLossWorkspace() {
   const forecastRevenueTotal = sumMetric(forecast, "revenue");
   const forecastNetTotal = sumMetric(forecast, "netIncome");
   const peakForecastMonth = forecast.reduce((best, point) => (point.revenue > best.revenue ? point : best), forecast[0]);
+  const forecastRevenueDelta = forecastRevenueTotal - baselineRevenueTotal;
+  const forecastNetDelta = forecastNetTotal - baselineNetTotal;
+  const maxStoreRevenue = Math.max(...storePerformance.map((entry) => entry.revenue), 1);
+  const forecastOverviewCards = [
+    { label: "7-Month Revenue", value: fmtK(forecastRevenueTotal), detail: `${activeScenario.label} scenario` },
+    { label: "7-Month Net", value: fmtK(forecastNetTotal), detail: `${forecastConfidence.label} · ${forecastConfidence.score}/100` },
+    { label: "Peak Month", value: peakForecastMonth.label, detail: `${fmtK(peakForecastMonth.revenue)} revenue` },
+    {
+      label: "Baseline Net Delta",
+      value: formatSignedCompactCurrency(forecastNetDelta),
+      detail: `${forecastNetDelta >= 0 ? "Ahead of" : "Behind"} baseline`
+    }
+  ];
+  const peakOutlookMonth = monthlyOutlookRows[0]
+    ? monthlyOutlookRows.reduce((best, row) => (row.revenue > best.revenue ? row : best), monthlyOutlookRows[0])
+    : null;
+  const bestNetOutlookMonth = monthlyOutlookRows[0]
+    ? monthlyOutlookRows.reduce((best, row) => (row.netIncome > best.netIncome ? row : best), monthlyOutlookRows[0])
+    : null;
+  const seasonalLowOutlookMonth = monthlyOutlookRows[0]
+    ? monthlyOutlookRows.reduce((worst, row) => (row.revenue < worst.revenue ? row : worst), monthlyOutlookRows[0])
+    : null;
+  const next90Rows = monthlyOutlookRows.slice(0, 3);
+  const next90Revenue = next90Rows.reduce((sum, row) => sum + row.revenue, 0);
+  const next90BaselineRevenue = next90Rows.reduce((sum, row) => sum + row.baselineRevenue, 0);
+  const monthlyOutlookMaxRevenue = Math.max(1, ...monthlyOutlookRows.map((row) => Math.max(row.revenue, row.baselineRevenue)));
+  const monthlyOutlookMaxNet = Math.max(1, ...monthlyOutlookRows.map((row) => Math.max(Math.abs(row.netIncome), Math.abs(row.baselineNetIncome))));
+  const priorGrossMarginPct = priorRevenue > 0 ? (priorGrossProfit / priorRevenue) * 100 : 0;
+  const priorNetMarginPct = priorRevenue > 0 ? (priorNetIncome / priorRevenue) * 100 : 0;
+  const priorCostLoadPct = priorRevenue > 0 ? ((priorRevenue - priorGrossProfit) / priorRevenue) * 100 : 0;
+  const revenueBudget = statementLines.find((line) => line.group === "Income" && line.isTotal)?.budget ?? getBudgetAmount(revenue, "Income");
+  const netBudget = statementLines.find((line) => line.group === "Net Income" && line.isTotal)?.budget ?? getBudgetAmount(netIncome, "Net Income");
+  const revenueBudgetGap = revenue - revenueBudget;
+  const netBudgetGap = netIncome - netBudget;
+  const costLoadPct = revenue > 0 ? (costOfSales / revenue) * 100 : 0;
+  const next90Net = next90Rows.reduce((sum, row) => sum + row.netIncome, 0);
+  const next90NetBaseline = next90Rows.reduce((sum, row) => sum + row.baselineNetIncome, 0);
+  const topStore = storePerformance[0] ?? null;
+  const worstStore = storePerformance[storePerformance.length - 1] ?? null;
+  const storeMarginSpread = topStore && worstStore ? topStore.netMarginPct - worstStore.netMarginPct : 0;
+  const leadingDepartment = departmentPerformance[0] ?? null;
+  const topDepartmentByNetMargin = [...departmentPerformance].sort((left, right) => right.netMarginPct - left.netMarginPct)[0] ?? null;
+  const bestScenario = [...scenarioCompareRows].sort((left, right) => right.netTotal - left.netTotal)[0] ?? null;
+  const groupTotalLines = profitLossGroupOrder
+    .map((group) => statementLines.find((line) => line.group === group && line.isTotal))
+    .filter((line): line is ProfitLossLine => Boolean(line));
+  const groupBudgetGapSeries = groupTotalLines.map((line) => line.may2026 - (line.budget ?? getBudgetAmount(line.may2026, line.group)));
+  const expenseLoadHistory = scopedHistoryData.map((point) => Math.max(point.grossProfit - point.netIncome, 0));
+  const costLoadHistory = scopedHistoryData.map((point) => (point.revenue > 0 ? ((point.revenue - point.grossProfit) / point.revenue) * 100 : 0));
+  const grossMarginHistory = scopedHistoryData.map((point) => (point.revenue > 0 ? (point.grossProfit / point.revenue) * 100 : 0));
+  const netMarginHistory = scopedHistoryData.map((point) => (point.revenue > 0 ? (point.netIncome / point.revenue) * 100 : 0));
+  const forecastRevenueDeltaSeries = forecast.map((point, index) => point.revenue - (baselineForecast[index]?.revenue ?? 0));
+  const forecastNetDeltaSeries = forecast.map((point, index) => point.netIncome - (baselineForecast[index]?.netIncome ?? 0));
+  const scenarioNetSeries = scenarioCompareRows.map((row) => row.netTotal);
+  const departmentNetMarginSeries = departmentPerformance.map((department) => department.netMarginPct);
+  const next90RevenueSeries = next90Rows.map((row) => row.revenue);
+  const next90NetSeries = next90Rows.map((row) => row.netIncome);
+  const anomalyHighlights = statementLines
+    .filter((line) => line.account && anomalies.has(line.account))
+    .map((line) => {
+      const anomaly = anomalies.get(line.account);
+      return {
+        direction: anomaly?.direction === "down" ? "down" as const : "up" as const,
+        line,
+        pct: anomaly?.pct ?? 0
+      };
+    })
+    .sort((left, right) => Math.abs(right.pct) - Math.abs(left.pct));
+  const anomalyMagnitudeSeries = anomalyHighlights.slice(0, 6).map((item) => Math.abs(item.pct));
+  const snapshotNetSeries = savedSnapshots.length > 0 ? [...savedSnapshots].slice(0, 6).reverse().map((snapshot) => snapshot.netTotal) : [forecastNetTotal];
+  const topContributionLines = statementLines
+    .filter((line) => line.account && line.contributors && line.contributors.length > 0)
+    .sort((left, right) => right.may2026 - left.may2026)
+    .slice(0, 4);
+  const chartMetricDefinitions: Record<PLChartMetricWidgetId, { color: string; description: string; detail: string; label: string; series: number[]; value: string }> = {
+    revenueRunRate: {
+      color: "#2563eb",
+      description: "Trailing top-line pace against the active month.",
+      detail: `${formatSignedPercent(trailingRevenueRunRate > 0 ? ((revenue - trailingRevenueRunRate) / trailingRevenueRunRate) * 100 : 0)} vs current month`,
+      label: "3-Mo Revenue Run Rate",
+      series: scopedHistoryData.map((point) => point.revenue),
+      value: fmtK(trailingRevenueRunRate)
+    },
+    grossProfitRunRate: {
+      color: "#16a34a",
+      description: "Trailing gross profit pace with current margin context.",
+      detail: `${grossMarginPct.toFixed(1)}% current gross margin`,
+      label: "3-Mo Gross Profit",
+      series: scopedHistoryData.map((point) => point.grossProfit),
+      value: fmtK(trailingGrossRunRate)
+    },
+    netIncomeRunRate: {
+      color: "#d97706",
+      description: "Trailing earnings pace versus current net margin.",
+      detail: `${netMarginPct.toFixed(1)}% current net margin`,
+      label: "3-Mo Net Income",
+      series: scopedHistoryData.map((point) => point.netIncome),
+      value: fmtK(trailingNetRunRate)
+    },
+    forecastRevenueDelta: {
+      color: "#0b4360",
+      description: "Scenario lift or drag versus the baseline revenue outlook.",
+      detail: `${activeScenario.label} vs baseline`,
+      label: "Forecast Revenue Delta",
+      series: forecastRevenueDeltaSeries,
+      value: formatSignedCompactCurrency(forecastRevenueDelta)
+    },
+    forecastNetDelta: {
+      color: "#0891b2",
+      description: "Net income separation versus the baseline forecast run.",
+      detail: `${forecastNetDelta >= 0 ? "Ahead of" : "Behind"} baseline`,
+      label: "Forecast Net Delta",
+      series: forecastNetDeltaSeries,
+      value: formatSignedCompactCurrency(forecastNetDelta)
+    },
+    grossMargin: {
+      color: "#14b8a6",
+      description: "Current gross margin rate with historical context.",
+      detail: `${formatSignedPercent(grossMarginPct - priorGrossMarginPct)} vs prior margin`,
+      label: "Gross Margin",
+      series: grossMarginHistory,
+      value: `${grossMarginPct.toFixed(1)}%`
+    },
+    netMargin: {
+      color: "#f59e0b",
+      description: "Current net margin rate with prior-year pacing.",
+      detail: `${formatSignedPercent(netMarginPct - priorNetMarginPct)} vs prior margin`,
+      label: "Net Margin",
+      series: netMarginHistory,
+      value: `${netMarginPct.toFixed(1)}%`
+    },
+    expenseLoad: {
+      color: "#7c3aed",
+      description: "Operating expense weight carried through recent months.",
+      detail: `${getVariancePercent(expenses, priorExpenses)} YoY operating spend`,
+      label: "Expense Load",
+      series: expenseLoadHistory,
+      value: formatCurrency(expenses)
+    },
+    scenarioConfidence: {
+      color: "#1d4ed8",
+      description: "Scenario confidence based on assumption intensity.",
+      detail: forecastConfidence.label,
+      label: "Scenario Confidence",
+      series: scenarioCompareRows.map((row) => row.confidence),
+      value: `${forecastConfidence.score}/100`
+    },
+    peakForecastMonth: {
+      color: "#0f766e",
+      description: "Highest revenue month in the current forecast run.",
+      detail: `${fmtK(peakForecastMonth.revenue)} revenue`,
+      label: "Peak Forecast Month",
+      series: forecast.map((point) => point.revenue),
+      value: peakForecastMonth.label
+    },
+    topStore: {
+      color: "#2563eb",
+      description: "Leading store in the selected scope.",
+      detail: topStore ? `${fmtK(topStore.revenue)} revenue · ${topStore.netMarginPct.toFixed(1)}% net margin` : "No store selected",
+      label: "Top Store",
+      series: storePerformance.slice(0, MAX_WIDGET_PREVIEW_ITEMS).map((store) => store.revenue),
+      value: topStore?.storeName ?? "No Store"
+    },
+    departmentLeader: {
+      color: "#16a34a",
+      description: "Best current department by revenue scale.",
+      detail: leadingDepartment ? `${leadingDepartment.grossMarginPct.toFixed(1)}% gross · ${leadingDepartment.netMarginPct.toFixed(1)}% net` : "Department data unavailable",
+      label: "Department Leader",
+      series: departmentPerformance.map((department) => department.revenue),
+      value: leadingDepartment?.department ?? "No Dept"
+    },
+    revenueBudgetGap: {
+      color: "#0f766e",
+      description: "Gap between booked revenue and the current budget line.",
+      detail: `${formatSignedCompactCurrency(revenueBudgetGap)} vs budget`,
+      label: "Revenue Budget Gap",
+      series: groupBudgetGapSeries,
+      value: formatSignedCompactCurrency(revenueBudgetGap)
+    },
+    netBudgetGap: {
+      color: "#c2410c",
+      description: "Gap between net income and the budgeted finish.",
+      detail: `${formatSignedCompactCurrency(netBudgetGap)} vs budget`,
+      label: "Net Budget Gap",
+      series: scenarioNetSeries,
+      value: formatSignedCompactCurrency(netBudgetGap)
+    },
+    cogsLoad: {
+      color: "#7c3aed",
+      description: "Cost of sales burden as a share of revenue.",
+      detail: `${formatSignedPercent(costLoadPct - priorCostLoadPct)} vs prior cost load`,
+      label: "COGS Load",
+      series: costLoadHistory,
+      value: `${costLoadPct.toFixed(1)}%`
+    },
+    nextNinetyRevenue: {
+      color: "#1d4ed8",
+      description: "Projected revenue across the next ninety-day window.",
+      detail: `${formatSignedCompactCurrency(next90Revenue - next90BaselineRevenue)} vs baseline`,
+      label: "Next 90-Day Revenue",
+      series: next90RevenueSeries,
+      value: fmtK(next90Revenue)
+    },
+    nextNinetyNet: {
+      color: "#0b4360",
+      description: "Projected net income for the next ninety days.",
+      detail: `${formatSignedCompactCurrency(next90Net - next90NetBaseline)} vs baseline`,
+      label: "Next 90-Day Net",
+      series: next90NetSeries,
+      value: fmtK(next90Net)
+    },
+    storeMarginSpread: {
+      color: "#2563eb",
+      description: "Spread between the highest and lowest store net margins.",
+      detail: topStore && worstStore ? `${topStore.storeName} to ${worstStore.storeName}` : "Current store scope",
+      label: "Store Margin Spread",
+      series: storePerformance.map((store) => store.netMarginPct),
+      value: `${storeMarginSpread.toFixed(1)} pts`
+    },
+    activeAnomalyCount: {
+      color: "#ea580c",
+      description: "Accounts currently beyond the anomaly threshold.",
+      detail: anomalyHighlights[0] ? `${anomalyHighlights[0].line.description} is the largest swing` : "No accounts above the alert threshold",
+      label: "Active Anomalies",
+      series: anomalyMagnitudeSeries.length > 0 ? anomalyMagnitudeSeries : [0],
+      value: `${anomalyHighlights.length}`
+    },
+    snapshotVaultCount: {
+      color: "#0f766e",
+      description: "Saved forecast runs available for reload and reporting.",
+      detail: savedSnapshots[0] ? `Latest ${savedSnapshots[0].label}` : "No saved snapshots yet",
+      label: "Saved Snapshots",
+      series: snapshotNetSeries,
+      value: `${savedSnapshots.length}`
+    },
+    bestScenarioNet: {
+      color: "#16a34a",
+      description: "Best net-income scenario currently available in the model.",
+      detail: bestScenario ? `${bestScenario.label} leads ${formatSignedCompactCurrency(bestScenario.deltaVsBaseline)} vs baseline` : `${activeScenario.label} is active`,
+      label: "Best Scenario Net",
+      series: scenarioNetSeries,
+      value: bestScenario ? fmtK(bestScenario.netTotal) : fmtK(forecastNetTotal)
+    },
+    topDepartmentMargin: {
+      color: "#14b8a6",
+      description: "Highest department net margin in the selected scope.",
+      detail: topDepartmentByNetMargin ? `${topDepartmentByNetMargin.department} leads the network` : "Department data unavailable",
+      label: "Top Dept Net Margin",
+      series: departmentNetMarginSeries,
+      value: topDepartmentByNetMargin ? `${topDepartmentByNetMargin.netMarginPct.toFixed(1)}%` : "0.0%"
+    }
+  };
+  const monthlyOutlookOverview = peakOutlookMonth && bestNetOutlookMonth && seasonalLowOutlookMonth
+    ? [
+        {
+          label: "Peak Revenue Window",
+          value: peakOutlookMonth.label,
+          detail: `${fmtK(peakOutlookMonth.revenue)} revenue · ${peakOutlookMonth.grossMarginPct.toFixed(1)}% gross margin`
+        },
+        {
+          label: "Best Net Drop-Through",
+          value: bestNetOutlookMonth.label,
+          detail: `${fmtK(bestNetOutlookMonth.netIncome)} net · ${bestNetOutlookMonth.netMarginPct.toFixed(1)}% net margin`
+        },
+        {
+          label: "Next 90 Days",
+          value: fmtK(next90Revenue),
+          detail: `${formatSignedCompactCurrency(next90Revenue - next90BaselineRevenue)} vs baseline under ${activeScenario.label}`
+        },
+        {
+          label: "Seasonal Floor",
+          value: seasonalLowOutlookMonth.label,
+          detail: `${fmtK(seasonalLowOutlookMonth.revenue)} revenue · ${formatSignedPercent(seasonalLowOutlookMonth.revenueStepPct)} sequential pace`
+        }
+      ]
+    : [];
+  const activeFeaturedChartWidgetId = visibleChartVisualWidgetIds.includes(featuredChartWidgetId)
+    ? featuredChartWidgetId
+    : visibleChartVisualWidgetIds[0];
+  const supportingChartWidgetIds = visibleChartVisualWidgetIds.filter((widgetId) => widgetId !== activeFeaturedChartWidgetId);
+  const isDenseVisualBoard = visibleChartVisualWidgetIds.length > MAX_CHART_DATA_WIDGETS;
+
+  function renderChartVisual(type: PLChartType) {
+    if (type === "trend") {
+      return <TrendChart history={scopedHistoryData} forecast={forecast} />;
+    }
+
+    if (type === "waterfall") {
+      return <WaterfallChart revenue={revenue} grossProfit={grossProfit} netIncome={netIncome} />;
+    }
+
+    return <DeptChart data={scopedDeptData} />;
+  }
+
+  function renderManagedWidgetPanel(widgetId: PLWidgetId, title: string, subtitle: string, body: ReactNode, className = "") {
+    return (
+      <article
+        className={`pl-power-panel ${className}${isExportingWidgetId === widgetId ? " is-exporting" : ""}`.trim()}
+        ref={(node) => {
+          widgetPanelRefs.current[widgetId] = node;
+        }}
+      >
+        <div className="pl-power-panel-header">
+          <div>
+            <strong>{title}</strong>
+            <span>{subtitle}</span>
+          </div>
+          {renderWidgetActions(widgetId)}
+        </div>
+        {body}
+      </article>
+    );
+  }
+
+  function renderChartPanel(widgetId: PLWidgetId, type: PLChartType, title: string, subtitle: string, className = "") {
+    return renderManagedWidgetPanel(
+      widgetId,
+      title,
+      subtitle,
+        <div className="pl-chart-frame is-report-panel">
+          {renderChartVisual(type)}
+        </div>,
+      className
+    );
+  }
+
+  function renderStoreLeaderboardPanel(className = "") {
+    return renderManagedWidgetPanel(
+      "storeLeaderboard",
+      chartWidgetDefinitions.storeLeaderboard.title,
+      chartWidgetDefinitions.storeLeaderboard.subtitle,
+        <div className="pl-power-list">
+          {storePerformance.map((store) => (
+            <div key={store.storeId} className="pl-power-progress-row">
+              <div className="pl-power-progress-copy">
+                <strong>{store.storeName}</strong>
+                <span>{fmtK(store.revenue)} revenue · {store.netMarginPct.toFixed(1)}% net margin</span>
+              </div>
+              <div className="pl-power-progress-track">
+                <span style={{ width: `${Math.max((store.revenue / maxStoreRevenue) * 100, 10)}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>,
+      className
+    );
+  }
+
+  function renderDepartmentPerformancePanel(className = "") {
+    return renderManagedWidgetPanel(
+      "departmentScoreboard",
+      chartWidgetDefinitions.departmentScoreboard.title,
+      chartWidgetDefinitions.departmentScoreboard.subtitle,
+        <div className="pl-power-card-grid">
+          {departmentPerformance.map((department) => (
+            <div key={department.department} className="pl-power-mini-card">
+              <span>{department.department}</span>
+              <strong>{fmtK(department.revenue)}</strong>
+              <small>{fmtK(department.grossProfit)} gross · {fmtK(department.netIncome)} net</small>
+              <small>{department.grossMarginPct.toFixed(1)}% gross margin · {department.netMarginPct.toFixed(1)}% net margin</small>
+            </div>
+          ))}
+        </div>,
+      className
+    );
+  }
+
+  function renderForecastDeltaPanel(className = "") {
+    return renderManagedWidgetPanel(
+      "forecastDelta",
+      chartWidgetDefinitions.forecastDelta.title,
+      chartWidgetDefinitions.forecastDelta.subtitle,
+      <>
+        <div className="pl-widget-metrics-grid">
+          <div className="pl-power-mini-card">
+            <span>Scenario Revenue</span>
+            <strong>{formatSignedCompactCurrency(forecastRevenueDelta)}</strong>
+            <small>{activeScenario.label} vs baseline</small>
+          </div>
+          <div className="pl-power-mini-card">
+            <span>Scenario Net</span>
+            <strong>{formatSignedCompactCurrency(forecastNetDelta)}</strong>
+            <small>{forecastConfidence.label}</small>
+          </div>
+        </div>
+        <div className="pl-chart-frame is-report-panel">
+          <ForecastDeltaChart baseline={baselineForecast} scenario={forecast} scenarioLabel={activeScenario.label} />
+        </div>
+      </>,
+      className
+    );
+  }
+
+  function renderVariancePulsePanel(className = "") {
+    const maxVariancePulse = Math.max(1, ...variancePulseRows.flatMap((row) => [Math.abs(row.budgetPct), Math.abs(row.priorPct)]));
+
+    return renderManagedWidgetPanel(
+      "variancePulse",
+      chartWidgetDefinitions.variancePulse.title,
+      chartWidgetDefinitions.variancePulse.subtitle,
+      <div className="pl-variance-board">
+        {variancePulseRows.map((row) => (
+          <article className="pl-variance-card" key={row.group}>
+            <div className="pl-variance-card-head">
+              <strong>{row.group}</strong>
+              <span>{fmtK(row.actual)}</span>
+            </div>
+            <div className="pl-variance-chip-row">
+              <span className={`pl-variance-chip tone-${row.budgetTone}`}>Budget {formatSignedPercent(row.budgetPct)}</span>
+              <span className={`pl-variance-chip tone-${row.priorTone}`}>Prior {formatSignedPercent(row.priorPct)}</span>
+            </div>
+            <div className="pl-variance-track-stack">
+              <div className="pl-variance-track-row">
+                <small>Budget</small>
+                <div className="pl-variance-track">
+                  <span className={`tone-${row.budgetTone}`} style={{ width: `${(Math.abs(row.budgetPct) / maxVariancePulse) * 100}%` }} />
+                </div>
+              </div>
+              <div className="pl-variance-track-row">
+                <small>Prior</small>
+                <div className="pl-variance-track">
+                  <span className={`tone-${row.priorTone}`} style={{ width: `${(Math.abs(row.priorPct) / maxVariancePulse) * 100}%` }} />
+                </div>
+              </div>
+            </div>
+            <small>{row.focus}</small>
+          </article>
+        ))}
+      </div>,
+      className
+    );
+  }
+
+  function renderScenarioBridgePanel(className = "") {
+    const maxBridgeValue = Math.max(1, ...scenarioBridge.map((point) => Math.abs(point.value)));
+
+    return renderManagedWidgetPanel(
+      "scenarioBridge",
+      chartWidgetDefinitions.scenarioBridge.title,
+      chartWidgetDefinitions.scenarioBridge.subtitle,
+      <div className="pl-scenario-bridge-list">
+        {scenarioBridge.map((point) => (
+          <div className="pl-scenario-bridge-row" key={point.label}>
+            <div className="pl-scenario-bridge-copy">
+              <strong>{point.label}</strong>
+              <span>{point.label === "Scenario Net" ? activeScenario.label : "Bridge component"}</span>
+            </div>
+            <div className="pl-scenario-bridge-track">
+              <span className={`tone-${point.tone}`} style={{ width: `${Math.max((Math.abs(point.value) / maxBridgeValue) * 100, 12)}%` }} />
+            </div>
+            <strong>{point.tone === "neutral" ? fmtK(point.value) : formatSignedCompactCurrency(point.value)}</strong>
+          </div>
+        ))}
+      </div>,
+      className
+    );
+  }
+
+  function renderMonthlyOutlookPreviewPanel(className = "") {
+    return renderManagedWidgetPanel(
+      "monthlyOutlookStudio",
+      chartWidgetDefinitions.monthlyOutlookStudio.title,
+      chartWidgetDefinitions.monthlyOutlookStudio.subtitle,
+      <div className="pl-outlook-preview-grid">
+        {monthlyOutlookRows.slice(0, MAX_WIDGET_PREVIEW_ITEMS).map((row) => (
+          <article className={`pl-outlook-preview-card tone-${row.paceTone}`} key={row.label}>
+            <div className="pl-outlook-preview-head">
+              <strong>{row.label}</strong>
+              <span>{row.paceLabel}</span>
+            </div>
+            <div className="pl-outlook-preview-metrics">
+              <div>
+                <span>Revenue</span>
+                <strong>{fmtK(row.revenue)}</strong>
+              </div>
+              <div>
+                <span>Net</span>
+                <strong>{fmtK(row.netIncome)}</strong>
+              </div>
+            </div>
+            <div className="pl-outlook-preview-bars">
+              <span className="is-baseline" style={{ width: `${(row.baselineRevenue / monthlyOutlookMaxRevenue) * 100}%` }} />
+              <span className="is-current" style={{ width: `${(row.revenue / monthlyOutlookMaxRevenue) * 100}%` }} />
+            </div>
+            <small>{formatSignedCompactCurrency(row.netDelta)} vs baseline · {row.netMarginPct.toFixed(1)}% net margin</small>
+          </article>
+        ))}
+      </div>,
+      className
+    );
+  }
+
+  function renderScenarioCommandCenterPanel(className = "") {
+    const maxScenarioNet = Math.max(1, ...scenarioCompareRows.map((row) => row.netTotal));
+
+    return renderManagedWidgetPanel(
+      "scenarioCommandCenter",
+      chartWidgetDefinitions.scenarioCommandCenter.title,
+      chartWidgetDefinitions.scenarioCommandCenter.subtitle,
+      <div className="pl-scenario-command-grid">
+        {scenarioCompareRows.map((row) => (
+          <article className={`pl-scenario-command-card${row.id === selectedScenarioId ? " is-active" : ""}`} key={row.id}>
+            <div className="pl-scenario-command-head">
+              <strong>{row.label}</strong>
+              <span>{row.confidence}/100</span>
+            </div>
+            <div className="pl-scenario-command-metrics">
+              <div>
+                <span>Revenue</span>
+                <strong>{fmtK(row.revenueTotal)}</strong>
+              </div>
+              <div>
+                <span>Net</span>
+                <strong>{fmtK(row.netTotal)}</strong>
+              </div>
+            </div>
+            <div className="pl-scenario-command-chip-row">
+              <span>{row.grossMarginPct.toFixed(1)}% gross margin</span>
+              <span>{formatSignedCompactCurrency(row.deltaVsBaseline)} vs baseline</span>
+            </div>
+            <div className="pl-scenario-command-track">
+              <span style={{ width: `${Math.max((row.netTotal / maxScenarioNet) * 100, 18)}%` }} />
+            </div>
+            <small>{row.summary}</small>
+          </article>
+        ))}
+      </div>,
+      className
+    );
+  }
+
+  function renderStoreMarginMatrixPanel(className = "") {
+    const maxStoreNetIncome = Math.max(1, ...storePerformance.map((store) => Math.abs(store.netIncome)));
+
+    return renderManagedWidgetPanel(
+      "storeMarginMatrix",
+      chartWidgetDefinitions.storeMarginMatrix.title,
+      chartWidgetDefinitions.storeMarginMatrix.subtitle,
+      <div className="pl-margin-matrix-grid">
+        {storePerformance.map((store) => {
+          const tone = store.netMarginPct >= 11 ? "up" : store.netMarginPct <= 8 ? "down" : "neutral";
+
+          return (
+            <article className={`pl-margin-matrix-card tone-${tone}`} key={store.storeId}>
+              <div className="pl-margin-matrix-head">
+                <strong>{store.storeName}</strong>
+                <span>{store.netMarginPct.toFixed(1)}% net</span>
+              </div>
+              <div className="pl-margin-matrix-metrics">
+                <div>
+                  <span>Revenue</span>
+                  <strong>{fmtK(store.revenue)}</strong>
+                </div>
+                <div>
+                  <span>Gross</span>
+                  <strong>{fmtK(store.grossProfit)}</strong>
+                </div>
+              </div>
+              <div className="pl-margin-matrix-track">
+                <span className={`tone-${tone}`} style={{ width: `${Math.max((Math.abs(store.netIncome) / maxStoreNetIncome) * 100, 10)}%` }} />
+              </div>
+              <small>{fmtK(store.netIncome)} net income contribution</small>
+            </article>
+          );
+        })}
+      </div>,
+      className
+    );
+  }
+
+  function renderAnomalyLedgerPanel(className = "") {
+    const topAnomalies = anomalyHighlights.slice(0, 6);
+    const maxAnomalyPct = Math.max(15, ...topAnomalies.map((item) => Math.abs(item.pct)));
+
+    return renderManagedWidgetPanel(
+      "anomalyLedger",
+      chartWidgetDefinitions.anomalyLedger.title,
+      chartWidgetDefinitions.anomalyLedger.subtitle,
+      topAnomalies.length > 0 ? (
+        <div className="pl-anomaly-ledger-list">
+          {topAnomalies.map((item) => (
+            <article className={`pl-anomaly-ledger-item tone-${item.direction}`} key={item.line.account}>
+              <div className="pl-anomaly-ledger-head">
+                <div>
+                  <strong>{item.line.description}</strong>
+                  <span>{item.line.owner ?? "Owner not assigned"}</span>
+                </div>
+                <strong>{item.direction === "up" ? "+" : "-"}{Math.abs(item.pct).toFixed(1)}%</strong>
+              </div>
+              <div className="pl-anomaly-ledger-track">
+                <span className={`tone-${item.direction}`} style={{ width: `${Math.max((Math.abs(item.pct) / maxAnomalyPct) * 100, 12)}%` }} />
+              </div>
+              <small>{formatCurrency(item.line.may2026)} actual · {item.line.driver ?? "No driver noted"}</small>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="pl-report-delivery-empty">No account anomalies are above the current alert threshold.</p>
+      ),
+      className
+    );
+  }
+
+  function renderContributorSpotlightPanel(className = "") {
+    return renderManagedWidgetPanel(
+      "contributorSpotlight",
+      chartWidgetDefinitions.contributorSpotlight.title,
+      chartWidgetDefinitions.contributorSpotlight.subtitle,
+      topContributionLines.length > 0 ? (
+        <div className="pl-contributor-spotlight-grid">
+          {topContributionLines.map((line) => {
+            const contributors = [...(line.contributors ?? [])].sort((left, right) => right.actual - left.actual).slice(0, 3);
+
+            return (
+              <article className="pl-contributor-spotlight-card" key={line.account}>
+                <div className="pl-contributor-spotlight-head">
+                  <div>
+                    <strong>{line.description}</strong>
+                    <span>{line.owner ?? "Owner not assigned"}</span>
+                  </div>
+                  <strong>{fmtK(line.may2026)}</strong>
+                </div>
+                <div className="pl-contributor-spotlight-list">
+                  {contributors.map((contributor) => (
+                    <div className="pl-contributor-spotlight-row" key={contributor.storeId}>
+                      <span>{contributor.storeName}</span>
+                      <div className="pl-contributor-spotlight-track">
+                        <b style={{ width: `${Math.max((contributor.actual / Math.max(line.may2026, 1)) * 100, 10)}%` }} />
+                      </div>
+                      <small>{fmtK(contributor.actual)}</small>
+                    </div>
+                  ))}
+                </div>
+                <small>{line.driver ?? "No driver noted"}</small>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="pl-report-delivery-empty">No contributor data is available for the current scope.</p>
+      ),
+      className
+    );
+  }
+
+  function renderSnapshotVaultPanel(className = "") {
+    const previewSnapshots = savedSnapshots.length > 0
+      ? savedSnapshots.slice(0, 4).map((snapshot) => ({
+          confidence: snapshot.confidence,
+          department: snapshot.department,
+          id: snapshot.id,
+          isActive: snapshot.scenarioId === selectedScenarioId && snapshot.month === selectedMonth && snapshot.year === selectedYear,
+          label: snapshot.label,
+          netTotal: snapshot.netTotal,
+          revenueTotal: snapshot.revenueTotal,
+          savedAt: snapshot.savedAt,
+          storeLabel: snapshot.storeLabel
+        }))
+      : [{
+          confidence: forecastConfidence.score,
+          department: selectedDepartment,
+          id: "live-run",
+          isActive: true,
+          label: `${selectedMonth.slice(0, 3)} ${selectedYear} · ${activeScenario.label}`,
+          netTotal: forecastNetTotal,
+          revenueTotal: forecastRevenueTotal,
+          savedAt: "Live board",
+          storeLabel: selectedStoresLabel
+        }];
+
+    return renderManagedWidgetPanel(
+      "snapshotVault",
+      chartWidgetDefinitions.snapshotVault.title,
+      chartWidgetDefinitions.snapshotVault.subtitle,
+      <div className="pl-snapshot-list">
+        {previewSnapshots.map((snapshot) => (
+          <article className={`pl-snapshot-card${snapshot.isActive ? " is-active" : ""}`} key={snapshot.id}>
+            <strong>{snapshot.label}</strong>
+            <span>{snapshot.savedAt}</span>
+            <small>{snapshot.department} · {snapshot.storeLabel}</small>
+            <div className="pl-snapshot-metrics">
+              <span>Revenue {fmtK(snapshot.revenueTotal)}</span>
+              <span>Net {fmtK(snapshot.netTotal)}</span>
+              <span>Confidence {snapshot.confidence}/100</span>
+            </div>
+          </article>
+        ))}
+      </div>,
+      className
+    );
+  }
+
+  function renderChartMetricCard(widgetId: PLChartMetricWidgetId) {
+    const card = chartMetricDefinitions[widgetId];
+
+    return (
+      <article key={widgetId} className="pl-power-kpi-card">
+        <span>{card.label}</span>
+        <strong>{card.value}</strong>
+        <div className="pl-power-kpi-card-foot">
+          <small>{card.detail}</small>
+          <Sparkline color={card.color} values={card.series.length > 0 ? card.series : [0]} />
+        </div>
+      </article>
+    );
+  }
+
+  function renderVisualWidgetPanel(widgetId: PLWidgetId, className = "") {
+    if (widgetId === "trendExplorer") {
+      return renderChartPanel(widgetId, "trend", chartWidgetDefinitions.trendExplorer.title, chartWidgetDefinitions.trendExplorer.subtitle, className);
+    }
+
+    if (widgetId === "marginWalk") {
+      return renderChartPanel(widgetId, "waterfall", chartWidgetDefinitions.marginWalk.title, chartWidgetDefinitions.marginWalk.subtitle, className);
+    }
+
+    if (widgetId === "departmentMix") {
+      return renderChartPanel(widgetId, "department", chartWidgetDefinitions.departmentMix.title, chartWidgetDefinitions.departmentMix.subtitle, className);
+    }
+
+    if (widgetId === "storeLeaderboard") {
+      return renderStoreLeaderboardPanel(className);
+    }
+
+    if (widgetId === "forecastDelta") {
+      return renderForecastDeltaPanel(className);
+    }
+
+    if (widgetId === "variancePulse") {
+      return renderVariancePulsePanel(className);
+    }
+
+    if (widgetId === "departmentScoreboard") {
+      return renderDepartmentPerformancePanel(className);
+    }
+
+    if (widgetId === "scenarioBridge") {
+      return renderScenarioBridgePanel(className);
+    }
+
+    if (widgetId === "scenarioCommandCenter") {
+      return renderScenarioCommandCenterPanel(className);
+    }
+
+    if (widgetId === "storeMarginMatrix") {
+      return renderStoreMarginMatrixPanel(className);
+    }
+
+    if (widgetId === "anomalyLedger") {
+      return renderAnomalyLedgerPanel(className);
+    }
+
+    if (widgetId === "contributorSpotlight") {
+      return renderContributorSpotlightPanel(className);
+    }
+
+    if (widgetId === "snapshotVault") {
+      return renderSnapshotVaultPanel(className);
+    }
+
+    return renderMonthlyOutlookPreviewPanel(className);
+  }
+
+  function renderSnapshotBoardPanel(className = "") {
+    return (
+      <article className={`pl-power-panel ${className}`.trim()}>
+        <div className="pl-power-panel-header">
+          <div>
+            <strong>Forecast Snapshots</strong>
+            <span>Save the current run and reload it for leadership reviews.</span>
+          </div>
+          <button type="button" onClick={saveCurrentSnapshot}>Save Snapshot</button>
+        </div>
+        {savedSnapshots.length > 0 ? (
+          <div className="pl-snapshot-list">
+            {savedSnapshots.map((snapshot) => (
+              <article key={snapshot.id} className={`pl-snapshot-card${snapshot.scenarioId === selectedScenarioId && snapshot.month === selectedMonth && snapshot.year === selectedYear ? " is-active" : ""}`}>
+                <strong>{snapshot.label}</strong>
+                <span>{snapshot.savedAt}</span>
+                <small>{snapshot.department} · {snapshot.storeLabel}</small>
+                <div className="pl-snapshot-metrics">
+                  <span>Revenue {fmtK(snapshot.revenueTotal)}</span>
+                  <span>Net {fmtK(snapshot.netTotal)}</span>
+                </div>
+                <div className="pl-snapshot-actions">
+                  <button type="button" onClick={() => loadSnapshot(snapshot)}>Load</button>
+                  <button type="button" onClick={() => deleteSnapshot(snapshot.id)}>Delete</button>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="pl-snapshot-empty">No forecast snapshots saved yet.</p>
+        )}
+      </article>
+    );
+  }
+
+  function renderScenarioLabPanel(className = "") {
+    return (
+      <article className={`pl-power-panel ${className}`.trim()}>
+        <div className="pl-power-panel-header">
+          <div>
+            <strong>Scenario Lab</strong>
+            <span>Blend preset plays with custom volume, margin, and expense levers.</span>
+          </div>
+        </div>
+        <div className="pl-scenario-grid">
+          {forecastScenarios.map((scenario) => (
+            <button
+              key={scenario.id}
+              type="button"
+              className={`pl-scenario-card tone-${scenario.id}${selectedScenarioId === scenario.id ? " is-active" : ""}`}
+              onClick={() => applyScenarioPreset(scenario.id)}
+            >
+              <strong>{scenario.label}</strong>
+              <span>{scenario.summary}</span>
+              <small>{scenario.revenuePct >= 0 ? "+" : ""}{scenario.revenuePct}% volume · {scenario.grossMarginBps >= 0 ? "+" : ""}{scenario.grossMarginBps} bps · {scenario.expensePct >= 0 ? "+" : ""}{scenario.expensePct}% expense</small>
+            </button>
+          ))}
+        </div>
+        <div className="pl-driver-controls">
+          <label>
+            <span>Volume</span>
+            <strong>{revenueLiftPct >= 0 ? "+" : ""}{revenueLiftPct.toFixed(1)}%</strong>
+            <input type="range" min={-10} max={15} step={0.5} value={revenueLiftPct} onChange={(e) => setRevenueLiftPct(Number(e.target.value))} />
+          </label>
+          <label>
+            <span>Gross Margin</span>
+            <strong>{marginShiftBps >= 0 ? "+" : ""}{marginShiftBps} bps</strong>
+            <input type="range" min={-250} max={250} step={10} value={marginShiftBps} onChange={(e) => setMarginShiftBps(Number(e.target.value))} />
+          </label>
+          <label>
+            <span>Expense Load</span>
+            <strong>{expenseShiftPct >= 0 ? "+" : ""}{expenseShiftPct.toFixed(1)}%</strong>
+            <input type="range" min={-8} max={8} step={0.5} value={expenseShiftPct} onChange={(e) => setExpenseShiftPct(Number(e.target.value))} />
+          </label>
+        </div>
+      </article>
+    );
+  }
+
+  function renderScenarioComparePanel(className = "") {
+    return (
+      <article className={`pl-power-panel ${className}`.trim()}>
+        <div className="pl-power-panel-header">
+          <div>
+            <strong>Scenario Compare</strong>
+            <span>Side-by-side scenario outputs for the forecast deck.</span>
+          </div>
+        </div>
+        <div className="pl-power-table-wrap">
+          <table className="pl-power-table">
+            <thead>
+              <tr>
+                <th>Scenario</th>
+                <th>Revenue</th>
+                <th>Gross Margin</th>
+                <th>Net</th>
+                <th>vs Baseline</th>
+                <th>Confidence</th>
+              </tr>
+            </thead>
+            <tbody>
+              {scenarioCompareRows.map((row) => (
+                <tr key={row.id} className={row.id === selectedScenarioId ? "is-active" : ""}>
+                  <td>
+                    <strong>{row.label}</strong>
+                    <small>{row.summary}</small>
+                  </td>
+                  <td>{fmtK(row.revenueTotal)}</td>
+                  <td>{row.grossMarginPct.toFixed(1)}%</td>
+                  <td>{fmtK(row.netTotal)}</td>
+                  <td>{formatSignedCompactCurrency(row.deltaVsBaseline)}</td>
+                  <td>{row.confidence}/100</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </article>
+    );
+  }
+
+  function renderMonthlyOutlookPanel(className = "") {
+    return (
+      <article className={`pl-power-panel ${className}`.trim()}>
+        <div className="pl-power-panel-header">
+          <div>
+            <strong>Monthly Outlook Studio</strong>
+            <span>Month-by-month revenue, margin, and drop-through against the active plan.</span>
+          </div>
+        </div>
+        <div className="pl-monthly-outlook-overview">
+          {monthlyOutlookOverview.map((item) => (
+            <article key={item.label} className="pl-monthly-outlook-overview-card">
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+              <small>{item.detail}</small>
+            </article>
+          ))}
+        </div>
+        <div className="pl-monthly-outlook-card-grid">
+          {monthlyOutlookRows.map((row) => {
+            const activeRevenueWidth = Math.max((row.revenue / monthlyOutlookMaxRevenue) * 100, row.revenue > 0 ? 10 : 0);
+            const baselineRevenueWidth = Math.max((row.baselineRevenue / monthlyOutlookMaxRevenue) * 100, row.baselineRevenue > 0 ? 10 : 0);
+            const activeNetWidth = Math.max((Math.abs(row.netIncome) / monthlyOutlookMaxNet) * 100, Math.abs(row.netIncome) > 0 ? 10 : 0);
+            const baselineNetWidth = Math.max((Math.abs(row.baselineNetIncome) / monthlyOutlookMaxNet) * 100, Math.abs(row.baselineNetIncome) > 0 ? 10 : 0);
+
+            return (
+              <article key={row.label} className={`pl-monthly-outlook-card tone-${row.paceTone}`}>
+                <div className="pl-monthly-outlook-card-head">
+                  <div>
+                    <strong>{row.label}</strong>
+                    <span>{row.focus}</span>
+                  </div>
+                  <span className={`pl-monthly-outlook-chip tone-${row.paceTone}`}>{row.paceLabel}</span>
+                </div>
+                <div className="pl-monthly-outlook-metrics">
+                  <div>
+                    <span>Revenue</span>
+                    <strong>{fmtK(row.revenue)}</strong>
+                    <small>{formatSignedCompactCurrency(row.revenueDelta)} vs baseline</small>
+                  </div>
+                  <div>
+                    <span>Gross Margin</span>
+                    <strong>{row.grossMarginPct.toFixed(1)}%</strong>
+                    <small>{formatSignedPercent(row.revenueStepPct)} vs prior month pace</small>
+                  </div>
+                  <div>
+                    <span>Net Income</span>
+                    <strong>{fmtK(row.netIncome)}</strong>
+                    <small>{row.netMarginPct.toFixed(1)}% net margin</small>
+                  </div>
+                </div>
+                <div className="pl-monthly-outlook-compare">
+                  <div className="pl-monthly-outlook-track-row">
+                    <span>Revenue</span>
+                    <div className="pl-monthly-outlook-track">
+                      <i className="is-baseline" style={{ width: `${baselineRevenueWidth}%` }} />
+                      <b className={`tone-${row.paceTone}`} style={{ width: `${activeRevenueWidth}%` }} />
+                    </div>
+                    <small>{fmtK(row.baselineRevenue)} baseline</small>
+                  </div>
+                  <div className="pl-monthly-outlook-track-row">
+                    <span>Net</span>
+                    <div className="pl-monthly-outlook-track is-net">
+                      <i className="is-baseline" style={{ width: `${baselineNetWidth}%` }} />
+                      <b className={`tone-${row.netDelta > 0 ? "up" : row.netDelta < 0 ? "down" : row.paceTone}`} style={{ width: `${activeNetWidth}%` }} />
+                    </div>
+                    <small>{fmtK(row.baselineNetIncome)} baseline</small>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </article>
+    );
+  }
 
   return (
     <div className="profit-loss-shell is-compact">
-      {/* title bar */}
       <div className="profit-loss-title-bar">
         <div className="pl-title-left">
-          <strong>Profit and Loss Statement</strong>
-          <MarginScoreRing score={score.score} label={score.label} pct={netMarginPct} />
+          <div className="pl-title-copy">
+            <strong>Profit and Loss Statement</strong>
+            <span>{selectedMonth} {selectedYear} · {selectedStoresLabel} · {selectedDepartment}</span>
+          </div>
         </div>
         <div className="profit-loss-title-actions">
           <button type="button" onClick={() => exportCSV(statementLines, selectedMonth, selectedYear)}>CSV</button>
@@ -1529,124 +3726,384 @@ export function ProfitLossWorkspace() {
         </div>
       )}
 
-      {/* ── CHARTS VIEW ── */}
       {viewMode === "charts" && (
         <div className="pl-charts-view">
-          <div className="pl-chart-type-tabs">
-            {(["trend", "waterfall", "department"] as PLChartType[]).map((ct) => (
-              <button key={ct} type="button" className={chartType === ct ? "is-active" : ""} onClick={() => setChartType(ct)}>
-                {ct === "trend" ? "Trend" : ct === "waterfall" ? "Waterfall" : "Department"}
-              </button>
+          {deliveryNotice && <div className="pl-widget-delivery-notice">{deliveryNotice}</div>}
+          <div className="pl-report-toolbar">
+            <div className="pl-report-toolbar-group is-layout-toggle">
+              <span>Layout</span>
+              {([
+                ["focus", "Focus"],
+                ["board", "Board"],
+                ["multiReport", "Report Pack"]
+              ] as Array<[PLReportLayoutMode, string]>).map(([mode, label]) => (
+                <button key={mode} type="button" className={chartLayoutMode === mode ? "is-active" : ""} onClick={() => setChartLayoutMode(mode)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="pl-power-section-header">
+            <div className="pl-power-section-copy">
+              <strong>CEO Data Tiles</strong>
+              <span>Pick the four headline accounting signals leadership should see first.</span>
+            </div>
+            <div className="pl-power-section-actions">
+              <small>{visibleChartMetricWidgetIds.length}/{MAX_CHART_DATA_WIDGETS} visible</small>
+              <button className="pl-widget-action-button" onClick={() => setChartWidgetLibrarySection("data")} type="button">Filter Data Tiles</button>
+            </div>
+          </div>
+          <div className="pl-power-kpi-strip">
+            {visibleChartMetricWidgetIds.map((widgetId) => renderChartMetricCard(widgetId))}
+          </div>
+          <div className="pl-power-section-header">
+            <div className="pl-power-section-copy">
+              <strong>Accounting Visual Board</strong>
+              <span>Swap between advanced CEO and accounting widgets while holding up to eight on screen.</span>
+            </div>
+            <div className="pl-power-section-actions">
+              {chartLayoutMode === "focus" && activeFeaturedChartWidgetId && visibleChartVisualWidgetIds.length > 1 && (
+                <div className="pl-focus-widget-switcher">
+                  {visibleChartVisualWidgetIds.map((widgetId) => (
+                    <button
+                      key={widgetId}
+                      type="button"
+                      className={activeFeaturedChartWidgetId === widgetId ? "is-active" : ""}
+                      onClick={() => setFeaturedChartWidgetId(widgetId)}
+                    >
+                      {chartWidgetDefinitions[widgetId].shortTitle}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <small>{visibleChartVisualWidgetIds.length}/{MAX_CHART_VISUAL_WIDGETS} visible</small>
+              <button className="pl-widget-action-button" onClick={() => setChartWidgetLibrarySection("visuals")} type="button">Filter Widgets</button>
+            </div>
+          </div>
+          {chartLayoutMode === "focus" ? (
+            <div className="pl-power-focus-layout">
+              {activeFeaturedChartWidgetId && renderVisualWidgetPanel(activeFeaturedChartWidgetId, "is-span-2")}
+              {supportingChartWidgetIds.length > 0 && (
+                <div className="pl-power-side-stack">
+                  {supportingChartWidgetIds.map((widgetId) => <Fragment key={widgetId}>{renderVisualWidgetPanel(widgetId)}</Fragment>)}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className={`pl-power-grid${chartLayoutMode === "multiReport" ? " is-report-pack" : ""}${isDenseVisualBoard ? " is-dense" : ""}`}>
+              {visibleChartVisualWidgetIds.map((widgetId) => <Fragment key={widgetId}>{renderVisualWidgetPanel(widgetId)}</Fragment>)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {viewMode === "forecast" && (
+        <div className="pl-forecast-view">
+          <div className="pl-report-toolbar">
+            <div className="pl-report-toolbar-group">
+              <span>Report</span>
+              {([
+                ["scenarioLab", "Scenario Lab"],
+                ["scenarioCompare", "Scenario Compare"],
+                ["monthlyOutlook", "Monthly Outlook"]
+              ] as Array<[PLForecastReport, string]>).map(([reportKey, label]) => (
+                <button key={reportKey} type="button" className={forecastReport === reportKey ? "is-active" : ""} onClick={() => setForecastReport(reportKey)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="pl-report-toolbar-group is-layout-toggle">
+              <span>Layout</span>
+              {([
+                ["focus", "Focus"],
+                ["board", "Board"],
+                ["multiReport", "Report Pack"]
+              ] as Array<[PLReportLayoutMode, string]>).map(([mode, label]) => (
+                <button key={mode} type="button" className={forecastLayoutMode === mode ? "is-active" : ""} onClick={() => setForecastLayoutMode(mode)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="pl-power-kpi-strip">
+            {forecastOverviewCards.map((card) => (
+              <article key={card.label} className="pl-power-kpi-card">
+                <span>{card.label}</span>
+                <strong>{card.value}</strong>
+                <small>{card.detail}</small>
+              </article>
             ))}
           </div>
-          <div className="pl-chart-frame">
-            {chartType === "trend" && <TrendChart history={scopedHistoryData} forecast={forecast} />}
-            {chartType === "waterfall" && <WaterfallChart revenue={revenue} grossProfit={grossProfit} netIncome={netIncome} />}
-            {chartType === "department" && <DeptChart data={scopedDeptData} />}
+          {forecastLayoutMode === "focus" ? (
+            <div className="pl-power-focus-layout">
+              {forecastReport === "scenarioLab"
+                ? renderScenarioLabPanel("is-span-2")
+                : forecastReport === "scenarioCompare"
+                  ? renderScenarioComparePanel("is-span-2")
+                  : renderMonthlyOutlookPanel("is-span-2")}
+              <div className="pl-power-side-stack">
+                {renderSnapshotBoardPanel()}
+              </div>
+            </div>
+          ) : (
+            <div className={`pl-power-grid${forecastLayoutMode === "multiReport" ? " is-report-pack" : ""}`}>
+              {renderSnapshotBoardPanel("is-span-2")}
+              {renderScenarioLabPanel()}
+              {renderScenarioComparePanel()}
+              {renderMonthlyOutlookPanel("is-span-2")}
+            </div>
+          )}
+        </div>
+      )}
+
+      {chartWidgetLibrarySection && (
+        <div className="modal-backdrop" onClick={closeChartWidgetLibraryModal} role="presentation">
+          <div aria-modal="true" className="modal-panel pl-report-delivery-modal pl-widget-library-modal" onClick={(event) => event.stopPropagation()} role="dialog">
+            <div className="modal-header">
+              <div>
+                <span className="pl-report-delivery-eyebrow">Charts personalization</span>
+                <h2>{chartWidgetLibrarySection === "data" ? "Choose Data Tiles" : "Choose Visual Widgets"}</h2>
+              </div>
+              <button className="pl-widget-action-button" onClick={closeChartWidgetLibraryModal} type="button">Close</button>
+            </div>
+            <p className="pl-report-delivery-copy">
+              {chartWidgetLibrarySection === "data"
+                ? "Select up to four small data tiles for the executive strip. Keep the mix tight so the header stays readable."
+                : "Select up to eight advanced accounting visuals for the board. Focus mode will feature one and stack the others beside it."}
+            </p>
+            <div className="pl-widget-library-status">
+              <strong>
+                {chartWidgetLibrarySection === "data" ? visibleChartMetricWidgetIds.length : visibleChartVisualWidgetIds.length}/{chartWidgetLibrarySection === "data" ? MAX_CHART_DATA_WIDGETS : MAX_CHART_VISUAL_WIDGETS} selected
+              </strong>
+              <span>At least one item stays visible at all times.</span>
+            </div>
+            <div className="pl-widget-library-list">
+              {chartWidgetLibrarySection === "data"
+                ? chartMetricWidgetOrder.map((widgetId) => {
+                    const definition = chartMetricDefinitions[widgetId];
+                    const selected = visibleChartMetricWidgetIds.includes(widgetId);
+                    const disabled = !selected && visibleChartMetricWidgetIds.length >= MAX_CHART_DATA_WIDGETS;
+
+                    return (
+                      <label className={`pl-widget-library-option${selected ? " is-selected" : ""}${disabled ? " is-disabled" : ""}`} key={widgetId}>
+                        <input checked={selected} disabled={disabled} onChange={() => toggleChartMetricWidget(widgetId)} type="checkbox" />
+                        <div className="pl-widget-library-option-copy">
+                          <strong>{definition.label}</strong>
+                          <span>{definition.description}</span>
+                        </div>
+                        <small>{definition.value}</small>
+                      </label>
+                    );
+                  })
+                : chartWidgetOrder.map((widgetId) => {
+                    const definition = chartWidgetDefinitions[widgetId];
+                    const selected = visibleChartVisualWidgetIds.includes(widgetId);
+                    const disabled = !selected && visibleChartVisualWidgetIds.length >= MAX_CHART_VISUAL_WIDGETS;
+
+                    return (
+                      <label className={`pl-widget-library-option${selected ? " is-selected" : ""}${disabled ? " is-disabled" : ""}`} key={widgetId}>
+                        <input checked={selected} disabled={disabled} onChange={() => toggleChartVisualWidget(widgetId)} type="checkbox" />
+                        <div className="pl-widget-library-option-copy">
+                          <strong>{definition.title}</strong>
+                          <span>{definition.subtitle}</span>
+                        </div>
+                        <small>{definition.shortTitle}</small>
+                      </label>
+                    );
+                  })}
+            </div>
+            <div className="pl-report-delivery-footer">
+              <small>
+                {chartWidgetLibrarySection === "data"
+                  ? "Use the executive strip for high-signal callouts. The line spark in each tile updates automatically with the current scope."
+                  : "Every visible visual widget keeps the existing PDF, send, and schedule controls so the board remains exportable."}
+              </small>
+              <div className="pl-report-delivery-actions">
+                <button className="pl-widget-action-button" onClick={() => resetChartWidgetLibrary(chartWidgetLibrarySection)} type="button">Reset Defaults</button>
+                <button className="pl-widget-action-button is-primary" onClick={closeChartWidgetLibraryModal} type="button">Done</button>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* ── FORECAST VIEW ── */}
-      {viewMode === "forecast" && (
-        <div className="pl-forecast-view">
-          <div className="pl-snapshot-board">
-            <div className="pl-analysis-header">
+      {deliveryModalMode && (
+        <div className="modal-backdrop" onClick={closeWidgetDeliveryModal} role="presentation">
+          <div aria-modal="true" className="modal-panel pl-report-delivery-modal" onClick={(event) => event.stopPropagation()} role="dialog">
+            <div className="modal-header">
               <div>
-                <strong>Forecast Snapshots</strong>
-                <span>Save the current run and reload it for leadership reviews.</span>
+                <span className="pl-report-delivery-eyebrow">{deliveryModalMode === "send" ? "Widget delivery" : "Scheduled delivery"}</span>
+                <h2>{deliveryModalMode === "send" ? "Send Widget Report" : "Schedule Widget Report"}</h2>
               </div>
-              <button type="button" onClick={saveCurrentSnapshot}>Save Snapshot</button>
+              <button className="pl-widget-action-button" onClick={closeWidgetDeliveryModal} type="button">Close</button>
             </div>
-            {savedSnapshots.length > 0 ? (
-              <div className="pl-snapshot-list">
-                {savedSnapshots.map((snapshot) => (
-                  <article key={snapshot.id} className={`pl-snapshot-card${snapshot.scenarioId === selectedScenarioId && snapshot.month === selectedMonth && snapshot.year === selectedYear ? " is-active" : ""}`}>
-                    <strong>{snapshot.label}</strong>
-                    <span>{snapshot.savedAt}</span>
-                    <small>{snapshot.department} · {snapshot.storeLabel}</small>
-                    <div className="pl-snapshot-metrics">
-                      <span>Revenue {fmtK(snapshot.revenueTotal)}</span>
-                      <span>Net {fmtK(snapshot.netTotal)}</span>
+            <p className="pl-report-delivery-copy">
+              {deliveryModalMode === "send"
+                ? "Open a Gmail draft for the selected widgets and optionally download each widget PDF first."
+                : "Save a recurring widget pack with store scope and cadence so the report set is ready for delivery automation."}
+            </p>
+            <div className="pl-report-delivery-grid">
+              <section className="pl-report-delivery-section">
+                <h3>Gmail Profile</h3>
+                <label className="pl-report-delivery-field">
+                  <span>Gmail Account</span>
+                  <input onChange={(event) => setGmailDraftAddress(event.target.value)} placeholder="you@gmail.com" type="email" value={gmailDraftAddress} />
+                </label>
+                <div className="pl-report-delivery-inline-actions">
+                  <button className="pl-widget-action-button" onClick={connectGmailProfile} type="button">Save Gmail</button>
+                  {gmailProfile && <span className="pl-report-delivery-chip">Connected {gmailProfile.address}</span>}
+                </div>
+                <label className="pl-report-delivery-field">
+                  <span>Recipient Email</span>
+                  <input onChange={(event) => setDeliveryRecipient(event.target.value)} placeholder="controller@company.com" type="email" value={deliveryRecipient} />
+                </label>
+                {deliveryModalMode === "send" && (
+                  <label className="pl-report-delivery-check">
+                    <input checked={includePdfExports} onChange={(event) => setIncludePdfExports(event.target.checked)} type="checkbox" />
+                    <span>Download widget PDFs before opening Gmail</span>
+                  </label>
+                )}
+                <div className="pl-report-delivery-field is-readonly">
+                  <span>Email Subject</span>
+                  <div className="pl-report-delivery-readout">{buildDefaultDeliverySubject(deliveryWidgetIds)}</div>
+                </div>
+              </section>
+
+              <section className="pl-report-delivery-section">
+                <h3>Widgets</h3>
+                <div className="pl-report-delivery-widget-list">
+                  {visibleChartVisualWidgetIds.map((widgetId) => (
+                    <label className="pl-report-delivery-check" key={widgetId}>
+                      <input checked={deliveryWidgetIds.includes(widgetId)} onChange={() => toggleDeliveryWidget(widgetId)} type="checkbox" />
+                      <span>{chartWidgetDefinitions[widgetId].title}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="pl-report-delivery-empty">Delivery uses the widgets that are currently visible on the board.</p>
+
+                <h3>Store Scope</h3>
+                <div className="pl-report-delivery-scope-switcher">
+                  {([
+                    ["current", `Current (${selectedStoresLabel})`],
+                    ["all", "All Stores"],
+                    ["custom", "Custom Stores"]
+                  ] as Array<[WidgetStoreScope, string]>).map(([scope, label]) => (
+                    <label className="pl-report-delivery-check" key={scope}>
+                      <input checked={deliveryStoreScope === scope} onChange={() => setDeliveryStoreScope(scope)} type="radio" />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </div>
+                {deliveryStoreScope === "custom" && (
+                  <div className="pl-report-delivery-store-list">
+                    {profitLossStores.map((store) => (
+                      <label className="pl-report-delivery-check" key={store.id}>
+                        <input checked={deliveryCustomStoreIds.includes(store.id)} onChange={() => toggleDeliveryCustomStore(store.id)} type="checkbox" />
+                        <span>{store.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                <label className="pl-report-delivery-field">
+                  <span>Notes</span>
+                  <textarea onChange={(event) => setDeliveryNote(event.target.value)} placeholder="Add context for the email body or schedule note…" rows={4} value={deliveryNote} />
+                </label>
+              </section>
+            </div>
+
+            {deliveryModalMode === "schedule" && (
+              <>
+                <section className="pl-report-delivery-section is-full-width">
+                  <h3>Cadence</h3>
+                  <div className="pl-report-delivery-scope-switcher">
+                    {([
+                      ["weekly", "Every Tuesday"],
+                      ["threePerWeek", "3x Weekly"],
+                      ["monthly", "Monthly"],
+                      ["custom", "Custom"]
+                    ] as Array<[WidgetScheduleCadence, string]>).map(([cadence, label]) => (
+                      <label className="pl-report-delivery-check" key={cadence}>
+                        <input checked={scheduleCadence === cadence} onChange={() => setScheduleCadence(cadence)} type="radio" />
+                        <span>{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {scheduleCadence === "weekly" && (
+                    <label className="pl-report-delivery-field">
+                      <span>Weekday</span>
+                      <select onChange={(event) => setScheduleWeekday(event.target.value)} value={scheduleWeekday}>
+                        {weekdayOptions.map((weekday) => <option key={weekday}>{weekday}</option>)}
+                      </select>
+                    </label>
+                  )}
+                  {scheduleCadence === "threePerWeek" && (
+                    <div className="pl-report-delivery-widget-list is-compact">
+                      {weekdayOptions.map((weekday) => (
+                        <label className="pl-report-delivery-check" key={weekday}>
+                          <input checked={scheduleWeekdays.includes(weekday)} onChange={() => toggleScheduleWeekday(weekday)} type="checkbox" />
+                          <span>{weekday}</span>
+                        </label>
+                      ))}
                     </div>
-                    <div className="pl-snapshot-actions">
-                      <button type="button" onClick={() => loadSnapshot(snapshot)}>Load</button>
-                      <button type="button" onClick={() => deleteSnapshot(snapshot.id)}>Delete</button>
+                  )}
+                  {scheduleCadence === "monthly" && (
+                    <label className="pl-report-delivery-field">
+                      <span>Day of Month</span>
+                      <input max="31" min="1" onChange={(event) => setScheduleMonthlyDay(event.target.value)} type="number" value={scheduleMonthlyDay} />
+                    </label>
+                  )}
+                  {scheduleCadence === "custom" && (
+                    <label className="pl-report-delivery-field">
+                      <span>Custom Rule</span>
+                      <select onChange={(event) => setScheduleCustomRule(event.target.value)} value={scheduleCustomRule}>
+                        {customScheduleRuleOptions.map((option) => <option key={option}>{option}</option>)}
+                      </select>
+                    </label>
+                  )}
+                </section>
+
+                <section className="pl-report-delivery-section is-full-width">
+                  <div className="pl-report-delivery-schedule-header">
+                    <h3>Saved Schedules</h3>
+                    <span>{savedWidgetSchedules.length} saved</span>
+                  </div>
+                  {savedWidgetSchedules.length > 0 ? (
+                    <div className="pl-report-delivery-schedule-list">
+                      {savedWidgetSchedules.map((schedule) => (
+                        <article className="pl-report-delivery-schedule-card" key={schedule.id}>
+                          <strong>{schedule.widgetIds.map((widgetId) => chartWidgetDefinitions[widgetId].title).join(" · ")}</strong>
+                          <span>{schedule.recipient} · {describeScheduleCadence(schedule)}</span>
+                          <small>{schedule.department} · {getDeliveryStoreLabel(schedule.storeIds)} · Saved {schedule.savedAt}</small>
+                          <button className="pl-widget-action-button" onClick={() => deleteWidgetSchedule(schedule.id)} type="button">Delete</button>
+                        </article>
+                      ))}
                     </div>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <p className="pl-snapshot-empty">No forecast snapshots saved yet.</p>
+                  ) : (
+                    <p className="pl-report-delivery-empty">No saved schedules yet.</p>
+                  )}
+                </section>
+              </>
             )}
-          </div>
-          <div className="pl-scenario-lab">
-            <div className="pl-scenario-grid">
-              {forecastScenarios.map((scenario) => (
-                <button
-                  key={scenario.id}
-                  type="button"
-                  className={`pl-scenario-card tone-${scenario.id}${selectedScenarioId === scenario.id ? " is-active" : ""}`}
-                  onClick={() => applyScenarioPreset(scenario.id)}
-                >
-                  <strong>{scenario.label}</strong>
-                  <span>{scenario.summary}</span>
-                  <small>{scenario.revenuePct >= 0 ? "+" : ""}{scenario.revenuePct}% volume · {scenario.grossMarginBps >= 0 ? "+" : ""}{scenario.grossMarginBps} bps · {scenario.expensePct >= 0 ? "+" : ""}{scenario.expensePct}% expense</small>
-                </button>
-              ))}
-            </div>
-            <div className="pl-driver-controls">
-              <label>
-                <span>Volume</span>
-                <strong>{revenueLiftPct >= 0 ? "+" : ""}{revenueLiftPct.toFixed(1)}%</strong>
-                <input type="range" min={-10} max={15} step={0.5} value={revenueLiftPct} onChange={(e) => setRevenueLiftPct(Number(e.target.value))} />
-              </label>
-              <label>
-                <span>Gross Margin</span>
-                <strong>{marginShiftBps >= 0 ? "+" : ""}{marginShiftBps} bps</strong>
-                <input type="range" min={-250} max={250} step={10} value={marginShiftBps} onChange={(e) => setMarginShiftBps(Number(e.target.value))} />
-              </label>
-              <label>
-                <span>Expense Load</span>
-                <strong>{expenseShiftPct >= 0 ? "+" : ""}{expenseShiftPct.toFixed(1)}%</strong>
-                <input type="range" min={-8} max={8} step={0.5} value={expenseShiftPct} onChange={(e) => setExpenseShiftPct(Number(e.target.value))} />
-              </label>
-            </div>
-          </div>
-          <div className="pl-forecast-summary">
-            {[
-              { label: "7-Month Revenue", value: fmtK(forecastRevenueTotal), detail: `${activeScenario.label} scenario` },
-              { label: "7-Month Net", value: fmtK(forecastNetTotal), detail: `${forecastConfidence.label} · ${forecastConfidence.score}/100` },
-              { label: "Peak Month", value: peakForecastMonth.label, detail: fmtK(peakForecastMonth.revenue) }
-            ].map((pt) => (
-              <div key={pt.label} className="pl-forecast-card">
-                <span>{pt.label}</span>
-                <strong>{pt.value}</strong>
-                <small>{pt.detail}</small>
+
+            <div className="pl-report-delivery-footer">
+              <small>
+                {deliveryModalMode === "send"
+                  ? "Gmail opens as a prefilled draft in a new tab. Browser-downloaded PDFs can be attached there."
+                  : "Schedules are stored in the browser profile for now and are ready to be wired into automated delivery later."}
+              </small>
+              <div className="pl-report-delivery-actions">
+                <button className="pl-widget-action-button" onClick={closeWidgetDeliveryModal} type="button">Cancel</button>
+                {deliveryModalMode === "send" ? (
+                  <button className="pl-widget-action-button is-primary" disabled={isSendingWidgetReport} onClick={() => void sendWidgetReport()} type="button">
+                    {isSendingWidgetReport ? "Opening Gmail…" : "Open Gmail Draft"}
+                  </button>
+                ) : (
+                  <button className="pl-widget-action-button is-primary" onClick={saveWidgetSchedule} type="button">Save Schedule</button>
+                )}
               </div>
-            ))}
+            </div>
           </div>
-          <div className="pl-forecast-insight">
-            {forecastInsights.map((line) => <p key={line}>{line}</p>)}
-          </div>
-          <div className="pl-chart-frame">
-            <TrendChart history={scopedHistoryData} forecast={forecast} />
-          </div>
-          <table className="profit-loss-report-table pl-forecast-table">
-            <thead>
-              <tr><th>Month</th><th>Projected Revenue</th><th>Gross Profit</th><th>Net Income</th></tr>
-            </thead>
-            <tbody>
-              {scopedHistoryData.slice(-3).map((pt) => (
-                <tr key={pt.label}><td>{pt.label}</td><td>{fmtK(pt.revenue)}</td><td>{fmtK(pt.grossProfit)}</td><td>{fmtK(pt.netIncome)}</td></tr>
-              ))}
-              {forecast.map((pt) => (
-                <tr key={pt.label} className="is-forecast-row">
-                  <td>{pt.label}</td><td>{fmtK(pt.revenue)}</td><td>{fmtK(pt.grossProfit)}</td><td>{fmtK(pt.netIncome)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       )}
     </div>

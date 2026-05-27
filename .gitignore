@@ -17,3 +17,4 @@ packages/database/prisma/*.db-journal
 .env
 .env.*
 !.env.example
+Twilio Account Information.txt
