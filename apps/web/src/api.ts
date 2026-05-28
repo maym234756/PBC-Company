@@ -74,6 +74,65 @@ export interface CashierAccountabilityReportResponse {
   entries: CashierAccountabilityReportEntry[];
 }
 
+export interface TechnicianWorkloadReportTechnician {
+  repairOrderCount: number;
+  id: string;
+  name: string;
+  availableHours: number;
+  billedHours: number;
+  creditedHours: number;
+  active: boolean;
+}
+
+export interface TechnicianWorkloadReportSessionDetail {
+  id: string;
+  startDate: string;
+  startTime: string;
+  endDate: string;
+  endTime: string;
+  actualHours: number;
+  creditedHours: number;
+  override: string;
+  status: "Clocked In" | "Clocked Out";
+}
+
+export interface TechnicianWorkloadReportJobDetail {
+  id: string;
+  roNumber: string;
+  customerName: string;
+  stockNumber: string;
+  model: string;
+  serviceWriter: string;
+  roStatus: string;
+  jobTitle: string;
+  availableHours: number;
+  billedHours: number;
+  creditedHours: number;
+  sessionCount: number;
+  sessions: TechnicianWorkloadReportSessionDetail[];
+}
+
+export interface TechnicianWorkloadReportTechnicianDetail {
+  technicianId: string;
+  technicianName: string;
+  repairOrderCount: number;
+  availableHours: number;
+  billedHours: number;
+  creditedHours: number;
+  jobCount: number;
+  jobs: TechnicianWorkloadReportJobDetail[];
+}
+
+export interface TechnicianWorkloadReportResponse {
+  storeId: string;
+  storeName: string;
+  startDate: string;
+  endDate: string;
+  generatedAt: string;
+  technicians: TechnicianWorkloadReportTechnician[];
+  technicianDetails: TechnicianWorkloadReportTechnicianDetail[];
+}
+
 export interface SalesDealDepositEntry {
   id: string;
   invoice: string;
@@ -657,6 +716,12 @@ export async function getCashierAccountabilityReport(storeId: string, startDate:
   const params = new URLSearchParams({ startDate, endDate });
 
   return request<CashierAccountabilityReportResponse>(`/stores/${storeId}/reports/cashier-accountability?${params.toString()}`);
+}
+
+export async function getTechnicianWorkloadReport(storeId: string, startDate: string, endDate: string) {
+  const params = new URLSearchParams({ startDate, endDate });
+
+  return request<TechnicianWorkloadReportResponse>(`/stores/${storeId}/reports/technician-workload?${params.toString()}`);
 }
 
 export async function getActivityLog(storeId: string, workspaceId: WorkspaceId, actorUserId?: string, limit?: number) {

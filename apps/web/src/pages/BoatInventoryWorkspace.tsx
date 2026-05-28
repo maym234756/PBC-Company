@@ -36,6 +36,7 @@ const boatInventoryEmptyForm: BoatInventoryUnitInput = {
   notes: ""
 };
 
+
 const majorUnitToolbarActions = [
   { label: "New", icon: "✦" },
   { label: "Download Price Book", icon: "$" },

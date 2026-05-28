@@ -13,6 +13,7 @@ import {
   resolveServiceOrderDetail,
   serializeServiceOrderDetail,
   type ServiceOrderActivityEntry,
+  type ServiceOrderDetailPayload,
   type ServiceOrderDetailMutation,
   type ServiceOrderTaskEntry,
   type ServiceOrderWorkspaceRow
@@ -865,7 +866,7 @@ const navigation = [
             items: [
               {
                 label: "Time & Promise",
-                items: ["Reports", "Elapsed Time Summary", "Promise-Date Performance"]
+                items: ["Reports", "Elapsed Time Summary", "Promise-Date Performance", "Technician Workload"]
               },
               {
                 label: "Warranty Throughput",
@@ -1807,6 +1808,7 @@ const cashierAccountabilityReportQuerySchema = z.object({
   message: "Start date must be on or before the end date.",
   path: ["endDate"]
 });
+const technicianWorkloadReportQuerySchema = cashierAccountabilityReportQuerySchema;
 const taskFilterSchema = activityFilterSchema;
 const taskStatusUpdateSchema = z.object({
   status: taskStatusSchema,
@@ -3752,6 +3754,64 @@ app.get("/api/stores/:storeId/reports/cashier-accountability", async (request, r
   });
 });
 
+app.get("/api/stores/:storeId/reports/technician-workload", async (request, response) => {
+  const parsedQuery = technicianWorkloadReportQuerySchema.safeParse(request.query);
+
+  if (!parsedQuery.success) {
+    response.status(400).json({ message: "Enter a valid technician workload date range." });
+    return;
+  }
+
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    select: {
+      id: true,
+      name: true
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  const orders = await prisma.serviceOrder.findMany({
+    where: {
+      storeId: store.id
+    },
+    orderBy: {
+      inDate: "desc"
+    },
+    select: {
+      id: true,
+      inDate: true,
+      roNumber: true,
+      orderType: true,
+      customerName: true,
+      stockNumber: true,
+      model: true,
+      serviceWriter: true,
+      roStatus: true,
+      category: true,
+      maker: true,
+      note: true,
+      tone: true,
+      detailSnapshot: true
+    }
+  });
+
+  response.json({
+    storeId: store.id,
+    storeName: store.name,
+    startDate: parsedQuery.data.startDate,
+    endDate: parsedQuery.data.endDate,
+    generatedAt: new Date().toISOString(),
+    ...buildTechnicianWorkloadReportData(orders, parsedQuery.data.startDate, parsedQuery.data.endDate)
+  });
+});
+
 app.get("/api/stores/:storeId/tasks", async (request, response) => {
   const parsedQuery = taskFilterSchema.safeParse(request.query);
 
@@ -5418,6 +5478,382 @@ function formatServiceWorkspaceRow(order: {
     maker: order.maker,
     note: order.note,
     tone: order.tone
+  };
+}
+
+function parseTechnicianWorkloadDate(value: string) {
+  if (!value) {
+    return null;
+  }
+
+  if (value.includes("-")) {
+    return parseDateInput(value);
+  }
+
+  const [month, day, year] = value.split("/").map((segment) => Number(segment));
+  const parsed = new Date(year, month - 1, day);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function countTechnicianWorkloadBusinessDays(startDate: string, endDate: string) {
+  const start = parseTechnicianWorkloadDate(startDate);
+  const end = parseTechnicianWorkloadDate(endDate);
+
+  if (!start || !end || start > end) {
+    return 0;
+  }
+
+  const cursor = new Date(start);
+  let dayCount = 0;
+
+  while (cursor <= end) {
+    const day = cursor.getDay();
+
+    if (day !== 0 && day !== 6) {
+      dayCount += 1;
+    }
+
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return dayCount;
+}
+
+function isTechnicianWorkloadDateInRange(value: string, startDate: string, endDate: string) {
+  const candidate = parseTechnicianWorkloadDate(value);
+  const start = parseTechnicianWorkloadDate(startDate);
+  const end = parseTechnicianWorkloadDate(endDate);
+
+  if (!candidate || !start || !end) {
+    return false;
+  }
+
+  return candidate >= start && candidate <= end;
+}
+
+function parseTechnicianWorkloadHours(value: string) {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function roundTechnicianWorkloadHours(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
+function buildTechnicianWorkloadReportRowId(name: string) {
+  const normalized = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return normalized || "unassigned";
+}
+
+function resolveTechnicianWorkloadSessionJob(detail: ServiceOrderDetailPayload, session: ServiceOrderDetailPayload["laborSessions"][number], technicianName: string) {
+  if (session.jobId) {
+    const matchedJob = detail.jobs.find((job) => job.id === session.jobId);
+
+    return {
+      id: matchedJob?.id ?? session.jobId,
+      title: matchedJob?.title ?? session.jobTitle?.trim() ?? "Unassigned job"
+    };
+  }
+
+  if (session.jobTitle?.trim()) {
+    const matchedJob = detail.jobs.find((job) => job.title === session.jobTitle);
+
+    return {
+      id: matchedJob?.id ?? `session-title:${session.jobTitle.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+      title: matchedJob?.title ?? session.jobTitle.trim()
+    };
+  }
+
+  const matchingJobs = detail.jobs.filter(
+    (job) => job.technician.trim() === technicianName || job.laborLines.some((line) => line.technician.trim() === technicianName)
+  );
+
+  if (matchingJobs.length === 1) {
+    return {
+      id: matchingJobs[0].id,
+      title: matchingJobs[0].title
+    };
+  }
+
+  if (matchingJobs.length > 1) {
+    const sessionActualHours = parseTechnicianWorkloadHours(session.actualHours);
+    const rankedJobs = [...matchingJobs].sort((left, right) => {
+      const leftHours =
+        left.laborLines
+          .filter((line) => line.technician.trim() === technicianName)
+          .reduce((total, line) => total + parseTechnicianWorkloadHours(line.quantity), 0) || left.quantity;
+      const rightHours =
+        right.laborLines
+          .filter((line) => line.technician.trim() === technicianName)
+          .reduce((total, line) => total + parseTechnicianWorkloadHours(line.quantity), 0) || right.quantity;
+
+      return Math.abs(leftHours - sessionActualHours) - Math.abs(rightHours - sessionActualHours);
+    });
+
+    return {
+      id: rankedJobs[0].id,
+      title: rankedJobs[0].title
+    };
+  }
+
+  return null;
+}
+
+function buildTechnicianWorkloadReportData(
+  orders: Array<{
+    id: string;
+    inDate: Date;
+    roNumber: string;
+    orderType: string;
+    customerName: string;
+    stockNumber: string;
+    model: string;
+    serviceWriter: string;
+    roStatus: string;
+    category: string;
+    maker: string;
+    note: string;
+    tone: string;
+    detailSnapshot: string | null;
+  }>,
+  startDate: string,
+  endDate: string
+) {
+  const technicianMap = new Map<string, {
+    repairOrderCount: number;
+    id: string;
+    name: string;
+    availableHours: number;
+    billedHours: number;
+    creditedHours: number;
+    active: boolean;
+  }>();
+  const technicianDetailMap = new Map<string, {
+    technicianId: string;
+    technicianName: string;
+    repairOrderCount: number;
+    availableHours: number;
+    billedHours: number;
+    creditedHours: number;
+    jobs: Map<string, {
+      id: string;
+      roNumber: string;
+      customerName: string;
+      stockNumber: string;
+      model: string;
+      serviceWriter: string;
+      roStatus: string;
+      jobTitle: string;
+      availableHours: number;
+      billedHours: number;
+      creditedHours: number;
+      sessionCount: number;
+      sessions: Array<{
+        id: string;
+        startDate: string;
+        startTime: string;
+        endDate: string;
+        endTime: string;
+        actualHours: number;
+        creditedHours: number;
+        override: string;
+        status: "Clocked In" | "Clocked Out";
+      }>;
+    }>;
+  }>();
+
+  for (const order of orders) {
+    const row = formatServiceWorkspaceRow(order);
+    const detail = resolveServiceOrderDetail(order.detailSnapshot, row, [], []);
+    const processedTechnicians = new Set<string>();
+    const sessionsInRange = detail.laborSessions.filter((session) =>
+      isTechnicianWorkloadDateInRange(session.endDate || session.startDate, startDate, endDate)
+    );
+
+    if (sessionsInRange.length > 0) {
+      for (const session of sessionsInRange) {
+        const technicianName = session.technician.trim();
+
+        if (!technicianName) {
+          continue;
+        }
+
+        const technicianId = buildTechnicianWorkloadReportRowId(technicianName);
+        const sessionActualHours = parseTechnicianWorkloadHours(session.actualHours);
+        const sessionCreditedHours = parseTechnicianWorkloadHours(session.creditedHours);
+        const summaryRow = technicianMap.get(technicianName) ?? {
+          id: technicianId,
+          name: technicianName,
+          availableHours: 0,
+          billedHours: 0,
+          creditedHours: 0,
+          repairOrderCount: 0,
+          active: true
+        };
+        const detailRow = technicianDetailMap.get(technicianId) ?? {
+          technicianId,
+          technicianName,
+          repairOrderCount: 0,
+          availableHours: 0,
+          billedHours: 0,
+          creditedHours: 0,
+          jobs: new Map()
+        };
+        const sessionJob = resolveTechnicianWorkloadSessionJob(detail, session, technicianName);
+        const jobKey = `${row.id}:${sessionJob?.id ?? `unassigned:${technicianId}`}`;
+        const jobDetail = detailRow.jobs.get(jobKey) ?? {
+          id: jobKey,
+          roNumber: row.roNumber,
+          customerName: row.customerName,
+          stockNumber: row.stockNumber,
+          model: row.model,
+          serviceWriter: row.serviceWriter,
+          roStatus: row.roStatus,
+          jobTitle: sessionJob?.title ?? "Unassigned Time Clock Session",
+          availableHours: 0,
+          billedHours: 0,
+          creditedHours: 0,
+          sessionCount: 0,
+          sessions: []
+        };
+
+        summaryRow.availableHours = roundTechnicianWorkloadHours(summaryRow.availableHours + sessionActualHours);
+        summaryRow.creditedHours = roundTechnicianWorkloadHours(summaryRow.creditedHours + sessionCreditedHours);
+        detailRow.availableHours = roundTechnicianWorkloadHours(detailRow.availableHours + sessionActualHours);
+        detailRow.creditedHours = roundTechnicianWorkloadHours(detailRow.creditedHours + sessionCreditedHours);
+        jobDetail.availableHours = roundTechnicianWorkloadHours(jobDetail.availableHours + sessionActualHours);
+        jobDetail.creditedHours = roundTechnicianWorkloadHours(jobDetail.creditedHours + sessionCreditedHours);
+        jobDetail.sessionCount += 1;
+        jobDetail.sessions.push({
+          id: `${jobKey}:${jobDetail.sessionCount}`,
+          startDate: session.startDate,
+          startTime: session.startTime,
+          endDate: session.endDate,
+          endTime: session.endTime,
+          actualHours: sessionActualHours,
+          creditedHours: sessionCreditedHours,
+          override: session.override,
+          status: session.endDate ? "Clocked Out" : "Clocked In"
+        });
+
+        if (!processedTechnicians.has(technicianName)) {
+          summaryRow.repairOrderCount += 1;
+          detailRow.repairOrderCount += 1;
+          processedTechnicians.add(technicianName);
+        }
+
+        technicianMap.set(technicianName, summaryRow);
+        detailRow.jobs.set(jobKey, jobDetail);
+        technicianDetailMap.set(technicianId, detailRow);
+      }
+    }
+
+    if (sessionsInRange.length === 0 && !isTechnicianWorkloadDateInRange(row.inDate, startDate, endDate)) {
+      continue;
+    }
+
+    for (const job of detail.jobs) {
+      const lineItems =
+        job.laborLines.length > 0
+          ? job.laborLines
+          : job.technician.trim().length > 0
+            ? [{ technician: job.technician, quantity: `${job.quantity ?? 0}` }]
+            : [];
+
+      for (const laborLine of lineItems) {
+        const technicianName = laborLine.technician.trim();
+
+        if (!technicianName) {
+          continue;
+        }
+
+        const technicianId = buildTechnicianWorkloadReportRowId(technicianName);
+        const billedHours = parseTechnicianWorkloadHours(laborLine.quantity);
+        const summaryRow = technicianMap.get(technicianName) ?? {
+          id: technicianId,
+          name: technicianName,
+          availableHours: 0,
+          billedHours: 0,
+          creditedHours: 0,
+          repairOrderCount: 0,
+          active: true
+        };
+        const detailRow = technicianDetailMap.get(technicianId) ?? {
+          technicianId,
+          technicianName,
+          repairOrderCount: 0,
+          availableHours: 0,
+          billedHours: 0,
+          creditedHours: 0,
+          jobs: new Map()
+        };
+        const jobKey = `${row.id}:${job.id}`;
+        const jobDetail = detailRow.jobs.get(jobKey) ?? {
+          id: jobKey,
+          roNumber: row.roNumber,
+          customerName: row.customerName,
+          stockNumber: row.stockNumber,
+          model: row.model,
+          serviceWriter: row.serviceWriter,
+          roStatus: row.roStatus,
+          jobTitle: job.title,
+          availableHours: 0,
+          billedHours: 0,
+          creditedHours: 0,
+          sessionCount: 0,
+          sessions: []
+        };
+
+        summaryRow.billedHours = roundTechnicianWorkloadHours(summaryRow.billedHours + billedHours);
+        detailRow.billedHours = roundTechnicianWorkloadHours(detailRow.billedHours + billedHours);
+        jobDetail.billedHours = roundTechnicianWorkloadHours(jobDetail.billedHours + billedHours);
+
+        if (sessionsInRange.length === 0) {
+          const fallbackCreditedHours = Math.max(billedHours - 0.3, 0);
+          summaryRow.creditedHours = roundTechnicianWorkloadHours(summaryRow.creditedHours + fallbackCreditedHours);
+          detailRow.creditedHours = roundTechnicianWorkloadHours(detailRow.creditedHours + fallbackCreditedHours);
+          jobDetail.creditedHours = roundTechnicianWorkloadHours(jobDetail.creditedHours + fallbackCreditedHours);
+        }
+
+        if (!processedTechnicians.has(technicianName)) {
+          summaryRow.repairOrderCount += 1;
+          detailRow.repairOrderCount += 1;
+          processedTechnicians.add(technicianName);
+        }
+
+        technicianMap.set(technicianName, summaryRow);
+        detailRow.jobs.set(jobKey, jobDetail);
+        technicianDetailMap.set(technicianId, detailRow);
+      }
+    }
+  }
+
+  return {
+    technicians: Array.from(technicianMap.values())
+      .map((row) => ({
+        ...row,
+        active: (row.availableHours > 0 || row.billedHours > 0 || row.creditedHours > 0) && row.repairOrderCount > 0
+      }))
+      .sort((left, right) => right.billedHours - left.billedHours || left.name.localeCompare(right.name)),
+    technicianDetails: Array.from(technicianDetailMap.values())
+      .map((detail) => ({
+        technicianId: detail.technicianId,
+        technicianName: detail.technicianName,
+        repairOrderCount: detail.repairOrderCount,
+        availableHours: detail.availableHours,
+        billedHours: detail.billedHours,
+        creditedHours: detail.creditedHours,
+        jobCount: detail.jobs.size,
+        jobs: Array.from(detail.jobs.values())
+          .map((job) => ({
+            ...job,
+            sessions: [...job.sessions].sort(
+              (left, right) => `${left.startDate} ${left.startTime}`.localeCompare(`${right.startDate} ${right.startTime}`)
+            )
+          }))
+          .sort((left, right) => left.roNumber.localeCompare(right.roNumber) || left.jobTitle.localeCompare(right.jobTitle))
+      }))
+      .sort((left, right) => right.billedHours - left.billedHours || left.technicianName.localeCompare(right.technicianName))
   };
 }
 

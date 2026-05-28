@@ -35,6 +35,26 @@ interface WebsiteWorkspaceProps {
 type WebsiteConnectionType = "website" | "api" | "webhook" | "file";
 type WebsiteIntegrationEnvironment = "sandbox" | "production";
 type WebsiteAuthMode = "API Key" | "OAuth 2.0" | "Basic Auth" | "Signed Webhook" | "None";
+type WebsiteMappingLaneId = "inventory" | "pricing" | "media" | "leads";
+
+interface WebsiteMappingFieldLink {
+  destination: string;
+  guidance: string;
+  source: string;
+}
+
+interface WebsiteMappingLane {
+  audienceLabel: string;
+  defaultSurface: string;
+  defaultSyncMode: string;
+  defaultValidation: string;
+  detail: string;
+  fields: WebsiteMappingFieldLink[];
+  id: WebsiteMappingLaneId;
+  label: string;
+  status: string;
+  tone: string;
+}
 
 const websiteConnectionOptions: Array<{
   detail: string;
@@ -62,6 +82,162 @@ const websiteConnectionOptions: Array<{
     label: "File / SFTP"
   }
 ];
+
+const websiteMappingLanes: WebsiteMappingLane[] = [
+  {
+    audienceLabel: "Merchandising + Inventory",
+    defaultSurface: "Inventory cards + detail pages",
+    defaultSyncMode: "Live API push",
+    defaultValidation: "Manager review before publish",
+    detail: "Map the core boat record so inventory cards, detail pages, and search facets stay aligned with the DMS.",
+    fields: [
+      {
+        destination: "Stock # / unit tile",
+        guidance: "Primary website lookup key used for cards, search, and detail routing.",
+        source: "DMS stock number"
+      },
+      {
+        destination: "Title / search headline",
+        guidance: "Used to build the public listing title and internal search label.",
+        source: "Year + make + model"
+      },
+      {
+        destination: "Availability badge",
+        guidance: "Controls whether the unit is live, pending, sold, or hidden.",
+        source: "Status"
+      },
+      {
+        destination: "Specs summary",
+        guidance: "Surfaces class, hull type, and location on the public page.",
+        source: "Class + location + hull"
+      }
+    ],
+    id: "inventory",
+    label: "Inventory & Availability",
+    status: "Mapped",
+    tone: "stable"
+  },
+  {
+    audienceLabel: "Pricing + Promotions",
+    defaultSurface: "Pricing block + promo banners",
+    defaultSyncMode: "Publish window sync",
+    defaultValidation: "Publish manager approval",
+    detail: "Control the pricing packet managers approve before the website updates payment, sale price, or incentive language.",
+    fields: [
+      {
+        destination: "Website sale price",
+        guidance: "Primary sell price shown on listing cards and detail pages.",
+        source: "Sale price"
+      },
+      {
+        destination: "MSRP / compare-at",
+        guidance: "Optional strikethrough or comparison price on website merchandising blocks.",
+        source: "MSRP"
+      },
+      {
+        destination: "Promo message",
+        guidance: "Feeds incentive copy, rebate text, or limited-time callouts.",
+        source: "Incentive / rebate notes"
+      },
+      {
+        destination: "Publish start / stop",
+        guidance: "Determines when pricing updates are allowed to go live.",
+        source: "Effective date window"
+      }
+    ],
+    id: "pricing",
+    label: "Pricing & Promotions",
+    status: "Publishing",
+    tone: "accent"
+  },
+  {
+    audienceLabel: "Marketing + Content",
+    defaultSurface: "Gallery + hero media + SEO copy",
+    defaultSyncMode: "Scheduled publish batch",
+    defaultValidation: "Brand manager review",
+    detail: "Keep photo order, hero visuals, and listing copy in one manager-facing rail without asking engineering to rename fields.",
+    fields: [
+      {
+        destination: "Image gallery",
+        guidance: "Publishes ordered gallery photos to listing cards and detail pages.",
+        source: "Primary / gallery photos"
+      },
+      {
+        destination: "Hero image slot",
+        guidance: "Controls the first website image or category hero where enabled.",
+        source: "Primary photo"
+      },
+      {
+        destination: "Description + highlights",
+        guidance: "Sends long-form copy and feature bullets to the public detail page.",
+        source: "Description + sales notes"
+      },
+      {
+        destination: "SEO card metadata",
+        guidance: "Supports search snippets and social preview content.",
+        source: "Meta title + meta description"
+      }
+    ],
+    id: "media",
+    label: "Media & Merchandising",
+    status: "Mapped",
+    tone: "stable"
+  },
+  {
+    audienceLabel: "BDC + CRM",
+    defaultSurface: "Lead forms + CRM intake",
+    defaultSyncMode: "Webhook return path",
+    defaultValidation: "Ops lead monitoring",
+    detail: "Show leadership exactly how inquiry forms route back into the CRM and who owns follow-up without touching endpoint code.",
+    fields: [
+      {
+        destination: "CRM contact record",
+        guidance: "Creates or updates the contact on inbound form submit.",
+        source: "Lead name + phone + email"
+      },
+      {
+        destination: "Lead source tag",
+        guidance: "Marks the lead with website, campaign, and page context.",
+        source: "UTM + referring page"
+      },
+      {
+        destination: "Assigned queue owner",
+        guidance: "Routes the lead to the correct BDC or sales owner for follow-up.",
+        source: "Store + inquiry type"
+      },
+      {
+        destination: "Conversation timeline",
+        guidance: "Stores consent, requested unit, and message body for response history.",
+        source: "Lead form body + consent flags"
+      }
+    ],
+    id: "leads",
+    label: "Lead Forms & Source Tags",
+    status: "Receiving",
+    tone: "stable"
+  }
+];
+
+const websiteMappingSurfaceOptions = {
+  inventory: ["Inventory cards + detail pages", "Homepage featured inventory", "Search results + filters"],
+  pricing: ["Pricing block + promo banners", "Payment calculator summary", "Special offers landing page"],
+  media: ["Gallery + hero media + SEO copy", "Brand landing page modules", "Category hero rail"],
+  leads: ["Lead forms + CRM intake", "Quote request modal", "Contact us + chat capture"]
+} satisfies Record<WebsiteMappingLaneId, string[]>;
+
+const websiteMappingSyncOptions = {
+  inventory: ["Live API push", "Hourly sync", "Nightly publish batch"],
+  pricing: ["Publish window sync", "Manager-approved publish", "Nightly publish batch"],
+  media: ["Scheduled publish batch", "Manual review publish", "Asset-ready webhook"],
+  leads: ["Webhook return path", "Lead inbox polling", "CRM direct post"]
+} satisfies Record<WebsiteMappingLaneId, string[]>;
+
+const websiteMappingValidationOptions = {
+  inventory: ["Manager review before publish", "Auto-publish on ready", "Inventory lead sign-off"],
+  pricing: ["Publish manager approval", "Finance approval required", "Auto-publish on window"],
+  media: ["Brand manager review", "Marketing approval", "Auto-publish on asset complete"],
+  leads: ["Ops lead monitoring", "BDC manager approval", "Sales lead auto-route"]
+} satisfies Record<WebsiteMappingLaneId, string[]>;
 
 const syncSettingsCategoryCards = [
   {
@@ -474,6 +650,27 @@ export function WebsiteWorkspace({
   const [connectionType, setConnectionType] = useState<WebsiteConnectionType>("website");
   const [environment, setEnvironment] = useState<WebsiteIntegrationEnvironment>("sandbox");
   const [authMode, setAuthMode] = useState<WebsiteAuthMode>("API Key");
+  const [isHeroCollapsed, setIsHeroCollapsed] = useState(true);
+  const [activeMappingLaneId, setActiveMappingLaneId] = useState<WebsiteMappingLaneId>("inventory");
+  const [mappingSurfaceSelections, setMappingSurfaceSelections] = useState<Record<WebsiteMappingLaneId, string>>({
+    inventory: websiteMappingLanes[0].defaultSurface,
+    pricing: websiteMappingLanes[1].defaultSurface,
+    media: websiteMappingLanes[2].defaultSurface,
+    leads: websiteMappingLanes[3].defaultSurface
+  });
+  const [mappingSyncSelections, setMappingSyncSelections] = useState<Record<WebsiteMappingLaneId, string>>({
+    inventory: websiteMappingLanes[0].defaultSyncMode,
+    pricing: websiteMappingLanes[1].defaultSyncMode,
+    media: websiteMappingLanes[2].defaultSyncMode,
+    leads: websiteMappingLanes[3].defaultSyncMode
+  });
+  const [mappingValidationSelections, setMappingValidationSelections] = useState<Record<WebsiteMappingLaneId, string>>({
+    inventory: websiteMappingLanes[0].defaultValidation,
+    pricing: websiteMappingLanes[1].defaultValidation,
+    media: websiteMappingLanes[2].defaultValidation,
+    leads: websiteMappingLanes[3].defaultValidation
+  });
+  const [websitePreviewState, setWebsitePreviewState] = useState<"idle" | "loading" | "ready" | "blocked">("idle");
   const [connectorUrl, setConnectorUrl] = useState("");
   const [validationNotice, setValidationNotice] = useState("Connection settings are ready for validation.");
   const [isTestingConnection, setIsTestingConnection] = useState(false);
@@ -503,6 +700,34 @@ export function WebsiteWorkspace({
   const authModeOptions = getWebsiteAuthModes(connectionType);
   const integrationEndpoints = buildWebsiteIntegrationEndpoints(normalizedConnectorUrl, connectionType, environment);
   const contractRows = buildWebsiteContractRows(connectionType);
+  const heroSummaryCards = [
+    {
+      detail: `${publishingCount} publishing, ${readyCount} ready, ${reviewCount} waiting on setup.`,
+      label: "Configured Destinations",
+      value: `${rows.length}`
+    },
+    {
+      detail: "Inventory, pricing, media, and availability records staged for external systems.",
+      label: "DMS Objects",
+      value: `${totalInventory}`
+    },
+    {
+      detail: "Submitted leads accepted back into the operator workflow today.",
+      label: "Lead Return Path",
+      value: `${totalLeads}`
+    },
+    {
+      detail: `${rows.length} ${endpointLabel} have a ready or active integration state.`,
+      label: "Transport Readiness",
+      value: `${connectorReadinessScore}%`
+    }
+  ];
+  const heroStages = buildWebsiteConnectorStages(rows, totalInventory, totalLeads);
+  const activePreviewUrl = selectedRow ? buildWebsiteConnectorUrl(selectedRow) : normalizedConnectorUrl || getWebsiteDefaultBaseUrl(connectionType);
+  const previewHostLabel = formatWebsitePreviewHost(activePreviewUrl);
+  const previewHighlights = buildWebsitePreviewHighlights(selectedRow, selectedInventoryShare, selectedLeadShare);
+  const activeMappingLane = websiteMappingLanes.find((lane) => lane.id === activeMappingLaneId) ?? websiteMappingLanes[0];
+  const blockedPreviewSnapshotUrl = buildWebsitePreviewSnapshotUrl(activePreviewUrl);
 
   async function handleTestConnection() {
     setIsTestingConnection(true);
@@ -542,6 +767,20 @@ export function WebsiteWorkspace({
     }
   }, [authMode, connectionType]);
 
+  useEffect(() => {
+    if (!selectedRow) {
+      setWebsitePreviewState("idle");
+      return;
+    }
+
+    setWebsitePreviewState("loading");
+    const timeoutId = window.setTimeout(() => {
+      setWebsitePreviewState((current) => (current === "loading" ? "blocked" : current));
+    }, 4000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [activePreviewUrl, selectedRow]);
+
   if (view === "customSettings") {
     return (
       <SyncMonitorCustomSettingsPage
@@ -557,20 +796,40 @@ export function WebsiteWorkspace({
 
   return (
     <div className="website-feed-page">
-      <section className="legacy-info-card website-feed-hero">
+      <section className={`legacy-info-card website-feed-hero${isHeroCollapsed ? " is-collapsed" : ""}`}>
         <div className="website-feed-hero-copy">
           <span className="legacy-command-meta">Premier Marine Cloud DMS / Integration Layer</span>
           <h3>Website Feed Integration Console</h3>
-          <p>Connect your website, API, webhook receiver, or file transport to publish DMS inventory and route leads back into Premier Marine Cloud.</p>
-          <div className="legacy-chip-row">
-            <span className="legacy-chip tone-stable">Website CMS</span>
-            <span className="legacy-chip tone-stable">REST API</span>
-            <span className="legacy-chip tone-neutral">Webhook</span>
-            <span className="legacy-chip tone-neutral">File / SFTP</span>
-          </div>
+          {isHeroCollapsed ? (
+            <div className="website-feed-hero-collapsed-meta">
+              <span className="legacy-chip tone-stable">{rows.length} sites</span>
+              <span className="legacy-chip tone-stable">{totalInventory} objects</span>
+              <span className="legacy-chip tone-neutral">{totalLeads} leads</span>
+              <span className="legacy-chip tone-neutral">{connectorReadinessScore}% ready</span>
+              {selectedRow ? <span className="legacy-chip tone-neutral">{selectedRow.brand}</span> : null}
+            </div>
+          ) : (
+            <>
+              <p>Connect your website, API, webhook receiver, or file transport to publish DMS inventory and route leads back into Premier Marine Cloud.</p>
+              <div className="legacy-chip-row">
+                <span className="legacy-chip tone-stable">Website CMS</span>
+                <span className="legacy-chip tone-stable">REST API</span>
+                <span className="legacy-chip tone-neutral">Webhook</span>
+                <span className="legacy-chip tone-neutral">File / SFTP</span>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="website-feed-hero-actions">
+          <button
+            aria-expanded={!isHeroCollapsed}
+            className="legacy-desktop-board-button is-secondary"
+            onClick={() => setIsHeroCollapsed((current) => !current)}
+            type="button"
+          >
+            {isHeroCollapsed ? "Expand Summary" : "Collapse Summary"}
+          </button>
           <button className="legacy-desktop-board-button" onClick={() => onRunTool("Publish Feed")} type="button">
             Publish Feed
           </button>
@@ -582,236 +841,230 @@ export function WebsiteWorkspace({
           </button>
         </div>
 
-        <div className="website-feed-health-grid">
-          <article className="website-feed-health-card">
-            <span>Configured Destinations</span>
-            <strong>{rows.length}</strong>
-            <p>{publishingCount} publishing, {readyCount} ready, {reviewCount} waiting on setup.</p>
-          </article>
-          <article className="website-feed-health-card">
-            <span>DMS Objects</span>
-            <strong>{totalInventory}</strong>
-            <p>Inventory, pricing, media, and availability records staged for external systems.</p>
-          </article>
-          <article className="website-feed-health-card">
-            <span>Lead Return Path</span>
-            <strong>{totalLeads}</strong>
-            <p>Submitted leads accepted back into the operator workflow today.</p>
-          </article>
-          <article className="website-feed-health-card">
-            <span>Transport Readiness</span>
-            <strong>{connectorReadinessScore}%</strong>
-            <p>{rows.length} {endpointLabel} have a ready or active integration state.</p>
-          </article>
-        </div>
-      </section>
-
-      <section className="legacy-info-card website-feed-pipeline">
-        {buildWebsiteConnectorStages(rows, totalInventory, totalLeads).map((stage, index) => (
-          <article className={`website-feed-stage tone-${stage.tone}`} key={stage.label}>
-            <span className="website-feed-stage-index">{index + 1}</span>
-            <div>
-              <strong>{stage.label}</strong>
-              <p>{stage.detail}</p>
-            </div>
-            <span className={`legacy-chip tone-${stage.tone}`}>{stage.status}</span>
-          </article>
-        ))}
-      </section>
-
-      <section className="legacy-info-card website-feed-setup">
-        <div className="legacy-command-log-header">
-          <div>
-            <h3>Connection Setup</h3>
-            <span>
-              {selectedConnectionOption.label} / {environment}
-            </span>
-          </div>
-          <span className="legacy-chip tone-stable">{authMode}</span>
-        </div>
-
-        <div className="website-feed-setup-grid">
-          <div className="website-feed-control-panel">
-            <span className="website-feed-control-label">Connector Type</span>
-            <div className="website-feed-segmented" role="group" aria-label="Website feed connector type">
-              {websiteConnectionOptions.map((option) => (
-                <button
-                  className={option.id === connectionType ? "is-selected" : ""}
-                  key={option.id}
-                  onClick={() => {
-                    setConnectionType(option.id);
-                    setTestConnectionResult(null);
-                    setValidationNotice(`${option.label} connector selected. Validate the endpoint when settings are ready.`);
-                  }}
-                  type="button"
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            <article className="website-feed-selected-connector">
-              <strong>{selectedConnectionOption.label}</strong>
-              <p>{selectedConnectionOption.detail}</p>
-            </article>
-
-            <span className="website-feed-control-label">Environment</span>
-            <div className="website-feed-segmented is-compact" role="group" aria-label="Website feed environment">
-              {(["sandbox", "production"] as WebsiteIntegrationEnvironment[]).map((option) => (
-                <button
-                  className={option === environment ? "is-selected" : ""}
-                  key={option}
-                  onClick={() => {
-                    setEnvironment(option);
-                    setTestConnectionResult(null);
-                    setValidationNotice(`${option === "production" ? "Production" : "Sandbox"} environment selected for validation.`);
-                  }}
-                  type="button"
-                >
-                  {option === "production" ? "Production" : "Sandbox"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="website-feed-control-panel">
-            <label className="website-feed-field">
-              <span>Base URL / Host</span>
-              <input
-                onChange={(event) => { setConnectorUrl(event.target.value); setTestConnectionResult(null); }}
-                placeholder="https://www.yourwebsite.com"
-                value={connectorUrl}
-              />
-            </label>
-            <label className="website-feed-field">
-              <span>Authentication</span>
-              <select onChange={(event) => setAuthMode(event.target.value as WebsiteAuthMode)} value={authMode}>
-                {authModeOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="website-feed-notice">
-              <strong>{environment === "production" ? "Production" : "Sandbox"} connector</strong>
-              {testConnectionResult ? (
-                <div className={`website-feed-test-result tone-${testConnectionResult.ok ? "stable" : "alert"}`}>
-                  <span className={`legacy-chip tone-${testConnectionResult.ok ? "stable" : "alert"}`}>
-                    {testConnectionResult.ok ? "Connected" : "Failed"}
-                  </span>
-                  <p>{testConnectionResult.message}</p>
-                  <span className="website-feed-test-latency">{testConnectionResult.latencyMs}ms</span>
-                </div>
-              ) : (
-                <p>{validationNotice}</p>
-              )}
-            </div>
-            <div className="website-feed-action-row">
-              <button
-                className={`legacy-task-status-button${isTestingConnection ? " is-loading" : ""}`}
-                disabled={isTestingConnection}
-                onClick={() => void handleTestConnection()}
-                type="button"
-              >
-                {isTestingConnection ? "Testing…" : "Validate Connection"}
-              </button>
-              <button
-                className="legacy-task-status-button"
-                onClick={() => {
-                  const credentialMode = authModeOptions.includes("API Key") ? "API Key" : authModeOptions[0];
-                  setAuthMode(credentialMode);
-                  setValidationNotice(`${credentialMode} credential staged for ${selectedConnectionOption.label}.`);
-                }}
-                type="button"
-              >
-                Create Credential
-              </button>
-              <button className="legacy-task-status-button" onClick={() => onRunTool("Open Queue")} type="button">
-                Queue Setup
-              </button>
-            </div>
-          </div>
-
-          <div className="website-feed-control-panel">
-            <div className="website-feed-panel-heading">
-              <span className="website-feed-control-label">Generated Endpoints</span>
-              <span>{integrationEndpoints.length} routes</span>
-            </div>
-            <div className="website-feed-generated-list">
-              {integrationEndpoints.map((endpoint) => (
-                <article className="website-feed-generated-endpoint" key={`${endpoint.method}-${endpoint.label}`}>
-                  <span>{endpoint.method}</span>
-                  <strong>{endpoint.label}</strong>
-                  <code>{endpoint.url}</code>
-                  <p>{endpoint.detail}</p>
+        {!isHeroCollapsed ? (
+          <>
+            <div className="website-feed-summary-strip">
+              {heroSummaryCards.map((card) => (
+                <article className="website-feed-summary-card" key={card.label}>
+                  <span>{card.label}</span>
+                  <strong>{card.value}</strong>
+                  <p>{card.detail}</p>
                 </article>
               ))}
             </div>
-          </div>
-        </div>
 
-        <div className="website-feed-contract-list">
-          {contractRows.map((contractRow) => (
-            <article className="website-feed-contract-card" key={contractRow.route}>
-              <span>{contractRow.method}</span>
-              <strong>{contractRow.route}</strong>
-              <p>{contractRow.detail}</p>
-              <code>{contractRow.schema}</code>
-            </article>
-          ))}
-        </div>
+            <div className="website-feed-stage-strip">
+              {heroStages.map((stage, index) => (
+                <article className={`website-feed-stage-pill tone-${stage.tone}`} key={stage.label}>
+                  <span className="website-feed-stage-pill-index">{index + 1}</span>
+                  <div>
+                    <strong>{stage.label}</strong>
+                    <p>{stage.detail}</p>
+                  </div>
+                  <span className={`legacy-chip tone-${stage.tone}`}>{stage.status}</span>
+                </article>
+              ))}
+            </div>
+          </>
+        ) : null}
       </section>
 
-      <div className="website-feed-grid">
-        <section className="legacy-info-card website-feed-endpoints">
-          <div className="legacy-command-log-header">
-            <div>
-              <h3>Configured Destinations</h3>
-              <span>{rows.length} {endpointLabel}</span>
+      <div className="website-feed-workspace">
+        <aside className="website-feed-sidebar">
+          <section className="legacy-info-card website-feed-setup website-feed-sidebar-card">
+            <div className="legacy-command-log-header">
+              <div>
+                <h3>Connection Setup</h3>
+                <span>
+                  {selectedConnectionOption.label} / {environment}
+                </span>
+              </div>
+              <span className="legacy-chip tone-stable">{authMode}</span>
             </div>
-            <span>{publishingCount} live push</span>
-          </div>
 
-          {rows.length === 0 ? (
-            <p>No website endpoints are configured for this store.</p>
-          ) : (
-            <div className="website-feed-endpoint-list">
-              {rows.map((feed) => {
-                const inventoryShare = totalInventory > 0 ? Math.round((feed.inventoryCount / totalInventory) * 100) : 0;
-                const leadShare = totalLeads > 0 ? Math.round((feed.leadsToday / totalLeads) * 100) : 0;
+            <div className="website-feed-setup-grid">
+              <div className="website-feed-control-panel">
+                <span className="website-feed-control-label">Connector Type</span>
+                <div className="website-feed-segmented" role="group" aria-label="Website feed connector type">
+                  {websiteConnectionOptions.map((option) => (
+                    <button
+                      className={option.id === connectionType ? "is-selected" : ""}
+                      key={option.id}
+                      onClick={() => {
+                        setConnectionType(option.id);
+                        setTestConnectionResult(null);
+                        setValidationNotice(`${option.label} connector selected. Validate the endpoint when settings are ready.`);
+                      }}
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <article className="website-feed-selected-connector">
+                  <strong>{selectedConnectionOption.label}</strong>
+                  <p>{selectedConnectionOption.detail}</p>
+                </article>
 
-                return (
+                <span className="website-feed-control-label">Environment</span>
+                <div className="website-feed-segmented is-compact" role="group" aria-label="Website feed environment">
+                  {(["sandbox", "production"] as WebsiteIntegrationEnvironment[]).map((option) => (
+                    <button
+                      className={option === environment ? "is-selected" : ""}
+                      key={option}
+                      onClick={() => {
+                        setEnvironment(option);
+                        setTestConnectionResult(null);
+                        setValidationNotice(`${option === "production" ? "Production" : "Sandbox"} environment selected for validation.`);
+                      }}
+                      type="button"
+                    >
+                      {option === "production" ? "Production" : "Sandbox"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="website-feed-control-panel">
+                <label className="website-feed-field">
+                  <span>Base URL / Host</span>
+                  <input
+                    onChange={(event) => {
+                      setConnectorUrl(event.target.value);
+                      setTestConnectionResult(null);
+                    }}
+                    placeholder="https://www.yourwebsite.com"
+                    value={connectorUrl}
+                  />
+                </label>
+                <label className="website-feed-field">
+                  <span>Authentication</span>
+                  <select onChange={(event) => setAuthMode(event.target.value as WebsiteAuthMode)} value={authMode}>
+                    {authModeOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="website-feed-notice">
+                  <strong>{environment === "production" ? "Production" : "Sandbox"} connector</strong>
+                  {testConnectionResult ? (
+                    <div className={`website-feed-test-result tone-${testConnectionResult.ok ? "stable" : "alert"}`}>
+                      <span className={`legacy-chip tone-${testConnectionResult.ok ? "stable" : "alert"}`}>
+                        {testConnectionResult.ok ? "Connected" : "Failed"}
+                      </span>
+                      <p>{testConnectionResult.message}</p>
+                      <span className="website-feed-test-latency">{testConnectionResult.latencyMs}ms</span>
+                    </div>
+                  ) : (
+                    <p>{validationNotice}</p>
+                  )}
+                </div>
+                <div className="website-feed-action-row">
                   <button
-                    className={`website-feed-endpoint${feed.id === selectedRowId ? " is-selected" : ""}`}
-                    key={feed.id}
-                    onClick={() => onSelectRow(feed)}
+                    className={`legacy-task-status-button${isTestingConnection ? " is-loading" : ""}`}
+                    disabled={isTestingConnection}
+                    onClick={() => void handleTestConnection()}
                     type="button"
                   >
-                    <div className="website-feed-endpoint-header">
-                      <div>
-                        <strong>{feed.brand}</strong>
-                        <span>{feed.domain}</span>
-                      </div>
-                      <span className={`legacy-chip tone-${feed.status.toLowerCase()}`}>{feed.status}</span>
-                    </div>
-                    <div className="website-feed-endpoint-meter">
-                      <span style={{ width: `${Math.max(8, inventoryShare)}%` }} />
-                    </div>
-                    <div className="website-feed-endpoint-meta">
-                      <span>{feed.inventoryCount} units</span>
-                      <span>{feed.leadsToday} leads</span>
-                      <span>{leadShare}% lead share</span>
-                    </div>
-                    <p>{buildWebsiteSyncGuidance(feed)}</p>
+                    {isTestingConnection ? "Testing…" : "Validate Connection"}
                   </button>
-                );
-              })}
-            </div>
-          )}
-        </section>
+                  <button
+                    className="legacy-task-status-button"
+                    onClick={() => {
+                      const credentialMode = authModeOptions.includes("API Key") ? "API Key" : authModeOptions[0];
+                      setAuthMode(credentialMode);
+                      setValidationNotice(`${credentialMode} credential staged for ${selectedConnectionOption.label}.`);
+                    }}
+                    type="button"
+                  >
+                    Create Credential
+                  </button>
+                  <button className="legacy-task-status-button" onClick={() => onRunTool("Open Queue")} type="button">
+                    Queue Setup
+                  </button>
+                </div>
+              </div>
 
-        <div className="website-feed-detail-stack">
-          <section className="legacy-info-card website-feed-focus">
+              <div className="website-feed-control-panel">
+                <div className="website-feed-panel-heading">
+                  <span className="website-feed-control-label">Generated Endpoints</span>
+                  <span>{integrationEndpoints.length} routes</span>
+                </div>
+                <div className="website-feed-generated-list">
+                  {integrationEndpoints.map((endpoint) => (
+                    <article className="website-feed-generated-endpoint" key={`${endpoint.method}-${endpoint.label}`}>
+                      <span>{endpoint.method}</span>
+                      <strong>{endpoint.label}</strong>
+                      <code>{endpoint.url}</code>
+                      <p>{endpoint.detail}</p>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="website-feed-contract-list">
+              {contractRows.map((contractRow) => (
+                <article className="website-feed-contract-card" key={contractRow.route}>
+                  <span>{contractRow.method}</span>
+                  <strong>{contractRow.route}</strong>
+                  <p>{contractRow.detail}</p>
+                  <code>{contractRow.schema}</code>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="legacy-info-card website-feed-endpoints website-feed-sidebar-card">
+            <div className="legacy-command-log-header">
+              <div>
+                <h3>Connected Websites</h3>
+                <span>{rows.length} {endpointLabel}</span>
+              </div>
+              <span>{publishingCount} live push</span>
+            </div>
+
+            {rows.length === 0 ? (
+              <p>No website endpoints are configured for this store.</p>
+            ) : (
+              <div className="website-feed-endpoint-list">
+                {rows.map((feed) => {
+                  const inventoryShare = totalInventory > 0 ? Math.round((feed.inventoryCount / totalInventory) * 100) : 0;
+                  const leadShare = totalLeads > 0 ? Math.round((feed.leadsToday / totalLeads) * 100) : 0;
+
+                  return (
+                    <button
+                      className={`website-feed-endpoint${feed.id === selectedRowId ? " is-selected" : ""}`}
+                      key={feed.id}
+                      onClick={() => onSelectRow(feed)}
+                      type="button"
+                    >
+                      <div className="website-feed-endpoint-header">
+                        <div>
+                          <strong>{feed.brand}</strong>
+                          <span>{feed.domain}</span>
+                        </div>
+                        <span className={`legacy-chip tone-${feed.status.toLowerCase()}`}>{feed.status}</span>
+                      </div>
+                      <div className="website-feed-endpoint-meter">
+                        <span style={{ width: `${Math.max(8, inventoryShare)}%` }} />
+                      </div>
+                      <div className="website-feed-endpoint-meta">
+                        <span>{feed.inventoryCount} units</span>
+                        <span>{feed.leadsToday} leads</span>
+                        <span>{leadShare}% lead share</span>
+                      </div>
+                      <p>{buildWebsiteSyncGuidance(feed)}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section className="legacy-info-card website-feed-focus website-feed-sidebar-card">
             <div className="legacy-command-log-header">
               <div>
                 <h3>Destination Profile</h3>
@@ -844,350 +1097,528 @@ export function WebsiteWorkspace({
             )}
           </section>
 
-          <section className="legacy-info-card website-feed-mapping">
+          <section className="legacy-info-card website-feed-mapping website-feed-sidebar-card">
             <div className="legacy-command-log-header">
               <div>
                 <h3>Field Mapping</h3>
-                <span>Inventory, pricing, media, leads</span>
+                <span>Live endpoint connections for managers</span>
               </div>
             </div>
 
-            <div className="website-feed-map-grid">
-              {buildWebsiteMappingRows(selectedRow).map((mappingRow) => (
-                <article className="website-feed-map-card" key={mappingRow.label}>
-                  <span className={`legacy-chip tone-${mappingRow.tone}`}>{mappingRow.status}</span>
-                  <strong>{mappingRow.label}</strong>
-                  <p>{mappingRow.detail}</p>
-                </article>
-              ))}
-            </div>
-          </section>
-        </div>
-      </div>
-
-      <section className="legacy-info-card website-feed-retired-panel">
-        <div className="legacy-command-log-header">
-          <div>
-            <h3>Publishing Queue</h3>
-            <span>{rows.length} feeds</span>
-          </div>
-          <span>{publishingCount} publishing · {readyCount} ready</span>
-        </div>
-
-        {rows.length === 0 ? (
-          <p>No website feeds are configured for this store.</p>
-        ) : (
-          <div className="legacy-feed-stack">
-            {rows.map((feed) => (
-              <button
-                className={`legacy-feed-line legacy-feed-button${feed.id === selectedRowId ? " is-selected" : ""}`}
-                key={feed.id}
-                onClick={() => onSelectRow(feed)}
-                type="button"
-              >
-                <div>
-                  <strong>{feed.brand}</strong>
-                  <p>{feed.domain}</p>
-                  <span className="legacy-command-meta">
-                    {feed.leadsToday} leads today · {feed.inventoryCount} units
-                  </span>
-                </div>
-                <div>
-                  <strong>{feed.lastSyncLabel}</strong>
-                  <p>{buildWebsiteSyncGuidance(feed)}</p>
-                </div>
-                <span className={`legacy-chip tone-${feed.status.toLowerCase()}`}>{feed.status}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <div className="website-feed-ops-grid">
-        <section className="legacy-info-card website-feed-retired-panel">
-          <div className="legacy-command-log-header">
-            <div>
-              <h3>Feed Focus</h3>
-              <span>{selectedRow?.brand ?? "No feed selected"}</span>
-            </div>
-            {selectedRow ? <span className={`legacy-chip tone-${selectedRow.status.toLowerCase()}`}>{selectedRow.status}</span> : null}
-          </div>
-
-          {!selectedRow ? (
-            <p>Select a website feed to inspect publish posture and lead-sync load.</p>
-          ) : (
-            <>
-              <div className="legacy-info-grid">
-                <LabelValue label="Domain" value={selectedRow.domain} />
-                <LabelValue label="Inventory" value={`${selectedRow.inventoryCount} units`} />
-                <LabelValue label="Leads Today" value={`${selectedRow.leadsToday}`} />
-                <LabelValue label="Last Sync" value={selectedRow.lastSyncLabel} />
-              </div>
-              <div className="legacy-chip-row">
-                <span className={`legacy-chip tone-${buildWebsiteLeadTone(selectedRow.leadsToday)}`}>{buildWebsiteLeadLabel(selectedRow.leadsToday)}</span>
-                <span className="legacy-chip tone-neutral">{selectedLeadShare}% of store web leads</span>
-                <span className="legacy-chip tone-neutral">
-                  {selectedRow.inventoryCount >= 100 ? "Full catalog window" : "Featured inventory window"}
-                </span>
-              </div>
-              <p>{buildWebsitePublishGuidance(selectedRow)}</p>
-            </>
-          )}
-        </section>
-
-        <section className="legacy-info-card website-feed-retired-panel">
-          <h3>Lead Sync Monitor</h3>
-          <p>{fallbackStatusLine}</p>
-          <div className="legacy-activity-stack">
-            {rows.map((feed) => {
-              const leadShare = totalLeads > 0 ? Math.round((feed.leadsToday / totalLeads) * 100) : 0;
-
-              return (
-                <article className={`legacy-activity-line tone-${buildWebsiteLeadTone(feed.leadsToday)}`} key={`${feed.id}-lead`}>
-                  <strong>{feed.brand}</strong>
-                  <p>
-                    {feed.leadsToday} leads today · {leadShare}% of store web leads · {feed.lastSyncLabel}
-                  </p>
-                </article>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="legacy-info-card website-feed-retired-panel">
-          <h3>Feed Totals</h3>
-          <div className="legacy-feed-health-strip">
-            <article className="legacy-feed-health-card">
-              <span>Total Inventory</span>
-              <strong>{totalInventory}</strong>
-              <p>Units currently staged across every public website surface for this store.</p>
-            </article>
-            <article className="legacy-feed-health-card">
-              <span>Web Leads</span>
-              <strong>{totalLeads}</strong>
-              <p>Combined website leads captured today across the active domain lanes.</p>
-            </article>
-            <article className="legacy-feed-health-card">
-              <span>Publishing Now</span>
-              <strong>{publishingCount}</strong>
-              <p>Feeds actively pushing inventory updates or waiting for the publish window to close.</p>
-            </article>
-          </div>
-        </section>
-
-        <section className="legacy-info-card">
-          <div className="legacy-command-log-header">
-            <div>
-              <h3>Digital Ops Queue</h3>
-              <span>{filteredQueueEntries.length} task{filteredQueueEntries.length === 1 ? "" : "s"} visible</span>
-            </div>
-            <span>{overdueQueueCount} overdue</span>
-          </div>
-
-          <div className="legacy-website-filter-row">
-            <label className="legacy-audit-filter-control">
-              <span>Queue Action</span>
-              <select onChange={(event) => setQueueActionFilter(event.target.value)} value={queueActionFilter}>
-                {queueActionOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="legacy-audit-filter-control">
-              <span>Queue Status</span>
-              <select onChange={(event) => setQueueStatusFilter(event.target.value)} value={queueStatusFilter}>
-                {queueStatusOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          {isFilteredByOperator ? <span className="legacy-command-meta legacy-website-inline-meta">Mine only is active in the shared rails for this workspace.</span> : null}
-
-          {entries.length === 0 ? (
-            <p>{isFilteredByOperator ? "No website tasks are queued for this operator right now." : "No website tasks are queued for Digital Ops right now."}</p>
-          ) : filteredQueueEntries.length === 0 ? (
-            <p>No website tasks match the current queue filters.</p>
-          ) : (
-            <div className="legacy-command-list">
-              {filteredQueueEntries.map((entry) => (
-                <article className={`legacy-command-line tone-${entry.tone}`} key={entry.id}>
-                  <span className="legacy-command-time">{entry.status}</span>
-                  <div>
-                    <strong>{entry.action}</strong>
-                    <p>{entry.detail}</p>
-                    <span className="legacy-command-meta">Created by {entry.actorName}</span>
-                    <span className="legacy-command-meta">
-                      Owner {entry.assignedName} · Updated by {entry.lastUpdatedByName} · {entry.timeLabel}
-                    </span>
-                    <span className={`legacy-command-meta${entry.isOverdue ? " is-overdue" : ""}`}>
-                      Age {entry.ageLabel} · SLA {entry.slaLabel} · {entry.breachLabel}
-                    </span>
-                    {entry.latestCommentPreview ? <span className="legacy-command-meta">Latest note: {entry.latestCommentPreview}</span> : null}
-                    {entry.resolutionNote ? <span className="legacy-command-meta">Resolution: {entry.resolutionNote}</span> : null}
-                    {entry.commentCount > 0 ? (
-                      <span className="legacy-command-meta">{entry.commentCount} note{entry.commentCount === 1 ? "" : "s"} recorded</span>
-                    ) : null}
-                    {updatingTaskId === entry.id ? <span className="legacy-command-meta">Updating task status...</span> : null}
-                    {entry.notes.length > 0 ? (
-                      <div className="legacy-task-note-list">
-                        {entry.notes.map((note) => (
-                          <article className="legacy-task-note-line" key={note.id}>
-                            <strong>{note.kind}</strong>
-                            <p>{note.body}</p>
-                            <span className="legacy-command-meta">
-                              {note.authorName} · {note.timeLabel}
-                            </span>
-                          </article>
-                        ))}
+            {!selectedRow ? (
+              <p>Select a website endpoint to open the live field mapping board.</p>
+            ) : (
+              <div className="website-feed-mapper-shell">
+                <div className="website-feed-mapper-lane-tabs" role="tablist" aria-label="Website field mapping lanes">
+                  {websiteMappingLanes.map((lane) => (
+                    <button
+                      aria-selected={lane.id === activeMappingLaneId}
+                      className={lane.id === activeMappingLaneId ? "is-selected" : ""}
+                      key={lane.id}
+                      onClick={() => setActiveMappingLaneId(lane.id)}
+                      role="tab"
+                      type="button"
+                    >
+                      <div className="website-feed-mapper-tab-meta">
+                        <span className={`legacy-chip tone-${lane.tone}`}>{lane.status}</span>
+                        <span>{lane.fields.length} links</span>
                       </div>
-                    ) : null}
-                    <div className="legacy-task-note-composer">
-                      <textarea
-                        aria-label={`Website task note for ${entry.action}`}
-                        className="legacy-task-note-input"
-                        disabled={Boolean(updatingTaskId)}
-                        onChange={(event) =>
-                          setNoteDrafts((current) => ({
-                            ...current,
-                            [entry.id]: event.target.value
-                          }))
-                        }
-                        placeholder="Add digital-ops context, blocker detail, or a resolution note"
-                        rows={2}
-                        value={noteDrafts[entry.id] ?? ""}
-                      />
-                      <div className="legacy-task-status-actions">
-                        <button
-                          className="legacy-task-status-button"
-                          disabled={Boolean(updatingTaskId) || !(noteDrafts[entry.id] ?? "").trim()}
-                          onClick={() => {
-                            void onAddTaskNote(entry.id, (noteDrafts[entry.id] ?? "").trim(), "Comment").then((saved) => {
-                              if (saved) {
-                                setNoteDrafts((current) => ({
-                                  ...current,
-                                  [entry.id]: ""
-                                }));
-                              }
-                            });
-                          }}
-                          type="button"
-                        >
-                          Add note
-                        </button>
-                        <button
-                          className="legacy-task-status-button"
-                          disabled={Boolean(updatingTaskId) || !(noteDrafts[entry.id] ?? "").trim()}
-                          onClick={() => {
-                            void onAddTaskNote(entry.id, (noteDrafts[entry.id] ?? "").trim(), "Resolution").then((saved) => {
-                              if (saved) {
-                                setNoteDrafts((current) => ({
-                                  ...current,
-                                  [entry.id]: ""
-                                }));
-                              }
-                            });
-                          }}
-                          type="button"
-                        >
-                          {entry.status === "Done" ? "Update resolution" : "Resolve"}
-                        </button>
-                      </div>
+                      <strong>{lane.label}</strong>
+                      <span className="website-feed-mapper-tab-audience">{lane.audienceLabel}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="website-feed-mapper-panel" role="tabpanel">
+                  <div className="website-feed-mapper-toolbar">
+                    <div>
+                      <span className="website-feed-control-label">Active lane</span>
+                      <h4>{activeMappingLane.label}</h4>
+                      <p>{activeMappingLane.detail}</p>
                     </div>
-                    <div className="legacy-task-handoff-row">
+                    <div className="website-feed-mapper-context-strip">
+                      <span className={`legacy-chip tone-${activeMappingLane.tone}`}>{activeMappingLane.status}</span>
+                      <span className="legacy-chip tone-neutral">Premier Marine Cloud to {selectedRow.brand}</span>
+                      <span className="legacy-chip tone-neutral">{selectedRow.brand}</span>
+                    </div>
+                  </div>
+
+                  <div className="website-feed-mapper-toolbar-fields">
+                    <label className="website-feed-field">
+                      <span>Website Surface</span>
                       <select
-                        aria-label={`Assign website task ${entry.action}`}
-                        className="legacy-task-assignee-select"
-                        disabled={Boolean(updatingTaskId)}
                         onChange={(event) =>
-                          setHandoffSelections((current) => ({
+                          setMappingSurfaceSelections((current) => ({
                             ...current,
-                            [entry.id]: event.target.value
+                            [activeMappingLane.id]: event.target.value
                           }))
                         }
-                        value={handoffSelections[entry.id] ?? entry.assignedUserId ?? ""}
+                        value={mappingSurfaceSelections[activeMappingLane.id]}
                       >
-                        <option value="">Unassigned</option>
-                        {operators.map((operator) => (
-                          <option key={operator.id} value={operator.id}>
-                            {operator.name} · {operator.title}
+                        {websiteMappingSurfaceOptions[activeMappingLane.id].map((option) => (
+                          <option key={option} value={option}>
+                            {option}
                           </option>
                         ))}
                       </select>
-                      <button
-                        className="legacy-task-status-button"
-                        disabled={Boolean(updatingTaskId) || (handoffSelections[entry.id] ?? entry.assignedUserId ?? "") === (entry.assignedUserId ?? "")}
-                        onClick={() => onAssignTask(entry.id, (handoffSelections[entry.id] ?? entry.assignedUserId ?? "") || null)}
-                        type="button"
+                    </label>
+
+                    <label className="website-feed-field">
+                      <span>Sync Mode</span>
+                      <select
+                        onChange={(event) =>
+                          setMappingSyncSelections((current) => ({
+                            ...current,
+                            [activeMappingLane.id]: event.target.value
+                          }))
+                        }
+                        value={mappingSyncSelections[activeMappingLane.id]}
                       >
-                        Hand off
-                      </button>
-                    </div>
-                    <div className="legacy-task-status-actions">
-                      {getTaskStatusActions(entry.status).map((action) => (
+                        {websiteMappingSyncOptions[activeMappingLane.id].map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="website-feed-field">
+                      <span>Approval Guardrail</span>
+                      <select
+                        onChange={(event) =>
+                          setMappingValidationSelections((current) => ({
+                            ...current,
+                            [activeMappingLane.id]: event.target.value
+                          }))
+                        }
+                        value={mappingValidationSelections[activeMappingLane.id]}
+                      >
+                        {websiteMappingValidationOptions[activeMappingLane.id].map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="website-feed-mapper-meta-bar">
+                    <span>DMS source: Premier Marine Cloud</span>
+                    <span>Website destination: {selectedRow.domain}</span>
+                    <span>Sync: {mappingSyncSelections[activeMappingLane.id]}</span>
+                    <span>Approval: {mappingValidationSelections[activeMappingLane.id]}</span>
+                  </div>
+
+                  <div className="website-feed-mapper-table-wrap">
+                    <table className="website-feed-mapper-table">
+                      <thead>
+                        <tr>
+                          <th>DMS Field</th>
+                          <th>Website Field</th>
+                          <th>Surface</th>
+                          <th>Sync</th>
+                          <th>Approval</th>
+                          <th>Manager Guidance</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activeMappingLane.fields.map((field) => (
+                          <tr key={`${activeMappingLane.id}-${field.source}-${field.destination}`}>
+                            <td>
+                              <strong>{field.source}</strong>
+                              <span>Premier Marine Cloud</span>
+                            </td>
+                            <td>
+                              <strong>{field.destination}</strong>
+                              <span>{selectedRow.brand}</span>
+                            </td>
+                            <td>{mappingSurfaceSelections[activeMappingLane.id]}</td>
+                            <td>{mappingSyncSelections[activeMappingLane.id]}</td>
+                            <td>{mappingValidationSelections[activeMappingLane.id]}</td>
+                            <td>{field.guidance}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="legacy-info-card website-feed-support-card website-feed-sidebar-card">
+            <div className="legacy-command-log-header">
+              <div>
+                <h3>Lead Sync Monitor</h3>
+                <span>Live website response path</span>
+              </div>
+            </div>
+            <p>{fallbackStatusLine}</p>
+            <div className="legacy-activity-stack">
+              {rows.map((feed) => {
+                const leadShare = totalLeads > 0 ? Math.round((feed.leadsToday / totalLeads) * 100) : 0;
+
+                return (
+                  <article className={`legacy-activity-line tone-${buildWebsiteLeadTone(feed.leadsToday)}`} key={`${feed.id}-lead`}>
+                    <strong>{feed.brand}</strong>
+                    <p>
+                      {feed.leadsToday} leads today · {leadShare}% of store web leads · {feed.lastSyncLabel}
+                    </p>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="legacy-info-card website-feed-support-card website-feed-sidebar-card">
+            <div className="legacy-command-log-header">
+              <div>
+                <h3>Feed Totals</h3>
+                <span>Storewide publishing posture</span>
+              </div>
+            </div>
+            <div className="legacy-feed-health-strip">
+              <article className="legacy-feed-health-card">
+                <span>Total Inventory</span>
+                <strong>{totalInventory}</strong>
+                <p>Units currently staged across every public website surface for this store.</p>
+              </article>
+              <article className="legacy-feed-health-card">
+                <span>Web Leads</span>
+                <strong>{totalLeads}</strong>
+                <p>Combined website leads captured today across the active domain lanes.</p>
+              </article>
+              <article className="legacy-feed-health-card">
+                <span>Publishing Now</span>
+                <strong>{publishingCount}</strong>
+                <p>Feeds actively pushing inventory updates or waiting for the publish window to close.</p>
+              </article>
+            </div>
+          </section>
+
+          <section className="legacy-info-card website-feed-queue-panel website-feed-sidebar-card">
+            <div className="legacy-command-log-header">
+              <div>
+                <h3>Digital Ops Queue</h3>
+                <span>{filteredQueueEntries.length} task{filteredQueueEntries.length === 1 ? "" : "s"} visible</span>
+              </div>
+              <span>{overdueQueueCount} overdue</span>
+            </div>
+
+            <div className="legacy-website-filter-row">
+              <label className="legacy-audit-filter-control">
+                <span>Queue Action</span>
+                <select onChange={(event) => setQueueActionFilter(event.target.value)} value={queueActionFilter}>
+                  {queueActionOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="legacy-audit-filter-control">
+                <span>Queue Status</span>
+                <select onChange={(event) => setQueueStatusFilter(event.target.value)} value={queueStatusFilter}>
+                  {queueStatusOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {isFilteredByOperator ? <span className="legacy-command-meta legacy-website-inline-meta">Mine only is active in the shared rails for this workspace.</span> : null}
+
+            {entries.length === 0 ? (
+              <p>{isFilteredByOperator ? "No website tasks are queued for this operator right now." : "No website tasks are queued for Digital Ops right now."}</p>
+            ) : filteredQueueEntries.length === 0 ? (
+              <p>No website tasks match the current queue filters.</p>
+            ) : (
+              <div className="legacy-command-list">
+                {filteredQueueEntries.map((entry) => (
+                  <article className={`legacy-command-line tone-${entry.tone}`} key={entry.id}>
+                    <span className="legacy-command-time">{entry.status}</span>
+                    <div>
+                      <strong>{entry.action}</strong>
+                      <p>{entry.detail}</p>
+                      <span className="legacy-command-meta">Created by {entry.actorName}</span>
+                      <span className="legacy-command-meta">
+                        Owner {entry.assignedName} · Updated by {entry.lastUpdatedByName} · {entry.timeLabel}
+                      </span>
+                      <span className={`legacy-command-meta${entry.isOverdue ? " is-overdue" : ""}`}>
+                        Age {entry.ageLabel} · SLA {entry.slaLabel} · {entry.breachLabel}
+                      </span>
+                      {entry.latestCommentPreview ? <span className="legacy-command-meta">Latest note: {entry.latestCommentPreview}</span> : null}
+                      {entry.resolutionNote ? <span className="legacy-command-meta">Resolution: {entry.resolutionNote}</span> : null}
+                      {entry.commentCount > 0 ? (
+                        <span className="legacy-command-meta">{entry.commentCount} note{entry.commentCount === 1 ? "" : "s"} recorded</span>
+                      ) : null}
+                      {updatingTaskId === entry.id ? <span className="legacy-command-meta">Updating task status...</span> : null}
+                      {entry.notes.length > 0 ? (
+                        <div className="legacy-task-note-list">
+                          {entry.notes.map((note) => (
+                            <article className="legacy-task-note-line" key={note.id}>
+                              <strong>{note.kind}</strong>
+                              <p>{note.body}</p>
+                              <span className="legacy-command-meta">
+                                {note.authorName} · {note.timeLabel}
+                              </span>
+                            </article>
+                          ))}
+                        </div>
+                      ) : null}
+                      <div className="legacy-task-note-composer">
+                        <textarea
+                          aria-label={`Website task note for ${entry.action}`}
+                          className="legacy-task-note-input"
+                          disabled={Boolean(updatingTaskId)}
+                          onChange={(event) =>
+                            setNoteDrafts((current) => ({
+                              ...current,
+                              [entry.id]: event.target.value
+                            }))
+                          }
+                          placeholder="Add digital-ops context, blocker detail, or a resolution note"
+                          rows={2}
+                          value={noteDrafts[entry.id] ?? ""}
+                        />
+                        <div className="legacy-task-status-actions">
+                          <button
+                            className="legacy-task-status-button"
+                            disabled={Boolean(updatingTaskId) || !(noteDrafts[entry.id] ?? "").trim()}
+                            onClick={() => {
+                              void onAddTaskNote(entry.id, (noteDrafts[entry.id] ?? "").trim(), "Comment").then((saved) => {
+                                if (saved) {
+                                  setNoteDrafts((current) => ({
+                                    ...current,
+                                    [entry.id]: ""
+                                  }));
+                                }
+                              });
+                            }}
+                            type="button"
+                          >
+                            Add note
+                          </button>
+                          <button
+                            className="legacy-task-status-button"
+                            disabled={Boolean(updatingTaskId) || !(noteDrafts[entry.id] ?? "").trim()}
+                            onClick={() => {
+                              void onAddTaskNote(entry.id, (noteDrafts[entry.id] ?? "").trim(), "Resolution").then((saved) => {
+                                if (saved) {
+                                  setNoteDrafts((current) => ({
+                                    ...current,
+                                    [entry.id]: ""
+                                  }));
+                                }
+                              });
+                            }}
+                            type="button"
+                          >
+                            {entry.status === "Done" ? "Update resolution" : "Resolve"}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="legacy-task-handoff-row">
+                        <select
+                          aria-label={`Assign website task ${entry.action}`}
+                          className="legacy-task-assignee-select"
+                          disabled={Boolean(updatingTaskId)}
+                          onChange={(event) =>
+                            setHandoffSelections((current) => ({
+                              ...current,
+                              [entry.id]: event.target.value
+                            }))
+                          }
+                          value={handoffSelections[entry.id] ?? entry.assignedUserId ?? ""}
+                        >
+                          <option value="">Unassigned</option>
+                          {operators.map((operator) => (
+                            <option key={operator.id} value={operator.id}>
+                              {operator.name} · {operator.title}
+                            </option>
+                          ))}
+                        </select>
                         <button
                           className="legacy-task-status-button"
-                          disabled={Boolean(updatingTaskId)}
-                          key={`${entry.id}-${action.status}`}
-                          onClick={() => onUpdateStatus(entry.id, action.status)}
+                          disabled={Boolean(updatingTaskId) || (handoffSelections[entry.id] ?? entry.assignedUserId ?? "") === (entry.assignedUserId ?? "")}
+                          onClick={() => onAssignTask(entry.id, (handoffSelections[entry.id] ?? entry.assignedUserId ?? "") || null)}
                           type="button"
                         >
-                          {action.label}
+                          Hand off
                         </button>
-                      ))}
+                      </div>
+                      <div className="legacy-task-status-actions">
+                        {getTaskStatusActions(entry.status).map((action) => (
+                          <button
+                            className="legacy-task-status-button"
+                            disabled={Boolean(updatingTaskId)}
+                            key={`${entry.id}-${action.status}`}
+                            onClick={() => onUpdateStatus(entry.id, action.status)}
+                            type="button"
+                          >
+                            {action.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="legacy-info-card">
-          <div className="legacy-command-log-header">
-            <div>
-              <h3>Publish History</h3>
-              <span>{filteredHistoryEntries.length} event{filteredHistoryEntries.length === 1 ? "" : "s"}</span>
-            </div>
-          </div>
-
-          <div className="legacy-website-filter-row">
-            <label className="legacy-audit-filter-control">
-              <span>History Type</span>
-              <select onChange={(event) => setHistoryFilter(event.target.value)} value={historyFilter}>
-                {historyTypeOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
+                  </article>
                 ))}
-              </select>
-            </label>
-          </div>
+              </div>
+            )}
+          </section>
 
-          {historyEntries.length === 0 ? (
-            <p>No website activity has been logged for this store yet.</p>
-          ) : filteredHistoryEntries.length === 0 ? (
-            <p>No website history rows match the current history filter.</p>
-          ) : (
-            <div className="legacy-command-list">
-              {filteredHistoryEntries.map((entry) => (
-                <article className={`legacy-command-line tone-${entry.tone}`} key={entry.id}>
-                  <span className="legacy-command-time">{entry.timeLabel}</span>
-                  <div>
-                    <strong>{entry.label}</strong>
-                    <p>{entry.detail}</p>
-                    <span className="legacy-command-meta">{entry.actorName}</span>
-                  </div>
-                </article>
-              ))}
+          <section className="legacy-info-card website-feed-history-panel website-feed-sidebar-card">
+            <div className="legacy-command-log-header">
+              <div>
+                <h3>Publish History</h3>
+                <span>{filteredHistoryEntries.length} event{filteredHistoryEntries.length === 1 ? "" : "s"}</span>
+              </div>
             </div>
-          )}
-        </section>
+
+            <div className="legacy-website-filter-row">
+              <label className="legacy-audit-filter-control">
+                <span>History Type</span>
+                <select onChange={(event) => setHistoryFilter(event.target.value)} value={historyFilter}>
+                  {historyTypeOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {historyEntries.length === 0 ? (
+              <p>No website activity has been logged for this store yet.</p>
+            ) : filteredHistoryEntries.length === 0 ? (
+              <p>No website history rows match the current history filter.</p>
+            ) : (
+              <div className="legacy-command-list">
+                {filteredHistoryEntries.map((entry) => (
+                  <article className={`legacy-command-line tone-${entry.tone}`} key={entry.id}>
+                    <span className="legacy-command-time">{entry.timeLabel}</span>
+                    <div>
+                      <strong>{entry.label}</strong>
+                      <p>{entry.detail}</p>
+                      <span className="legacy-command-meta">{entry.actorName}</span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </aside>
+
+        <div className="website-feed-main">
+          <section className="legacy-info-card website-feed-preview-panel">
+            <div className="website-feed-preview-header">
+              <div>
+                <span className="legacy-command-meta">Website backend workspace</span>
+                <h3>{selectedRow?.brand ?? "Select a connected website"}</h3>
+                <p>
+                  {selectedRow
+                    ? `Review ${selectedRow.brand} inside a protected operations shell before publishing inventory, pricing, media, or lead-routing changes.`
+                    : "Choose a connected website from the left rail to open its safe editing view and website operations details."}
+                </p>
+              </div>
+
+              <div className="website-feed-preview-actions">
+                <button className="legacy-desktop-board-button" onClick={() => onRunTool("Publish Feed")} type="button">
+                  Publish Feed
+                </button>
+                <button className="legacy-desktop-board-button is-secondary" onClick={() => onRunTool("Lead Sync")} type="button">
+                  Lead Sync
+                </button>
+                {selectedRow ? (
+                  <a className="legacy-desktop-board-button is-secondary" href={activePreviewUrl} rel="noreferrer" target="_blank">
+                    Open Live Site
+                  </a>
+                ) : null}
+              </div>
+            </div>
+
+            {!selectedRow ? (
+              <div className="website-feed-empty-preview">
+                <strong>No website selected</strong>
+                <p>Use the connected websites list on the left to load a site into this backend workspace.</p>
+              </div>
+            ) : (
+              <>
+                <div className="website-feed-preview-toolbar">
+                  <div className="website-feed-browser-dots" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                  <div className="website-feed-preview-address">{previewHostLabel}</div>
+                  <span className={`legacy-chip tone-${buildWebsiteConnectionTone(selectedRow)}`}>{buildWebsiteConnectionLabel(selectedRow)}</span>
+                </div>
+
+                <div className="website-feed-browser-frame">
+                  {websitePreviewState === "blocked" ? (
+                    <div className="website-feed-browser-snapshot-shell">
+                      <img
+                        alt={`${selectedRow.brand} website snapshot`}
+                        className="website-feed-browser-snapshot-image"
+                        loading="lazy"
+                        src={blockedPreviewSnapshotUrl}
+                      />
+                      <div className="website-feed-browser-snapshot-bar">
+                        <div>
+                          <strong>Showing synced website snapshot</strong>
+                          <p>{selectedRow.brand} blocks embedded live rendering, so this panel is showing a current visual website snapshot instead.</p>
+                        </div>
+                        <div className="website-feed-browser-snapshot-chips">
+                          <span className="legacy-chip tone-neutral">{previewHostLabel}</span>
+                          <span className={`legacy-chip tone-${buildWebsiteConnectionTone(selectedRow)}`}>{buildWebsiteConnectionLabel(selectedRow)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <iframe
+                        className="website-feed-browser-iframe"
+                        loading="lazy"
+                        onError={() => setWebsitePreviewState("blocked")}
+                        onLoad={() => setWebsitePreviewState("ready")}
+                        referrerPolicy="no-referrer"
+                        sandbox="allow-forms allow-popups allow-same-origin allow-scripts"
+                        src={activePreviewUrl}
+                        title={`${selectedRow.brand} website preview`}
+                      />
+                      {websitePreviewState === "loading" ? (
+                        <div className="website-feed-browser-state-overlay">
+                          <strong>Loading website preview...</strong>
+                          <p>Connecting to {previewHostLabel} inside the protected preview frame.</p>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+
+                <div className="website-feed-preview-footnote">
+                  <span className="legacy-command-meta">
+                    {websitePreviewState === "blocked"
+                      ? "Embedded preview is unavailable for this site, so this panel has switched to a synced website snapshot."
+                      : "If the website blocks embedded previews, use Open Live Site to verify changes in a separate tab."}
+                  </span>
+                </div>
+
+                <div className="website-feed-preview-highlight-grid">
+                  {previewHighlights.map((highlight) => (
+                    <article className="website-feed-preview-highlight-card" key={highlight.label}>
+                      <span>{highlight.label}</span>
+                      <strong>{highlight.value}</strong>
+                      <p>{highlight.detail}</p>
+                    </article>
+                  ))}
+                </div>
+              </>
+            )}
+          </section>
+        </div>
       </div>
     </div>
   );
@@ -1271,6 +1702,46 @@ function buildWebsiteConnectionLabel(feed: WebsiteWorkspaceRow) {
   return "Review needed";
 }
 
+function buildWebsitePreviewHighlights(feed: WebsiteWorkspaceRow | null, inventoryShare: number, leadShare: number) {
+  if (!feed) {
+    return [
+      {
+        detail: "Connect a CMS, API, webhook, or file transport to open a managed backend view here.",
+        label: "Safe editing lane",
+        value: "Awaiting site"
+      },
+      {
+        detail: "Once a site is selected, its publish posture, lead routing, and catalog coverage will appear here.",
+        label: "Website context",
+        value: "No endpoint"
+      },
+      {
+        detail: "Open the connection rail on the left to stage credentials and generated endpoints first.",
+        label: "Next action",
+        value: "Connect + select"
+      }
+    ];
+  }
+
+  return [
+    {
+      detail: `${inventoryShare}% of staged inventory currently routes to this website lane.`,
+      label: "Catalog coverage",
+      value: `${feed.inventoryCount} units`
+    },
+    {
+      detail: `${leadShare}% of today's web leads are returning through this endpoint.`,
+      label: "Lead return path",
+      value: `${feed.leadsToday} leads`
+    },
+    {
+      detail: buildWebsitePublishGuidance(feed),
+      label: "Publish posture",
+      value: feed.lastSyncLabel
+    }
+  ];
+}
+
 function formatWebsiteFeedEndpoint(feed: WebsiteWorkspaceRow) {
   const normalizedDomain = feed.domain.replace(/^https?:\/\//i, "").replace(/\/$/, "");
 
@@ -1285,6 +1756,15 @@ function normalizeWebsiteBaseUrl(value: string) {
   }
 
   return /^(https?|sftp):\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+function formatWebsitePreviewHost(value: string) {
+  return value.replace(/^(https?|sftp):\/\//i, "").replace(/\/$/, "") || "preview unavailable";
+}
+
+function buildWebsitePreviewSnapshotUrl(value: string) {
+  const normalizedUrl = normalizeWebsiteBaseUrl(value);
+  return `https://image.thum.io/get/width/1600/noanimate/${normalizedUrl}`;
 }
 
 function buildWebsiteConnectorUrl(feed: WebsiteWorkspaceRow) {
@@ -1505,35 +1985,6 @@ function buildWebsiteConnectorStages(rows: WebsiteWorkspaceRow[], totalInventory
       detail: `${totalLeads} website lead${totalLeads === 1 ? "" : "s"} captured today for operator follow-up.`,
       status: totalLeads > 0 ? "Receiving" : "Quiet",
       tone: totalLeads > 0 ? "stable" : "neutral"
-    }
-  ];
-}
-
-function buildWebsiteMappingRows(feed: WebsiteWorkspaceRow | null) {
-  return [
-    {
-      label: "Inventory & Availability",
-      detail: feed ? `${feed.inventoryCount} units from DMS stock are in this endpoint scope.` : "Awaiting endpoint selection.",
-      status: feed ? "Mapped" : "Pending",
-      tone: feed ? "stable" : "neutral"
-    },
-    {
-      label: "Pricing & Promotions",
-      detail: feed ? `${feed.brand} pricing payload follows the active publish window.` : "Pricing rules attach after a website endpoint is selected.",
-      status: feed?.status === "Publishing" ? "Publishing" : feed ? "Ready" : "Pending",
-      tone: feed?.status === "Publishing" ? "accent" : feed ? "stable" : "neutral"
-    },
-    {
-      label: "Media & Merchandising",
-      detail: feed && feed.inventoryCount >= 100 ? "Full catalog media and listing copy are in scope." : "Featured inventory media and listing copy are in scope.",
-      status: feed ? "Mapped" : "Pending",
-      tone: feed ? "stable" : "neutral"
-    },
-    {
-      label: "Lead Forms & Source Tags",
-      detail: feed ? `${feed.leadsToday} lead${feed.leadsToday === 1 ? "" : "s"} received today from this endpoint.` : "Lead return path opens with the selected endpoint.",
-      status: feed && feed.leadsToday > 0 ? "Receiving" : feed ? "Ready" : "Pending",
-      tone: feed && feed.leadsToday > 0 ? "stable" : "neutral"
     }
   ];
 }

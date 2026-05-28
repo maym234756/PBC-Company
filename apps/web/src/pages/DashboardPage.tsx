@@ -52,6 +52,7 @@ import { CrmCommunicateWorkspace } from "./CrmCommunicateWorkspace";
 import { ManagementActivitiesWorkspace } from "./ManagementActivitiesWorkspace";
 import { ProfitLossWorkspace } from "./ProfitLossWorkspace";
 import { ReportCenterWorkspace, fiProductLibrary } from "./ReportCenterWorkspace";
+import { TechnicianWorkloadWorkspace } from "./TechnicianWorkloadWorkspace";
 import { WebsiteWorkspace } from "./WebsiteWorkspace";
 import { TopTabs } from "../components/TopTabs";
 import {
@@ -1103,6 +1104,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const serviceReturnStoreId = searchParams.get("returnStore");
   const activeSalesDealId = workspaceId === "sales" ? searchParams.get("activeDeal") : null;
   const activeSalesCommunicatePage = workspaceId === "sales" && searchParams.get("view") === "communicate";
+  const activeTechnicianWorkloadPage = workspaceId === "service" && searchParams.get("view") === "technician-workload";
   const partsWorkspaceView: PartsWorkspaceView = workspaceId === "parts" && searchParams.get("view") === "inventory" ? "inventory" : "ordering";
   const activePartsInventoryPartNumber = workspaceId === "parts" && partsWorkspaceView === "inventory" ? searchParams.get("inventoryPart") : null;
   const activeGeneralLedgerPage: "chartOfAccounts" | "profitLoss" | null =
@@ -1123,7 +1125,11 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
           : activeCashierAccountabilityPage
             ? "view=cashier-accountability"
           : "";
-  const activeWorkspaceQuery = activeSalesCommunicatePage ? "view=communicate" : activeAnalyticsQuery;
+  const activeWorkspaceQuery = activeSalesCommunicatePage
+    ? "view=communicate"
+    : activeTechnicianWorkloadPage
+      ? "view=technician-workload"
+      : activeAnalyticsQuery;
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [workspace, setWorkspace] = useState<WorkspacePayload | null>(null);
   const [workspaceSnapshots, setWorkspaceSnapshots] = useState<{
@@ -1270,6 +1276,13 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
             ...workspaceDefinitions.analytics,
             title: "Profit & Loss",
             subtitle: "Financial statement performance, variance, and forecast modeling",
+            tools: [] as string[]
+          }
+      : activeTechnicianWorkloadPage
+        ? {
+            ...workspaceDefinitions.service,
+            title: "Technician Workload",
+            subtitle: "Technician availability, billed hours, and credited-hours workload reporting",
             tools: [] as string[]
           }
       : activeSalesCommunicatePage
@@ -1541,20 +1554,43 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       return;
     }
 
-    if (workspaceId !== "sales") {
+    if (activeTechnicianWorkloadPage) {
+      setOpenWorkspaceRoutesById((current) => ({
+        ...current,
+        service: {
+          groupLabel: "Service",
+          item: "Technician Workload",
+          label: "Technician Workload"
+        }
+      }));
+      return;
+    }
+
+    if (workspaceId !== "sales" && workspaceId !== "service") {
       return;
     }
 
     setOpenWorkspaceRoutesById((current) => {
-      if (!("sales" in current)) {
+      const hasSalesRoute = workspaceId === "sales" && "sales" in current;
+      const hasServiceRoute = workspaceId === "service" && "service" in current;
+
+      if (!hasSalesRoute && !hasServiceRoute) {
         return current;
       }
 
       const next = { ...current };
-      delete next.sales;
+
+      if (hasSalesRoute) {
+        delete next.sales;
+      }
+
+      if (hasServiceRoute) {
+        delete next.service;
+      }
+
       return next;
     });
-  }, [activeSalesCommunicatePage, workspaceId]);
+  }, [activeSalesCommunicatePage, activeTechnicianWorkloadPage, workspaceId]);
 
   useEffect(() => {
     setQuickLaunchOrderSlots((current) => normalizeQuickLaunchOrderPreference(current));
@@ -2045,7 +2081,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   function navigateToWorkspace(nextWorkspaceId: WorkspaceId, sourceLabel?: string) {
     if (
       nextWorkspaceId === workspaceId &&
-      !(nextWorkspaceId === "service" && activeServiceDetailRoNumber) &&
+      !(nextWorkspaceId === "service" && (activeServiceDetailRoNumber || activeTechnicianWorkloadPage)) &&
       !(nextWorkspaceId === "parts" && partsWorkspaceView !== "ordering") &&
       !(nextWorkspaceId === "sales" && activeSalesCommunicatePage) &&
       !(nextWorkspaceId === "analytics" && (activeGeneralLedgerPage !== null || activeManagementActivitiesPage || activeCashierAccountabilityPage))
@@ -2438,6 +2474,14 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     }
 
     if (workspace === "service") {
+      if (activeTechnicianWorkloadPage) {
+        return {
+          groupLabel: "Service",
+          item: "Technician Workload",
+          label: "Technician Workload"
+        };
+      }
+
       return {
         groupLabel: "Service",
         item: "Estimates & Repair Orders",
@@ -2747,12 +2791,47 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       return;
     }
 
+    if (groupLabel === "Service" && item === "Technician Workload") {
+      setActiveWorkflow(null);
+      setPendingServiceMenuIntent(null);
+      setPendingWorkspaceMenuIntent(null);
+      setToolbarNotice("Technician workload ready.");
+      addOpenWorkspace("service");
+      setOpenWorkspaceRoutesById((current) => ({
+        ...current,
+        service: {
+          groupLabel: "Service",
+          item: "Technician Workload",
+          label: "Technician Workload"
+        }
+      }));
+      appendCommandLog(
+        {
+          label: "Workspace opened",
+          detail: `Technician Workload via ${groupLabel} / ${item}.`,
+          tone: "neutral"
+        },
+        {
+          optimistic: false,
+          workspaceId: "service"
+        }
+      );
+
+      navigate(`/dashboard/${activeStore.id}/service?view=technician-workload`);
+      return;
+    }
+
     const workspaceMenuIntent = resolveWorkspaceMenuIntent(groupLabel, item);
 
     if (workspaceMenuIntent) {
       setPendingWorkspaceMenuIntent(workspaceMenuIntent);
 
-      if (workspaceId !== workspaceMenuIntent.workspaceId) {
+      if (
+        workspaceId !== workspaceMenuIntent.workspaceId ||
+        (workspaceMenuIntent.workspaceId === "service" && activeTechnicianWorkloadPage) ||
+        (workspaceMenuIntent.workspaceId === "sales" && activeSalesCommunicatePage) ||
+        (workspaceMenuIntent.workspaceId === "analytics" && (activeGeneralLedgerPage !== null || activeManagementActivitiesPage || activeCashierAccountabilityPage))
+      ) {
         navigateToWorkspace(workspaceMenuIntent.workspaceId, `${groupLabel} / ${item}`);
       }
 
@@ -2779,7 +2858,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       if (serviceMenuIntent) {
         setPendingServiceMenuIntent(serviceMenuIntent);
 
-        if (workspaceId !== "service" || activeServiceDetailRoNumber) {
+        if (workspaceId !== "service" || activeServiceDetailRoNumber || activeTechnicianWorkloadPage) {
           navigateToWorkspace("service", `${groupLabel} / ${item}`);
         }
 
@@ -4865,6 +4944,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                       activeGeneralLedgerPage,
                       activeManagementActivitiesPage,
                       activeCashierAccountabilityPage,
+                      activeTechnicianWorkloadPage,
                       activeSalesCommunicatePage,
                       (roNumber: string, customerName: string) => { setPortalPreviewMode({ roNumber, customerName }); }
                     )
@@ -5800,6 +5880,7 @@ function renderWorkspace(
   activeGeneralLedgerPage: "chartOfAccounts" | "profitLoss" | null,
   activeManagementActivitiesPage: boolean,
   activeCashierAccountabilityPage: boolean,
+  activeTechnicianWorkloadPage: boolean,
   activeSalesCommunicatePage: boolean,
   onOpenPortalPreview: (roNumber: string, customerName: string) => void
 ) {
@@ -5857,6 +5938,11 @@ function renderWorkspace(
     }
     case "service": {
       const rows = workspace?.workspaceId === "service" ? workspace.rows : [];
+
+      if (activeTechnicianWorkloadPage) {
+        return <TechnicianWorkloadWorkspace storeId={auditControls.activeStoreId} storeName={dashboard?.store.name ?? "Premier Marine"} />;
+      }
+
       const isServiceDetailWindow = Boolean(taskControls.activeServiceDetailRoNumber);
       const serviceNotificationEntries = taskControls.serviceNotificationEntries ?? [];
 

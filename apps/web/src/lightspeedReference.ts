@@ -813,7 +813,7 @@ export const legacyFallbackNavigation: NavigationGroup[] = [
             items: [
               {
                 label: "Time & Promise",
-                items: ["Reports", "Elapsed Time Summary", "Promise-Date Performance"]
+                items: ["Reports", "Elapsed Time Summary", "Promise-Date Performance", "Technician Workload"]
               },
               {
                 label: "Warranty Throughput",
@@ -1843,6 +1843,7 @@ const navigationMenuWorkspaceLookup: Record<string, WorkspaceId> = {
     "service:new estimate": "service",
     "service:new repair order": "service",
     "service:estimates & repair orders": "service",
+    "service:technician workload": "service",
     "service:warranty claims": "service",
     "sales:salesperson insights": "sales",
     "sales:new lead": "sales",

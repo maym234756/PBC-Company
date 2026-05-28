@@ -177,6 +177,8 @@ export interface ServiceOrderFollowUp {
 }
 
 export interface ServiceOrderLaborSession {
+  jobId?: string;
+  jobTitle?: string;
   technician: string;
   startDate: string;
   startTime: string;
@@ -736,6 +738,8 @@ export function applyServiceOrderDetailMutation(
         completedBy: mutation.technician.trim()
       });
       nextDetail.laborSessions.unshift({
+        jobId: targetJob.id,
+        jobTitle: targetJob.title,
         technician: mutation.technician.trim(),
         startDate: mutation.startDate.trim(),
         startTime: mutation.startTime.trim(),
@@ -1715,6 +1719,8 @@ function buildServiceWorkbenchLaborSessions(row: ServiceOrderWorkspaceRow, jobs:
 
   return [
     {
+      jobId: primaryJob.id,
+      jobTitle: primaryJob.title,
       technician: primaryJob.technician,
       startDate: shiftUsDate(row.inDate, 1),
       startTime: "8:15 AM",
