@@ -38,6 +38,23 @@ test("website publish plan preserves the publish message while enriching the act
   assert.equal(plan.detail, "Premier Fort Lauderdale · Recent changes · Merchandising");
 });
 
+test("system sandbox plan returns a website-backed sandbox queue message", () => {
+  const plan = resolveWorkflowActionPlan({
+    workspaceId: "website",
+    action: "System Sandbox Review",
+    values: {
+      brand: "Premier Fort Lauderdale",
+      window: "Recent changes",
+      pulseType: "Sandbox validation"
+    }
+  });
+
+  assert.ok(plan);
+  assert.equal(plan.message, "System sandbox review queued.");
+  assert.equal(plan.activityLabel, "System sandbox review queued");
+  assert.equal(plan.detail, "Premier Fort Lauderdale · Recent changes · Sandbox validation");
+});
+
 test("receivables, general ledger, and system actions resolve into richer queued task plans", () => {
   const receivablesPlan = resolveWorkflowActionPlan({
     workspaceId: "analytics",

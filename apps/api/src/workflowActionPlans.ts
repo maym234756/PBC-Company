@@ -969,10 +969,22 @@ export function resolveWorkflowActionPlan(input: WorkflowActionPlanInput): Workf
         message: "Website feed publish queued."
       };
     }
+    case "website:System Sandbox Review":
     case "website:System Feed Health":
     case "website:System Lead Routing":
     case "website:System Sync Monitor":
     case "website:Application Favorite Website Feed": {
+      if (input.action === "System Sandbox Review") {
+        return createPlannedAction(input.values, {
+          activityDetailPrefix: "System sandbox review queued",
+          activityLabel: "System sandbox review queued",
+          activityTone: "stable",
+          detailKeys: ["brand", "window", "pulseType"],
+          fallbackDetail: "All feeds · Recent changes · Sandbox validation",
+          message: "System sandbox review queued."
+        });
+      }
+
       if (input.action === "System Feed Health") {
         return createPlannedAction(input.values, {
           activityDetailPrefix: "Feed health review queued",

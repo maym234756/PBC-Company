@@ -1,6 +1,25 @@
 import { useState, useRef, useEffect, type Dispatch, type SetStateAction } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  createSandbox,
+  createSandboxTemplate,
+  deleteSandboxTemplate,
+  getSandboxBackendModules,
+  getSandboxLoginAccess,
+  getSandboxPromotionPreview,
+  getSandboxWorkspace,
+  pushSandboxToProduction,
+  runSandboxAction,
+  updateSandboxTemplate,
+  type SandboxBackendModule,
+  type SandboxLoginAccess,
+  type SandboxPromotionCheckStatus,
+  type SandboxPromotionRiskLevel,
+  type SandboxPromotionPreview
+} from "../api";
 import type {
   ActivityLogEntry,
+  SandboxSessionContext,
   StoreOperatorOption,
   TaskNoteKind,
   TaskQueueEntry,
@@ -11,12 +30,32 @@ import type {
 
 type CommandLogEntry = ActivityLogEntry;
 
+const SANDBOX_SHELL_ACTION_EVENT = "marine-cloud-sandbox-shell-action";
+const SANDBOX_SHELL_ACTION_STORAGE_KEY = "marine-cloud-sandbox-shell-action";
+function readSandboxShellPendingSurfaceMode() {
+  if (typeof window === "undefined") {
+    return "editor";
+  }
 
+  const nextMode = window.sessionStorage.getItem(SANDBOX_SHELL_ACTION_STORAGE_KEY);
+
+  if (nextMode === "deploy") {
+    window.sessionStorage.removeItem(SANDBOX_SHELL_ACTION_STORAGE_KEY);
+    return "deploy";
+  }
+
+  return "editor";
+}
 
 interface WebsiteWorkspaceProps {
+  activeStoreId: string;
   activityEntries: CommandLogEntry[];
+  activeUserEmail: string;
+  activeUserName: string;
   entries: TaskQueueEntry[];
   fallbackStatusLine: string;
+  sandboxContext: SandboxSessionContext | null;
+  isSandboxSession: boolean;
   isFilteredByOperator: boolean;
   onAddTaskNote: (taskId: string, body: string, kind: TaskNoteKind) => Promise<boolean>;
   onAssignTask: (taskId: string, assigneeUserId: string | null) => void;
@@ -35,6 +74,7 @@ interface WebsiteWorkspaceProps {
 type WebsiteConnectionType = "website" | "api" | "webhook" | "file";
 type WebsiteIntegrationEnvironment = "sandbox" | "production";
 type WebsiteAuthMode = "API Key" | "OAuth 2.0" | "Basic Auth" | "Signed Webhook" | "None";
+type WebsiteSidebarPanel = "overview" | "mapping" | "queue" | "history";
 type WebsiteMappingLaneId = "inventory" | "pricing" | "media" | "leads";
 
 interface WebsiteMappingFieldLink {
@@ -377,6 +417,1960 @@ interface SyncMonitorCustomSettingsPageProps {
   totalLeads: number;
 }
 
+const sandboxLicenseCards = [
+  {
+    available: "24 Available",
+    inUseLabel: "1 of 25 Licenses In Use",
+    kind: "Developer",
+    tone: "stable"
+  },
+  {
+    available: "No additional licenses available",
+    inUseLabel: "0 of 0 Licenses In Use",
+    kind: "Developer Pro",
+    tone: "attention"
+  },
+  {
+    available: "No additional licenses available",
+    inUseLabel: "1 of 1 Licenses In Use",
+    kind: "Partial Copy",
+    tone: "alert"
+  },
+  {
+    available: "No additional licenses available",
+    inUseLabel: "0 of 0 Licenses In Use",
+    kind: "Full",
+    tone: "attention"
+  }
+] as const;
+
+const sandboxTabOptions = ["Sandboxes", "Sandbox Templates", "Sandbox History"] as const;
+
+type SandboxTemplateRow = {
+  id: string;
+  action: string;
+  description: string;
+  inUse: boolean;
+  name: string;
+  selectedModules: string[];
+};
+
+type SandboxRow = {
+  id: string;
+  actionLinks: string[];
+  completedOn: string;
+  copiedFrom: string;
+  currentOrgId: string;
+  description: string;
+  diffSummary: string;
+  location: string;
+  name: string;
+  releaseType: string;
+  selectedModules: string[];
+  status: string;
+  templateId: string | null;
+  type: string;
+};
+
+type SandboxHistoryRow = {
+  activated: string;
+  activatedBy: string;
+  detail: string;
+  diffSummary: string;
+  eventType: string;
+  finished: string;
+  id: string;
+  refreshed: string;
+  requestedBy: string;
+  sandbox: string;
+};
+
+const initialSandboxRows: SandboxRow[] = [
+  {
+    id: "sandbox-miles",
+    actionLinks: ["Clone", "Refresh", "Promote", "Log In", "Del"],
+    completedOn: "1/20/2026, 8:54 PM",
+    copiedFrom: "Premier Marine Cloud Template",
+    currentOrgId: "00Ddz000003hga9",
+    description: "Integration validation lane for marine inventory and CRM routing.",
+    diffSummary: "4 backend modules isolated across 4 source files.",
+    location: "Hyperforce USA952S",
+    name: "Miles",
+    releaseType: "Non-Preview",
+    selectedModules: ["CRM Communicate Backend", "Dashboard + Workspace API Routes", "Workflow Action Plans", "Task + Activity Ledger"],
+    status: "Completed",
+    templateId: null,
+    type: "Developer"
+  },
+  {
+    id: "sandbox-team-marine",
+    actionLinks: ["Clone", "Refresh", "Promote", "Log In", "Del"],
+    completedOn: "11/19/2025, 4:14 PM",
+    copiedFrom: "Premier Marine Cloud Partial Copy",
+    currentOrgId: "00DVZ000003zLaH",
+    description: "Team marine regression sandbox for website, Twilio, and workflow checks.",
+    diffSummary: "6 backend modules isolated across 7 source files.",
+    location: "Hyperforce USA710S",
+    name: "teamMarine",
+    releaseType: "Preview",
+    selectedModules: [
+      "Dashboard + Workspace API Routes",
+      "CRM Communicate Backend",
+      "Twilio Messaging Flows",
+      "Service Notification Rules",
+      "Service Order Detail",
+      "Workflow Action Plans"
+    ],
+    status: "Completed",
+    templateId: "template-team-marine",
+    type: "Partial Copy"
+  }
+] as const;
+
+const initialSandboxTemplateRows: SandboxTemplateRow[] = [
+  {
+    id: "template-team-marine",
+    action: "Edit",
+    description: "Backend-safe template for CRM, website, workflow, and service API changes.",
+    inUse: true,
+    name: "teamMarine",
+    selectedModules: [
+      "Dashboard + Workspace API Routes",
+      "CRM Communicate Backend",
+      "Twilio Messaging Flows",
+      "Service Notification Rules",
+      "Service Order Detail",
+      "Workflow Action Plans"
+    ]
+  }
+] as const;
+
+const initialSandboxHistoryRows: SandboxHistoryRow[] = [
+  {
+    detail: "Miles provisioned from Premier Marine Cloud Template.",
+    diffSummary: "4 backend modules isolated across 4 source files.",
+    eventType: "Provisioned",
+    activated: "1/20/2026, 8:59 PM",
+    activatedBy: "",
+    finished: "1/20/2026, 8:54 PM",
+    id: "history-miles-provisioned",
+    refreshed: "1/20/2026, 7:36 PM",
+    requestedBy: "Miles May",
+    sandbox: "Miles"
+  },
+  {
+    detail: "teamMarine provisioned from Premier Marine Cloud Partial Copy.",
+    diffSummary: "6 backend modules isolated across 7 source files.",
+    eventType: "Provisioned",
+    activated: "11/19/2025, 4:26 PM",
+    activatedBy: "Automated Process",
+    finished: "11/19/2025, 4:14 PM",
+    id: "history-team-marine-provisioned",
+    refreshed: "11/19/2025, 3:20 PM",
+    requestedBy: "teamMarine",
+    sandbox: "teamMarine"
+  }
+] as const;
+
+const fallbackSandboxBackendModules: SandboxBackendModule[] = [
+  {
+    detail: "Dashboard payload and workspace route handlers that shape store-scoped app shell responses across website, sales, service, parts, desktop, analytics, and audit surfaces.",
+    name: "Dashboard + Workspace API Routes",
+    sourceFiles: ["apps/api/src/server.ts"]
+  },
+  {
+    detail: "Planner logic for menu-driven submit actions, queued task messages, and activity detail generation used across workspaces.",
+    name: "Workflow Action Plans",
+    sourceFiles: ["apps/api/src/workflowActionPlans.ts", "apps/api/src/workflowActionPlans.test.ts"]
+  },
+  {
+    detail: "Store-scoped CRM contacts, conversations, outbound SMS actions, inbound thread hydration, and quick-info mutations for Communicate.",
+    name: "CRM Communicate Backend",
+    sourceFiles: ["apps/api/src/crmCommunicate.ts", "apps/api/src/server.ts"]
+  },
+  {
+    detail: "Twilio credential resolution, request signing, inbound/status webhook handling, and outbound message payload shaping.",
+    name: "Twilio Messaging Flows",
+    sourceFiles: ["apps/api/src/twilioMessaging.ts", "apps/api/src/server.ts"]
+  },
+  {
+    detail: "Service lane notification builders that derive customer, technician, parts-received, and promise-risk alerts from live service rows.",
+    name: "Service Notification Rules",
+    sourceFiles: ["apps/api/src/serviceNotifications.ts", "apps/api/src/serviceNotifications.test.ts"]
+  },
+  {
+    detail: "Normalized service-order detail snapshots, mutation rules, labor/job linkage, duplicate/create flows, and part catalog shaping.",
+    name: "Service Order Detail",
+    sourceFiles: ["apps/api/src/serviceOrderDetail.ts", "apps/api/src/serviceOrderDetail.test.ts", "apps/api/src/server.ts"]
+  },
+  {
+    detail: "Sales deal deposit ledger retrieval, cashier deposit creation, and receipt/reprint activity actions tied to deal-level accounting flows.",
+    name: "Sales Deal Deposits",
+    sourceFiles: ["apps/api/src/server.ts"]
+  },
+  {
+    detail: "Shared task queue and activity-log routes that record backend workflow execution across website, service, sales, parts, and audit flows.",
+    name: "Task + Activity Ledger",
+    sourceFiles: ["apps/api/src/server.ts"]
+  },
+  {
+    detail: "Task SLA preview, copy, reset, and action routes that drive audit-side policy management for queued backend work.",
+    name: "Task SLA Policies",
+    sourceFiles: ["apps/api/src/server.ts"]
+  },
+  {
+    detail: "Cashier accountability reporting endpoints that aggregate operator activity by day, user, and action window for store audit review.",
+    name: "Cashier Accountability Report",
+    sourceFiles: ["apps/api/src/server.ts"]
+  },
+  {
+    detail: "Technician workload reporting that groups repair orders, jobs, and labor sessions into available, billed, and credited hour summaries.",
+    name: "Technician Workload Report",
+    sourceFiles: ["apps/api/src/server.ts", "apps/api/src/serviceOrderDetail.ts"]
+  },
+  {
+    detail: "Vendor list and maintenance endpoints used by parts-side purchasing and supplier management workflows.",
+    name: "Vendor Management APIs",
+    sourceFiles: ["apps/api/src/server.ts"]
+  },
+  {
+    detail: "Pricing-rule retrieval and mutation endpoints that back inventory pricing controls and downstream merchandising decisions.",
+    name: "Pricing Rules APIs",
+    sourceFiles: ["apps/api/src/server.ts"]
+  },
+  {
+    detail: "Approval request endpoints and status updates used by management review flows before pricing, inventory, or process changes are promoted.",
+    name: "Approval Workflows",
+    sourceFiles: ["apps/api/src/server.ts"]
+  },
+  {
+    detail: "Boat inventory CRUD and search endpoints that drive unit-level inventory state, merchandising fields, and downstream website payloads.",
+    name: "Boat Inventory APIs",
+    sourceFiles: ["apps/api/src/server.ts"]
+  },
+  {
+    detail: "Prisma schema plus seed routines that define persisted store, CRM, website, service, inventory, task, and audit records used by the backend.",
+    name: "Prisma + Seed Data",
+    sourceFiles: ["packages/database/prisma/schema.prisma", "packages/database/prisma/seed.ts", "apps/api/src/seed.ts"]
+  }
+];
+
+type SandboxTemplateDraft = {
+  description: string;
+  name: string;
+  selectedModules: string[];
+};
+
+type SandboxDraft = {
+  name: string;
+  purpose: string;
+  selectedModules: string[];
+  templateName: string;
+  type: string;
+};
+
+function NewSandboxTemplatePage({
+  initialTemplate,
+  modules,
+  onDelete,
+  onCancel,
+  onSave
+}: {
+  initialTemplate: SandboxTemplateRow | null;
+  modules: SandboxBackendModule[];
+  onDelete?: () => void;
+  onCancel: () => void;
+  onSave: (draft: SandboxTemplateDraft) => void;
+}) {
+  const [draft, setDraft] = useState<SandboxTemplateDraft>({
+    description: initialTemplate?.description ?? "",
+    name: initialTemplate?.name ?? "",
+    selectedModules: initialTemplate?.selectedModules ?? []
+  });
+  const [activeObjectName, setActiveObjectName] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedObjects, setSelectedObjects] = useState<string[]>(() => initialTemplate?.selectedModules ?? []);
+  const [showSelectedOnly, setShowSelectedOnly] = useState(false);
+
+  useEffect(() => {
+    setDraft({
+      description: initialTemplate?.description ?? "",
+      name: initialTemplate?.name ?? "",
+      selectedModules: initialTemplate?.selectedModules ?? []
+    });
+    setSelectedObjects(initialTemplate?.selectedModules ?? []);
+    setActiveObjectName(initialTemplate?.selectedModules[0] ?? modules[0]?.name ?? null);
+    setSearchTerm("");
+    setShowSelectedOnly(false);
+  }, [initialTemplate, modules]);
+
+  const filteredObjects = modules.filter((object) => {
+    if (showSelectedOnly && !selectedObjects.includes(object.name)) {
+      return false;
+    }
+
+    if (searchTerm.trim().length === 0) {
+      return true;
+    }
+
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    return object.name.toLowerCase().includes(normalizedSearch);
+  });
+  const activeObject = modules.find((object) => object.name === activeObjectName) ?? null;
+  const allFilteredSelected = filteredObjects.length > 0 && filteredObjects.every((object) => selectedObjects.includes(object.name));
+
+  function toggleObjectSelection(objectName: string) {
+    setSelectedObjects((current) =>
+      current.includes(objectName) ? current.filter((name) => name !== objectName) : [...current, objectName]
+    );
+  }
+
+  function toggleSelectAllFiltered() {
+    setSelectedObjects((current) => {
+      if (allFilteredSelected) {
+        return current.filter((name) => !filteredObjects.some((object) => object.name === name));
+      }
+
+      const next = new Set(current);
+      filteredObjects.forEach((object) => next.add(object.name));
+      return [...next];
+    });
+  }
+
+  function handleSave() {
+    if (!draft.name.trim() || selectedObjects.length === 0) {
+      return;
+    }
+
+    onSave({
+      description: draft.description.trim(),
+      name: draft.name.trim(),
+      selectedModules: selectedObjects
+    });
+  }
+
+  return (
+    <div className="sandbox-template-builder-shell">
+      <div className="sandbox-template-builder-header">
+        <h3>{initialTemplate ? "Edit Sandbox Template" : "New Sandbox Template"}</h3>
+        <button className="sandbox-page-help-link" type="button">
+          Help for this Page
+        </button>
+      </div>
+
+      <div className="sandbox-template-purpose-strip">
+        Build a backend-only template for this app so API routes, workflow logic, messaging, schema-backed records, and service rules can
+        change safely without affecting the frontend workspaces until you promote those changes.
+      </div>
+
+      <div className="sandbox-template-action-row sandbox-template-action-row-top">
+        <button className="sandbox-new-button" disabled={!draft.name.trim() || selectedObjects.length === 0} onClick={handleSave} type="button">
+          {initialTemplate ? "Update" : "Save"}
+        </button>
+        {onDelete ? <button className="sandbox-new-button" onClick={onDelete} type="button">Delete</button> : null}
+        <button className="sandbox-new-button" onClick={onCancel} type="button">
+          Cancel
+        </button>
+      </div>
+
+      <section className="sandbox-template-section">
+        <div className="sandbox-section-title sandbox-template-section-title">
+          <span>Sandbox Template Information</span>
+          <span className="sandbox-required-label">Required Information</span>
+        </div>
+
+        <div className="sandbox-template-form-grid">
+          <label className="sandbox-template-field sandbox-template-field-name">
+            <span>Name</span>
+            <input
+              onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
+              required
+              value={draft.name}
+            />
+          </label>
+
+          <label className="sandbox-template-field sandbox-template-field-description">
+            <span>Description</span>
+            <textarea
+              onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
+              rows={4}
+              value={draft.description}
+            />
+          </label>
+        </div>
+      </section>
+
+      <section className="sandbox-template-section">
+        <div className="sandbox-template-objects-intro">Select the actual backend modules and route families you want this app sandbox template to isolate.</div>
+
+        <div className="sandbox-template-object-layout">
+          <div className="sandbox-template-object-panel">
+            <div className="sandbox-template-object-header">
+              <strong>Backend Modules</strong>
+              <div className="sandbox-template-filter-links">
+                <button className={!showSelectedOnly ? "is-active" : ""} onClick={() => setShowSelectedOnly(false)} type="button">
+                  Show All
+                </button>
+                <span>|</span>
+                <button className={showSelectedOnly ? "is-active" : ""} onClick={() => setShowSelectedOnly(true)} type="button">
+                  Show Selected
+                </button>
+              </div>
+            </div>
+
+            <div className="sandbox-template-object-table-shell">
+              <div className="sandbox-template-search-row">
+                <input
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Search"
+                  value={searchTerm}
+                />
+              </div>
+
+              <div className="sandbox-template-object-scroll">
+                <table className="sandbox-table sandbox-template-object-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Source Files</th>
+                      <th className="sandbox-template-selected-column">
+                        <input aria-label="Select all backend modules" checked={allFilteredSelected} onChange={toggleSelectAllFiltered} type="checkbox" />
+                        <span>Include</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredObjects.map((object) => {
+                      const isSelected = selectedObjects.includes(object.name);
+                      const isActive = activeObjectName === object.name;
+
+                      return (
+                        <tr
+                          className={isActive ? "is-active" : ""}
+                          key={object.name}
+                          onClick={() => setActiveObjectName(object.name)}
+                        >
+                          <td>{object.name}</td>
+                          <td>{object.sourceFiles.length > 0 ? object.sourceFiles.length : ""}</td>
+                          <td className="sandbox-template-selected-column">
+                            <input
+                              checked={isSelected}
+                              onChange={() => toggleObjectSelection(object.name)}
+                              onClick={(event) => event.stopPropagation()}
+                              type="checkbox"
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="sandbox-template-selection-count">Modules Selected: {selectedObjects.length}</div>
+            </div>
+          </div>
+
+          <aside className="sandbox-template-detail-panel">
+            <div className="sandbox-template-detail-title">
+              <strong>Module Details:</strong>
+              <span>Click a backend module to see what this template isolates from the live app.</span>
+            </div>
+
+            {activeObject ? (
+              <div className="sandbox-template-detail-card">
+                <h4>{activeObject.name}</h4>
+                <p>{activeObject.detail}</p>
+                <div className="sandbox-template-detail-meta">
+                  <span>Source Files</span>
+                  <strong>{activeObject.sourceFiles.length}</strong>
+                </div>
+                <div className="sandbox-template-detail-meta">
+                  <span>Selected for Template</span>
+                  <strong>{selectedObjects.includes(activeObject.name) ? "Yes" : "No"}</strong>
+                </div>
+                <div className="sandbox-template-detail-meta">
+                  <span>Frontend Impact</span>
+                  <strong>None until promoted</strong>
+                </div>
+              </div>
+            ) : null}
+          </aside>
+        </div>
+      </section>
+
+      <div className="sandbox-template-action-row sandbox-template-action-row-bottom">
+        <button className="sandbox-new-button" disabled={!draft.name.trim() || selectedObjects.length === 0} onClick={handleSave} type="button">
+          {initialTemplate ? "Update" : "Save"}
+        </button>
+        {onDelete ? <button className="sandbox-new-button" onClick={onDelete} type="button">Delete</button> : null}
+        <button className="sandbox-new-button" onClick={onCancel} type="button">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function NewSandboxPage({
+  modules,
+  onCancel,
+  onSave,
+  templates
+}: {
+  modules: SandboxBackendModule[];
+  onCancel: () => void;
+  onSave: (draft: SandboxDraft) => void;
+  templates: SandboxTemplateRow[];
+}) {
+  const defaultTemplateName = templates[0]?.name ?? "";
+  const [name, setName] = useState("");
+  const [purpose, setPurpose] = useState("");
+  const [sandboxType, setSandboxType] = useState("Developer");
+  const [templateName, setTemplateName] = useState(defaultTemplateName);
+  const [activeModuleName, setActiveModuleName] = useState<string | null>(null);
+  const [selectedModules, setSelectedModules] = useState<string[]>(() => templates[0]?.selectedModules ?? []);
+
+  const activeTemplate = templates.find((template) => template.name === templateName) ?? null;
+  const activeModule = modules.find((object) => object.name === activeModuleName) ?? null;
+
+  function handleTemplateChange(nextTemplateName: string) {
+    setTemplateName(nextTemplateName);
+    const nextTemplate = templates.find((template) => template.name === nextTemplateName);
+    setSelectedModules(nextTemplate?.selectedModules ?? []);
+    setActiveModuleName(null);
+  }
+
+  function toggleModuleSelection(moduleName: string) {
+    setSelectedModules((current) =>
+      current.includes(moduleName) ? current.filter((name) => name !== moduleName) : [...current, moduleName]
+    );
+  }
+
+  function handleSave() {
+    if (!name.trim() || !templateName || selectedModules.length === 0) {
+      return;
+    }
+
+    onSave({
+      name: name.trim(),
+      purpose: purpose.trim(),
+      selectedModules,
+      templateName,
+      type: sandboxType
+    });
+  }
+
+  return (
+    <div className="sandbox-template-builder-shell">
+      <div className="sandbox-template-builder-header">
+        <h3>New Sandbox</h3>
+        <button className="sandbox-page-help-link" type="button">
+          Help for this Page
+        </button>
+      </div>
+
+      <div className="sandbox-template-purpose-strip">
+        Provision a backend-safe sandbox from a saved template. The template preloads API, workflow, messaging, and schema module presets so
+        backend edits stay isolated from the live frontend until you explicitly promote them.
+      </div>
+
+      <div className="sandbox-template-action-row sandbox-template-action-row-top">
+        <button className="sandbox-new-button" disabled={!name.trim() || !templateName || selectedModules.length === 0} onClick={handleSave} type="button">
+          Save
+        </button>
+        <button className="sandbox-new-button" onClick={onCancel} type="button">
+          Cancel
+        </button>
+      </div>
+
+      <section className="sandbox-template-section">
+        <div className="sandbox-section-title sandbox-template-section-title">
+          <span>Sandbox Information</span>
+          <span className="sandbox-required-label">Required Information</span>
+        </div>
+
+        <div className="sandbox-template-form-grid">
+          <label className="sandbox-template-field sandbox-template-field-name">
+            <span>Name</span>
+            <input onChange={(event) => setName(event.target.value)} required value={name} />
+          </label>
+
+          <label className="sandbox-template-field">
+            <span>Sandbox Type</span>
+            <select onChange={(event) => setSandboxType(event.target.value)} value={sandboxType}>
+              <option value="Developer">Developer</option>
+              <option value="Developer Pro">Developer Pro</option>
+              <option value="Partial Copy">Partial Copy</option>
+            </select>
+          </label>
+
+          <label className="sandbox-template-field">
+            <span>Backend Template</span>
+            <select onChange={(event) => handleTemplateChange(event.target.value)} value={templateName}>
+              {templates.map((template) => (
+                <option key={template.name} value={template.name}>
+                  {template.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="sandbox-template-field sandbox-template-field-description">
+            <span>Purpose</span>
+            <textarea onChange={(event) => setPurpose(event.target.value)} rows={4} value={purpose} />
+          </label>
+        </div>
+
+        {activeTemplate ? (
+          <div className="sandbox-template-summary-strip">
+            <span className="legacy-chip tone-stable">{activeTemplate.name}</span>
+            <span className="legacy-chip tone-neutral">{selectedModules.length} backend modules</span>
+            <span className="legacy-chip tone-neutral">Frontend untouched until promotion</span>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="sandbox-template-section">
+        <div className="sandbox-template-objects-intro">Template preset modules start selected below. You can fine-tune the backend scope before provisioning.</div>
+
+        <div className="sandbox-template-object-layout">
+          <div className="sandbox-template-object-panel">
+            <div className="sandbox-template-object-header">
+              <strong>Preset Backend Modules</strong>
+              <span className="sandbox-template-helper-copy">Driven by {templateName || "template selection"}</span>
+            </div>
+
+            <div className="sandbox-template-object-table-shell">
+              <div className="sandbox-template-object-scroll">
+                <table className="sandbox-table sandbox-template-object-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Source Files</th>
+                      <th className="sandbox-template-selected-column">
+                        <span>Include</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {modules.map((object) => {
+                      const isSelected = selectedModules.includes(object.name);
+                      const isActive = activeModuleName === object.name;
+
+                      return (
+                        <tr className={isActive ? "is-active" : ""} key={object.name} onClick={() => setActiveModuleName(object.name)}>
+                          <td>{object.name}</td>
+                          <td>{object.sourceFiles.length}</td>
+                          <td className="sandbox-template-selected-column">
+                            <input
+                              checked={isSelected}
+                              onChange={() => toggleModuleSelection(object.name)}
+                              onClick={(event) => event.stopPropagation()}
+                              type="checkbox"
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="sandbox-template-selection-count">Modules Selected: {selectedModules.length}</div>
+            </div>
+          </div>
+
+          <aside className="sandbox-template-detail-panel">
+            <div className="sandbox-template-detail-title">
+              <strong>Provisioning Details:</strong>
+              <span>Review how this sandbox stays backend-only until promoted.</span>
+            </div>
+
+            {activeModule ? (
+              <div className="sandbox-template-detail-card">
+                <h4>{activeModule.name}</h4>
+                <p>{activeModule.detail}</p>
+                <div className="sandbox-template-detail-meta">
+                  <span>Included by Template</span>
+                  <strong>{activeTemplate?.selectedModules.includes(activeModule.name) ? "Yes" : "No"}</strong>
+                </div>
+                <div className="sandbox-template-detail-meta">
+                  <span>Included in This Sandbox</span>
+                  <strong>{selectedModules.includes(activeModule.name) ? "Yes" : "No"}</strong>
+                </div>
+                <div className="sandbox-template-detail-meta">
+                  <span>Frontend Impact</span>
+                  <strong>UI unchanged</strong>
+                </div>
+              </div>
+            ) : null}
+          </aside>
+        </div>
+      </section>
+
+      <div className="sandbox-template-action-row sandbox-template-action-row-bottom">
+        <button className="sandbox-new-button" disabled={!name.trim() || !templateName || selectedModules.length === 0} onClick={handleSave} type="button">
+          Save
+        </button>
+        <button className="sandbox-new-button" onClick={onCancel} type="button">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function buildLocalSandboxPromotionPreview(sandboxContext: SandboxSessionContext): SandboxPromotionPreview {
+  const modules = fallbackSandboxBackendModules.slice(0, 4);
+
+  const changes = modules.map((module, index) => {
+    const leafName = index === 0 ? "Desktop" : index === 1 ? "Website Feed" : index === 2 ? "Communicate" : "Notification Center";
+    const viewName =
+      index === 0 ? "Workspace shell" : index === 1 ? "Workflow panels" : index === 2 ? "Customer timeline" : "Webhook processing";
+    const entityName =
+      index === 0 ? "dashboardPayload" : index === 1 ? "workflowActionPlan" : index === 2 ? "crmConversation" : "twilioWebhook";
+    const fieldName =
+      index === 0 ? "workspaceRouteMap" : index === 1 ? "submitTaskPlan" : index === 2 ? "threadHydrationContract" : "signatureVerification";
+    const productionValue =
+      index === 0
+        ? "Current route-to-leaf map and shell labels."
+        : index === 1
+          ? "Current submit-action task plan and assignment flow."
+          : index === 2
+            ? "Current thread hydration contract and timeline stitching."
+            : "Current signature verification and callback parsing rules.";
+    const sandboxValue =
+      index === 0
+        ? "Corrected route-to-leaf map with sandbox shell overrides."
+        : index === 1
+          ? "Updated submit-action task plan and assignment flow."
+          : index === 2
+            ? `Updated thread hydration contract for ${sandboxContext.sandboxName}.`
+            : `Updated signature verification and callback parsing for ${sandboxContext.sandboxName}.`;
+    const riskLevel = (index === 0 || index === 3 ? "high" : "medium") as SandboxPromotionRiskLevel;
+
+    return {
+      affectedLeafs: [leafName],
+      affectedViews: [viewName],
+      entityName,
+      fieldName,
+      id: `local-change-${index}`,
+      impactSummary: module.detail,
+      leafName,
+      moduleName: module.name,
+      productionState: `${entityName}.${fieldName}: ${productionValue}`,
+      productionValue,
+      riskLevel,
+      sandboxState: `${entityName}.${fieldName}: ${sandboxValue}`,
+      sandboxValue,
+      sourceFiles: module.sourceFiles,
+      viewName
+    };
+  });
+
+  const validationChecks = modules.map((module, index) => ({
+    detail:
+      index % 2 === 0
+        ? `Compare persisted field values for ${module.name} before deployment.`
+        : `Review downstream dependencies and deployment health for ${module.name}.`,
+    id: `local-check-${index}`,
+    label: `${module.name} reviewed`,
+    status: (index === 0 ? "attention" : index === 1 ? "warning" : "ready") as SandboxPromotionCheckStatus
+  }));
+
+  return {
+    changes,
+    comparisonViews: changes.map((change) => ({
+      affectedLeafs: change.affectedLeafs,
+      fieldDiffs: [`${change.entityName}.${change.fieldName}: ${change.productionValue} -> ${change.sandboxValue}`],
+      id: `local-compare-${change.id}`,
+      impactSummary: change.impactSummary,
+      productionViewLabel: `${change.viewName} keeps the current production value.`,
+      riskLevel: change.riskLevel,
+      sandboxViewLabel: `${change.viewName} proposes the sandbox value for review.`,
+      title: `${change.moduleName} - ${change.viewName}`
+    })),
+    generatedAt: new Date().toLocaleString("en-US", {
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      month: "numeric",
+      year: "numeric"
+    }),
+    healthScore: 72,
+    hiddenContainerLabel: `${sandboxContext.sandboxName} deployment plan`,
+    sandboxId: sandboxContext.sandboxId,
+    sandboxName: sandboxContext.sandboxName,
+    summary: `${changes.length} persisted deploy candidates are ready for comparison across ${modules.length} backend modules.`,
+    validationChecks
+  };
+}
+
+function SandboxDeploymentWorkbench({
+    activeStoreId,
+    activeUserName,
+    startOpen = false,
+    sandboxContext
+  }: {
+    activeStoreId: string;
+    activeUserName: string;
+    startOpen?: boolean;
+    sandboxContext: SandboxSessionContext | null;
+  }) {
+    const [isPlanOpen, setIsPlanOpen] = useState(startOpen);
+    const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+    const [isPushing, setIsPushing] = useState(false);
+    const [notice, setNotice] = useState<string | null>(null);
+    const [preview, setPreview] = useState<SandboxPromotionPreview | null>(null);
+    const [selectedChangeIds, setSelectedChangeIds] = useState<string[]>([]);
+    const [reviewedCheckIds, setReviewedCheckIds] = useState<string[]>([]);
+
+    useEffect(() => {
+      if (!preview) {
+        setSelectedChangeIds([]);
+        setReviewedCheckIds([]);
+        return;
+      }
+
+      setSelectedChangeIds(preview.changes.map((change) => change.id));
+      setReviewedCheckIds([]);
+    }, [preview]);
+
+    async function loadPlan() {
+      if (preview || !sandboxContext) {
+        return;
+      }
+
+      setIsLoadingPreview(true);
+
+      try {
+        const nextPreview = await getSandboxPromotionPreview(activeStoreId, sandboxContext.sandboxId);
+        setPreview(nextPreview);
+      } catch (error) {
+        setPreview(buildLocalSandboxPromotionPreview(sandboxContext));
+        setNotice(error instanceof Error ? `${error.message} Showing the local deployment planner.` : "Showing the local deployment planner.");
+      } finally {
+        setIsLoadingPreview(false);
+      }
+    }
+
+    useEffect(() => {
+      if (!startOpen) {
+        return;
+      }
+
+      setIsPlanOpen(true);
+      void loadPlan();
+    }, [startOpen]);
+
+    async function handleOpenPlan() {
+      const nextOpen = !isPlanOpen;
+      setIsPlanOpen(nextOpen);
+
+      if (!nextOpen || preview || !sandboxContext) {
+        return;
+      }
+
+      await loadPlan();
+    }
+
+    function toggleChange(changeId: string) {
+      setSelectedChangeIds((current) =>
+        current.includes(changeId) ? current.filter((id) => id !== changeId) : [...current, changeId]
+      );
+    }
+
+    function toggleReviewedCheck(checkId: string) {
+      setReviewedCheckIds((current) =>
+        current.includes(checkId) ? current.filter((id) => id !== checkId) : [...current, checkId]
+      );
+    }
+
+    async function handlePushSelectedChanges() {
+      if (!sandboxContext || !preview) {
+        return;
+      }
+
+      setIsPushing(true);
+
+      try {
+        const result = await pushSandboxToProduction(activeStoreId, sandboxContext.sandboxId, {
+          actorName: activeUserName,
+          selectedChangeIds,
+          validatedCheckIds: reviewedCheckIds
+        });
+        setNotice(result.message);
+        setPreview(result.preview);
+      } catch (error) {
+        setNotice(error instanceof Error ? error.message : "Unable to push selected sandbox changes.");
+      } finally {
+        setIsPushing(false);
+      }
+    }
+
+    const allChecksReviewed = preview ? reviewedCheckIds.length === preview.validationChecks.length : false;
+
+    return (
+      <section aria-label="Sandbox blank canvas" className="sandbox-push-workbench-shell">
+        <div className="sandbox-push-workbench-intro">
+          <div>
+            <span className="sandbox-push-workbench-eyebrow">Sandbox Deployment Workbench</span>
+            <h2>Push to Production</h2>
+            <p>
+              Build a deploy plan from the current sandbox, inspect the backend modules and leafs it touches, compare sandbox vs production
+              behavior, and run the health checks you want reviewed before deployment.
+            </p>
+          </div>
+          <div className="sandbox-push-workbench-actions">
+            <button className="sandbox-new-button" onClick={() => void handleOpenPlan()} type="button">
+              {isPlanOpen ? "Hide Deployment Plan" : "Push to Production"}
+            </button>
+          </div>
+        </div>
+
+        <div className="sandbox-push-workbench-banner-grid">
+          <article className="sandbox-push-banner-card">
+            <span>Sandbox</span>
+            <strong>{sandboxContext?.sandboxName ?? "Current sandbox"}</strong>
+          </article>
+          <article className="sandbox-push-banner-card">
+            <span>Production mirror</span>
+            <strong>{sandboxContext?.sourceStoreName ?? "Current production store"}</strong>
+          </article>
+          <article className="sandbox-push-banner-card">
+            <span>Deploy mode</span>
+            <strong>Selective backend promotion</strong>
+          </article>
+        </div>
+
+        {notice ? <div className="sandbox-push-workbench-notice">{notice}</div> : null}
+
+        {isPlanOpen ? (
+          <div aria-label={preview?.hiddenContainerLabel ?? "Sandbox deployment plan"} className="sandbox-push-hidden-container">
+            {isLoadingPreview ? (
+              <div className="sandbox-push-loading">Locating changed modules, views, and validation checks...</div>
+            ) : preview ? (
+              <>
+                <section className="sandbox-push-summary-grid">
+                  <article className="sandbox-push-summary-card">
+                    <span>Deploy summary</span>
+                    <strong>{preview.summary}</strong>
+                    <small>Generated {preview.generatedAt}</small>
+                  </article>
+                  <article className="sandbox-push-summary-card">
+                    <span>Health score</span>
+                    <strong>{preview.healthScore}%</strong>
+                    <small>Review all checks before pushing selected changes.</small>
+                  </article>
+                  <article className="sandbox-push-summary-card">
+                    <span>Selected changes</span>
+                    <strong>{selectedChangeIds.length}</strong>
+                    <small>{preview.changes.length} deploy candidates available</small>
+                  </article>
+                </section>
+
+                <section className="sandbox-push-section">
+                  <div className="sandbox-push-section-heading">
+                    <div>
+                      <strong>Changed modules and leafs</strong>
+                      <p>Select the backend modules you want to push into production.</p>
+                    </div>
+                  </div>
+
+                  <div className="sandbox-push-change-table-wrap">
+                    <table className="sandbox-push-change-table">
+                      <thead>
+                        <tr>
+                          <th>Push</th>
+                          <th>Module</th>
+                          <th>Affected Leafs</th>
+                          <th>Sandbox View</th>
+                          <th>Production View</th>
+                          <th>Source Files</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preview.changes.map((change) => (
+                          <tr key={change.id}>
+                            <td>
+                              <input checked={selectedChangeIds.includes(change.id)} onChange={() => toggleChange(change.id)} type="checkbox" />
+                            </td>
+                            <td>
+                              <strong>{change.moduleName}</strong>
+                              <p>{change.impactSummary}</p>
+                              <div className="sandbox-push-change-meta">
+                                <span>{change.leafName}</span>
+                                <span>{change.viewName}</span>
+                                <span>{`${change.entityName}.${change.fieldName}`}</span>
+                              </div>
+                            </td>
+                            <td>{change.affectedLeafs.join(", ")}</td>
+                            <td>
+                              <div className="sandbox-push-value-cell">
+                                <strong>{change.sandboxValue}</strong>
+                                <p>{change.sandboxState}</p>
+                              </div>
+                            </td>
+                            <td>
+                              <div className="sandbox-push-value-cell">
+                                <strong>{change.productionValue}</strong>
+                                <p>{change.productionState}</p>
+                              </div>
+                            </td>
+                            <td>
+                              <div className="sandbox-push-source-file-list">
+                                {change.sourceFiles.map((sourceFile) => (
+                                  <span key={sourceFile}>{sourceFile}</span>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+
+                <section className="sandbox-push-compare-grid">
+                  <div className="sandbox-push-section-heading">
+                    <div>
+                      <strong>Cross-view comparison</strong>
+                      <p>Compare how the sandbox and production screens differ before deployment.</p>
+                    </div>
+                  </div>
+
+                  {preview.comparisonViews.map((comparison) => (
+                    <article className={`sandbox-push-compare-card tone-${comparison.riskLevel}`} key={comparison.id}>
+                      <div className="sandbox-push-compare-card-header">
+                        <strong>{comparison.title}</strong>
+                        <span>{comparison.affectedLeafs.join(" | ")}</span>
+                      </div>
+                      <div className="sandbox-push-compare-columns">
+                        <div>
+                          <span>Sandbox Screen</span>
+                          <p>{comparison.sandboxViewLabel}</p>
+                        </div>
+                        <div>
+                          <span>Production Screen</span>
+                          <p>{comparison.productionViewLabel}</p>
+                        </div>
+                      </div>
+                      <p>{comparison.impactSummary}</p>
+                      <ul className="sandbox-push-field-diff-list">
+                        {comparison.fieldDiffs.map((fieldDiff) => (
+                          <li key={fieldDiff}>{fieldDiff}</li>
+                        ))}
+                      </ul>
+                    </article>
+                  ))}
+                </section>
+
+                <section className="sandbox-push-section">
+                  <div className="sandbox-push-section-heading">
+                    <div>
+                      <strong>System health checks</strong>
+                      <p>Review each check so the deployment plan records what was inspected before push.</p>
+                    </div>
+                  </div>
+
+                  <div className="sandbox-push-check-list">
+                    {preview.validationChecks.map((check) => (
+                      <label className={`sandbox-push-check tone-${check.status}`} key={check.id}>
+                        <input checked={reviewedCheckIds.includes(check.id)} onChange={() => toggleReviewedCheck(check.id)} type="checkbox" />
+                        <div>
+                          <strong>{check.label}</strong>
+                          <p>{check.detail}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </section>
+
+                <div className="sandbox-push-footer-actions">
+                  <button
+                    className="sandbox-new-button"
+                    disabled={isPushing || selectedChangeIds.length === 0 || !allChecksReviewed}
+                    onClick={() => void handlePushSelectedChanges()}
+                    type="button"
+                  >
+                    {isPushing ? "Pushing Selected Changes..." : "Push Selected Changes"}
+                  </button>
+                  <button className="sandbox-new-button" onClick={() => setIsPlanOpen(false)} type="button">
+                    Close Plan
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="sandbox-push-loading">Unable to build a deployment plan for this sandbox.</div>
+            )}
+          </div>
+        ) : null}
+      </section>
+    );
+  }
+
+function SandboxesPage({
+  activeUserEmail,
+  activeUserName,
+  onViewChange,
+  storeId
+}: {
+  activeUserEmail: string;
+  activeUserName: string;
+  onViewChange: Dispatch<SetStateAction<WebsiteWorkspaceView>>;
+  storeId: string;
+}) {
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<(typeof sandboxTabOptions)[number]>("Sandboxes");
+  const [isCreatingSandbox, setIsCreatingSandbox] = useState(false);
+  const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
+  const [sandboxModules, setSandboxModules] = useState<SandboxBackendModule[]>(() => fallbackSandboxBackendModules);
+  const [sandboxRows, setSandboxRows] = useState<SandboxRow[]>(() => [...initialSandboxRows]);
+  const [sandboxHistoryRows, setSandboxHistoryRows] = useState<SandboxHistoryRow[]>(() => [...initialSandboxHistoryRows]);
+  const [sandboxTemplateRows, setSandboxTemplateRows] = useState<SandboxTemplateRow[]>(() => [...initialSandboxTemplateRows]);
+  const [sandboxAccessById, setSandboxAccessById] = useState<Record<string, SandboxLoginAccess>>({});
+  const [activeAccessSandboxId, setActiveAccessSandboxId] = useState<string | null>(null);
+  const [loadingSandboxAccessId, setLoadingSandboxAccessId] = useState<string | null>(null);
+  const [sandboxNotice, setSandboxNotice] = useState<string | null>(null);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const isTemplatesTab = activeTab === "Sandbox Templates";
+  const isHistoryTab = activeTab === "Sandbox History";
+  const editingTemplate = sandboxTemplateRows.find((template) => template.id === editingTemplateId) ?? null;
+  const activeAccessRow = activeAccessSandboxId ? sandboxRows.find((row) => row.id === activeAccessSandboxId) ?? null : null;
+  const activeSandboxAccess = activeAccessSandboxId ? sandboxAccessById[activeAccessSandboxId] ?? null : null;
+
+  function applySandboxWorkspacePayload(payload: {
+    history: SandboxHistoryRow[];
+    sandboxes: SandboxRow[];
+    templates: SandboxTemplateRow[];
+  }) {
+    setSandboxRows(payload.sandboxes);
+    setSandboxHistoryRows(payload.history);
+    setSandboxTemplateRows(payload.templates);
+  }
+
+  function shouldUseLocalSandboxFallback(error: unknown) {
+    const message = error instanceof Error ? error.message.toLowerCase() : "";
+    return message.includes("failed to fetch") || message.includes("load failed") || message.includes("networkerror");
+  }
+
+  function buildLocalTimeLabel(date = new Date()) {
+    return date.toLocaleString("en-US", {
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      month: "numeric",
+      year: "numeric"
+    });
+  }
+
+  function buildLocalDiffSummary(selectedModules: string[]) {
+    return `${selectedModules.length} backend modules isolated in this sandbox.`;
+  }
+
+  function buildLocalSandboxAccess(row: SandboxRow): SandboxLoginAccess {
+    const normalizedEmail = activeUserEmail.trim().toLowerCase();
+    const fallbackEmail = normalizedEmail.includes("@") ? normalizedEmail : `${normalizedEmail}@sandbox.local`;
+    const [localPart, domainPart] = fallbackEmail.replace(/\.sandbox$/i, "").split("@");
+    const safeLocalPart = (localPart || row.name).replace(/[^a-z0-9._-]+/gi, "-").toLowerCase();
+    const safeDomainPart = (domainPart || "marinecloud.local").replace(/[^a-z0-9.-]+/gi, "-").toLowerCase();
+
+    return {
+      apiKey: `sbx_local_${row.id.slice(-10)}`,
+      dealerGroupName: row.copiedFrom || "Sandbox Dealer Group",
+      loginEmail: `${safeLocalPart}@${safeDomainPart}.sandbox`,
+      readOnlyNotice: `Sandbox sessions mirror the assigned dealer-group data in read-only mode. Changes stay isolated inside ${row.name}.`,
+      sandboxId: row.id,
+      sandboxName: row.name,
+      sourceStoreId: storeId,
+      sourceStoreName: row.copiedFrom || "Current Store"
+    };
+  }
+
+  function getPromotionStateLabel(status: string) {
+    if (status === "Promoted") {
+      return "Ready to merge";
+    }
+
+    if (status === "Active") {
+      return "Validation running";
+    }
+
+    return "Ready for promote";
+  }
+
+  function updateLocalTemplateUsage(nextRows: SandboxRow[]) {
+    setSandboxTemplateRows((current) =>
+      current.map((template) => ({
+        ...template,
+        inUse: nextRows.some((row) => row.templateId === template.id || row.copiedFrom === template.name)
+      }))
+    );
+  }
+
+  function updateLocalSandboxRows(mutate: (current: SandboxRow[]) => SandboxRow[]) {
+    setSandboxRows((current) => {
+      const nextRows = mutate(current);
+      updateLocalTemplateUsage(nextRows);
+      return nextRows;
+    });
+  }
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    getSandboxBackendModules()
+      .then((modules) => {
+        if (!isCancelled && modules.length > 0) {
+          setSandboxModules(modules);
+        }
+      })
+      .catch(() => {
+        // Keep the local catalog snapshot during frontend-only runs.
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    getSandboxWorkspace(storeId)
+      .then((payload) => {
+        if (!isCancelled) {
+          applySandboxWorkspacePayload(payload);
+        }
+      })
+      .catch(() => {
+        // Keep the local fallback rows when the API is not available.
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [storeId]);
+
+  function handleSandboxTabSelect(tab: (typeof sandboxTabOptions)[number]) {
+    setActiveTab(tab);
+    setActiveAccessSandboxId(null);
+    setIsCreatingSandbox(false);
+    setIsCreatingTemplate(false);
+    setEditingTemplateId(null);
+  }
+
+  async function handleOpenSandboxAccess(row: SandboxRow) {
+    if (activeAccessSandboxId === row.id) {
+      setActiveAccessSandboxId(null);
+      return;
+    }
+
+    setActiveAccessSandboxId(row.id);
+
+    if (sandboxAccessById[row.id]) {
+      return;
+    }
+
+    setLoadingSandboxAccessId(row.id);
+
+    try {
+      const access = await getSandboxLoginAccess(row.id);
+      setSandboxAccessById((current) => ({
+        ...current,
+        [row.id]: access
+      }));
+    } catch (error) {
+      if (!shouldUseLocalSandboxFallback(error)) {
+        setSandboxNotice(error instanceof Error ? error.message : "Unable to load Sandbox access.");
+        setActiveAccessSandboxId(null);
+        return;
+      }
+
+      setSandboxAccessById((current) => ({
+        ...current,
+        [row.id]: buildLocalSandboxAccess(row)
+      }));
+    } finally {
+      setLoadingSandboxAccessId((current) => (current === row.id ? null : current));
+    }
+  }
+
+  async function handleCopySandboxAccess(label: string, value: string) {
+    if (typeof navigator === "undefined" || !navigator.clipboard) {
+      setSandboxNotice(`${label} clipboard copy is unavailable in this browser.`);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(value);
+      setSandboxNotice(`${label} copied for ${activeSandboxAccess?.sandboxName ?? "Sandbox"}.`);
+    } catch {
+      setSandboxNotice(`Unable to copy ${label.toLowerCase()} automatically.`);
+    }
+  }
+
+  async function handleSaveTemplate(draft: SandboxTemplateDraft) {
+    if (editingTemplate) {
+      try {
+        const payload = await updateSandboxTemplate(storeId, editingTemplate.id, draft);
+        applySandboxWorkspacePayload(payload);
+        setSandboxNotice(payload.message);
+        setIsCreatingTemplate(false);
+        setEditingTemplateId(null);
+        setActiveTab("Sandbox Templates");
+        return;
+      } catch (error) {
+        if (!shouldUseLocalSandboxFallback(error)) {
+          setSandboxNotice(error instanceof Error ? error.message : "Unable to update Sandbox template.");
+          return;
+        }
+      }
+
+      setSandboxTemplateRows((current) =>
+        current.map((template) =>
+          template.id === editingTemplate.id
+            ? {
+                ...template,
+                description: draft.description,
+                name: draft.name,
+                selectedModules: draft.selectedModules
+              }
+            : template
+        )
+      );
+      updateLocalSandboxRows((current) =>
+        current.map((sandbox) =>
+          sandbox.templateId === editingTemplate.id && sandbox.copiedFrom === editingTemplate.name
+            ? { ...sandbox, copiedFrom: draft.name }
+            : sandbox
+        )
+      );
+      setSandboxNotice(`Sandbox template ${draft.name} updated.`);
+    } else {
+      try {
+        const payload = await createSandboxTemplate(storeId, draft);
+        applySandboxWorkspacePayload(payload);
+        setSandboxNotice(payload.message);
+        setIsCreatingTemplate(false);
+        setActiveTab("Sandbox Templates");
+        return;
+      } catch (error) {
+        if (!shouldUseLocalSandboxFallback(error)) {
+          setSandboxNotice(error instanceof Error ? error.message : "Unable to save Sandbox template.");
+          return;
+        }
+      }
+
+      setSandboxTemplateRows((current) => [
+        {
+          id: `template-${Date.now()}`,
+          action: "Edit",
+          description: draft.description,
+          inUse: false,
+          name: draft.name,
+          selectedModules: draft.selectedModules
+        },
+        ...current
+      ]);
+      setSandboxNotice(`Sandbox template ${draft.name} saved.`);
+    }
+
+    setIsCreatingTemplate(false);
+    setEditingTemplateId(null);
+    setActiveTab("Sandbox Templates");
+  }
+
+  async function handleDeleteTemplate() {
+    if (!editingTemplate) {
+      return;
+    }
+
+    try {
+      const payload = await deleteSandboxTemplate(storeId, editingTemplate.id);
+      applySandboxWorkspacePayload(payload);
+      setSandboxNotice(payload.message);
+      setIsCreatingTemplate(false);
+      setEditingTemplateId(null);
+      setActiveTab("Sandbox Templates");
+      return;
+    } catch (error) {
+      if (!shouldUseLocalSandboxFallback(error)) {
+        setSandboxNotice(error instanceof Error ? error.message : "Unable to delete Sandbox template.");
+        return;
+      }
+    }
+
+    setSandboxTemplateRows((current) => current.filter((template) => template.id !== editingTemplate.id));
+    setSandboxNotice(`Sandbox template ${editingTemplate.name} deleted.`);
+    setIsCreatingTemplate(false);
+    setEditingTemplateId(null);
+    setActiveTab("Sandbox Templates");
+  }
+
+  async function handleSaveSandbox(draft: SandboxDraft) {
+    const now = new Date();
+    const timeLabel = buildLocalTimeLabel(now);
+    const generatedOrgId = `00DSB${String(now.getTime()).slice(-8)}`;
+    const template = sandboxTemplateRows.find((candidate) => candidate.name === draft.templateName) ?? null;
+
+    try {
+      const payload = await createSandbox(storeId, {
+        actorEmail: activeUserEmail,
+        actorName: activeUserName,
+        name: draft.name,
+        purpose: draft.purpose,
+        selectedModules: draft.selectedModules,
+        templateId: template?.id ?? null,
+        type: draft.type
+      });
+      applySandboxWorkspacePayload(payload);
+      setSandboxNotice(payload.message);
+      setIsCreatingSandbox(false);
+      setActiveTab("Sandboxes");
+      return;
+    } catch (error) {
+      if (!shouldUseLocalSandboxFallback(error)) {
+        setSandboxNotice(error instanceof Error ? error.message : "Unable to provision Sandbox.");
+        return;
+      }
+    }
+
+    updateLocalSandboxRows((current) => [
+      {
+        id: `sandbox-${now.getTime()}`,
+        actionLinks: ["Clone", "Refresh", "Promote", "Log In", "Del"],
+        completedOn: timeLabel,
+        copiedFrom: draft.templateName,
+        currentOrgId: generatedOrgId,
+        description:
+          draft.purpose || `Backend-safe copy of ${draft.selectedModules.length} app modules from ${draft.templateName}.`,
+        diffSummary: buildLocalDiffSummary(draft.selectedModules),
+        location: "Premier Marine Cloud Sandbox Runtime",
+        name: draft.name,
+        releaseType: draft.type === "Partial Copy" ? "Preview" : "Non-Preview",
+        selectedModules: draft.selectedModules,
+        status: "Completed",
+        templateId: template?.id ?? null,
+        type: draft.type
+      },
+      ...current
+    ]);
+    setSandboxHistoryRows((current) => [
+      {
+        activated: timeLabel,
+        activatedBy: "Sandbox Provisioner",
+        detail: `${draft.name} provisioned from ${draft.templateName}.`,
+        diffSummary: buildLocalDiffSummary(draft.selectedModules),
+        eventType: "Provisioned",
+        finished: timeLabel,
+        id: `history-${now.getTime()}`,
+        refreshed: timeLabel,
+        requestedBy: "Current Operator",
+        sandbox: draft.name
+      },
+      ...current
+    ]);
+    setSandboxNotice(`Sandbox ${draft.name} provisioned.`);
+    setIsCreatingSandbox(false);
+    setActiveTab("Sandboxes");
+  }
+
+  async function handleSandboxAction(row: SandboxRow, action: string) {
+    const actionMode =
+      action === "Clone"
+        ? "clone"
+        : action === "Del"
+          ? "delete"
+          : action === "Refresh"
+            ? "refresh"
+              : action === "Promote"
+                ? "promote"
+            : action === "Log In"
+              ? "login"
+              : null;
+
+    if (!actionMode) {
+      return;
+    }
+
+    try {
+      const payload = await runSandboxAction(storeId, row.id, {
+        actorName: activeUserName,
+        mode: actionMode
+      });
+      applySandboxWorkspacePayload(payload);
+      setSandboxNotice(payload.message);
+      if (action === "Log In") {
+        navigate(`/login/sandbox/${row.id}`);
+      }
+      return;
+    } catch (error) {
+      if (!shouldUseLocalSandboxFallback(error)) {
+        setSandboxNotice(error instanceof Error ? error.message : "Unable to run Sandbox action.");
+        return;
+      }
+    }
+
+    const now = new Date();
+    const timeLabel = buildLocalTimeLabel(now);
+
+    if (action === "Clone") {
+      let cloneName = `${row.name} Clone`;
+      let counter = 2;
+      while (sandboxRows.some((candidate) => candidate.name === cloneName)) {
+        cloneName = `${row.name} Clone ${counter}`;
+        counter += 1;
+      }
+
+      updateLocalSandboxRows((current) => [
+        {
+          ...row,
+          id: `sandbox-${now.getTime()}`,
+          completedOn: timeLabel,
+          copiedFrom: row.name,
+          currentOrgId: `00DSB${String(now.getTime()).slice(-8)}`,
+          name: cloneName
+        },
+        ...current
+      ]);
+      setSandboxHistoryRows((current) => [
+        {
+          activated: timeLabel,
+          activatedBy: "Sandbox Provisioner",
+          detail: `${cloneName} cloned from ${row.name}.`,
+          diffSummary: row.diffSummary,
+          eventType: "Cloned",
+          finished: timeLabel,
+          id: `history-${now.getTime()}`,
+          refreshed: timeLabel,
+          requestedBy: "Current Operator",
+          sandbox: cloneName
+        },
+        ...current
+      ]);
+      setSandboxNotice(`Sandbox ${cloneName} cloned from ${row.name}.`);
+      return;
+    }
+
+    if (action === "Del") {
+      updateLocalSandboxRows((current) => current.filter((candidate) => candidate.id !== row.id));
+      setSandboxHistoryRows((current) => [
+        {
+          activated: "",
+          activatedBy: "",
+          detail: `${row.name} deleted from the active Sandbox list.`,
+          diffSummary: row.diffSummary,
+          eventType: "Deleted",
+          finished: timeLabel,
+          id: `history-${now.getTime()}`,
+          refreshed: "",
+          requestedBy: "Current Operator",
+          sandbox: row.name
+        },
+        ...current
+      ]);
+      setSandboxNotice(`Sandbox ${row.name} deleted.`);
+      return;
+    }
+
+    if (action === "Refresh") {
+      updateLocalSandboxRows((current) =>
+        current.map((candidate) =>
+          candidate.id === row.id
+            ? {
+                ...candidate,
+                completedOn: timeLabel,
+                status: "Completed"
+              }
+            : candidate
+        )
+      );
+      setSandboxHistoryRows((current) => [
+        {
+          activated: "",
+          activatedBy: "",
+          detail: `${row.name} refreshed and synchronized with its backend module set.`,
+          diffSummary: row.diffSummary,
+          eventType: "Refreshed",
+          finished: timeLabel,
+          id: `history-${now.getTime()}`,
+          refreshed: timeLabel,
+          requestedBy: "Current Operator",
+          sandbox: row.name
+        },
+        ...current
+      ]);
+      setSandboxNotice(`Sandbox ${row.name} refreshed.`);
+      return;
+    }
+
+    if (action === "Promote") {
+      updateLocalSandboxRows((current) =>
+        current.map((candidate) =>
+          candidate.id === row.id
+            ? {
+                ...candidate,
+                status: "Promoted"
+              }
+            : candidate
+        )
+      );
+      setSandboxHistoryRows((current) => [
+        {
+          activated: timeLabel,
+          activatedBy: "Current Operator",
+          detail: `${row.name} marked ready for promotion with ${row.selectedModules.length} backend modules in scope.`,
+          diffSummary: row.diffSummary,
+          eventType: "Promoted",
+          finished: "",
+          id: `history-${now.getTime()}`,
+          refreshed: "",
+          requestedBy: "Current Operator",
+          sandbox: row.name
+        },
+        ...current
+      ]);
+      setSandboxNotice(`Sandbox ${row.name} marked ready for promotion.`);
+      return;
+    }
+
+    setSandboxHistoryRows((current) => [
+      {
+        activated: timeLabel,
+        activatedBy: "Current Operator",
+        detail: `${row.name} login initiated for org ${row.currentOrgId}.`,
+        diffSummary: row.diffSummary,
+        eventType: "Login",
+        finished: "",
+        id: `history-${now.getTime()}`,
+        refreshed: "",
+        requestedBy: "Current Operator",
+        sandbox: row.name
+      },
+      ...current
+    ]);
+    setSandboxNotice(`Sandbox login opened for ${row.name} (${row.currentOrgId}).`);
+    navigate(`/login/sandbox/${row.id}`);
+  }
+
+  function handleEditTemplate(row: SandboxTemplateRow) {
+    setEditingTemplateId(row.id);
+    setIsCreatingTemplate(true);
+  }
+
+  if (isCreatingSandbox) {
+    return (
+      <div className="sandbox-page-shell sandbox-page-shell-compact">
+        <section className="sandbox-table-shell">
+          <div className="sandbox-tab-strip" role="tablist" aria-label="Sandbox sections">
+            {sandboxTabOptions.map((tab) => (
+              <button
+                aria-selected={tab === activeTab}
+                className={tab === activeTab ? "is-active" : ""}
+                key={tab}
+                onClick={() => handleSandboxTabSelect(tab)}
+                role="tab"
+                type="button"
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          <NewSandboxPage modules={sandboxModules} onCancel={() => setIsCreatingSandbox(false)} onSave={handleSaveSandbox} templates={sandboxTemplateRows} />
+        </section>
+      </div>
+    );
+  }
+
+  if (isCreatingTemplate) {
+    return (
+      <div className="sandbox-page-shell sandbox-page-shell-compact">
+        <section className="sandbox-table-shell">
+          <div className="sandbox-tab-strip" role="tablist" aria-label="Sandbox sections">
+            {sandboxTabOptions.map((tab) => (
+              <button
+                aria-selected={tab === activeTab}
+                className={tab === activeTab ? "is-active" : ""}
+                key={tab}
+                onClick={() => handleSandboxTabSelect(tab)}
+                role="tab"
+                type="button"
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          <NewSandboxTemplatePage
+            initialTemplate={editingTemplate}
+            modules={sandboxModules}
+            onCancel={() => {
+              setIsCreatingTemplate(false);
+              setEditingTemplateId(null);
+            }}
+            onDelete={editingTemplate ? handleDeleteTemplate : undefined}
+            onSave={handleSaveTemplate}
+          />
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="sandbox-page-shell">
+      <section className="sandbox-page-header">
+        <div>
+          <div className="sandbox-page-title-row">
+            <h2>Sandboxes</h2>
+          </div>
+          <p>
+            Sandboxes in Premier Marine Cloud are backend-safe working copies of this app. Use them to change APIs, workflow logic,
+            messaging, integrations, schema-backed records, and seeded data without affecting the frontend experience operators use every day.
+            Sandbox Templates let you preselect which backend modules and data slices move into that isolated copy.
+          </p>
+        </div>
+        <button className="sandbox-page-help-link" onClick={() => onViewChange("feed")} type="button">
+          Return to Feed Console
+        </button>
+      </section>
+
+      <section className="sandbox-page-alert" role="status">
+        <span className="sandbox-page-alert-icon">i</span>
+        <p>
+          Plan ahead! The sandbox preview window for Winter '27 begins June 13, 2026.
+          <button className="sandbox-page-inline-link" type="button">Salesforce Sandbox Preview Instructions</button>
+        </p>
+      </section>
+
+      {sandboxNotice ? (
+        <section className="sandbox-page-alert" role="status">
+          <span className="sandbox-page-alert-icon">i</span>
+          <p>{sandboxNotice}</p>
+        </section>
+      ) : null}
+
+      <section className="sandbox-license-panel">
+        <div className="sandbox-section-title">Available Sandbox Licenses</div>
+        <div className="sandbox-license-grid">
+          {sandboxLicenseCards.map((card) => (
+            <article className="sandbox-license-card" key={card.kind}>
+              <strong>{card.kind}</strong>
+              <span className={`sandbox-license-usage tone-${card.tone}`}>{card.inUseLabel}</span>
+              <span className="sandbox-license-availability">({card.available})</span>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="sandbox-table-shell">
+        <div className="sandbox-tab-strip" role="tablist" aria-label="Sandbox sections">
+          {sandboxTabOptions.map((tab) => (
+            <button
+              aria-selected={tab === activeTab}
+              className={tab === activeTab ? "is-active" : ""}
+              key={tab}
+              onClick={() => handleSandboxTabSelect(tab)}
+              role="tab"
+              type="button"
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        {!isHistoryTab ? (
+          <div className="sandbox-table-toolbar">
+            <button
+              className="sandbox-new-button"
+              onClick={() => (isTemplatesTab ? setIsCreatingTemplate(true) : setIsCreatingSandbox(true))}
+              type="button"
+            >
+              {isTemplatesTab ? "New Sandbox Template" : "New Sandbox"}
+            </button>
+          </div>
+        ) : null}
+
+        <div className="sandbox-table-wrap">
+          {isTemplatesTab ? (
+            <table className="sandbox-table sandbox-table-templates">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th>Name</th>
+                  <th>Description</th>
+                  <th>In Use</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sandboxTemplateRows.map((row) => (
+                  <tr key={row.id}>
+                    <td><button className="sandbox-link-button" onClick={() => handleEditTemplate(row)} type="button">{row.action}</button></td>
+                    <td><button className="sandbox-link-button is-name" onClick={() => handleEditTemplate(row)} type="button">{row.name}</button></td>
+                    <td>{row.description}</td>
+                    <td>{row.inUse ? <span className="sandbox-info-pill">i</span> : null}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : isHistoryTab ? (
+            <table className="sandbox-table sandbox-table-history">
+              <thead>
+                <tr>
+                  <th>Sandbox</th>
+                  <th>Event</th>
+                  <th>Detail</th>
+                  <th>Diff Summary</th>
+                  <th>Requested By</th>
+                  <th>Activated By</th>
+                  <th>Refreshed</th>
+                  <th>Finished</th>
+                  <th>Activated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sandboxHistoryRows.map((row) => (
+                  <tr key={row.id}>
+                    <td>{row.sandbox}</td>
+                    <td>{row.eventType}</td>
+                    <td>{row.detail}</td>
+                    <td>{row.diffSummary}</td>
+                    <td><button className="sandbox-link-button" type="button">{row.requestedBy}</button></td>
+                    <td>{row.activatedBy ? <button className="sandbox-link-button" type="button">{row.activatedBy}</button> : null}</td>
+                    <td>{row.refreshed}</td>
+                    <td>{row.finished}</td>
+                    <td>{row.activated}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <table className="sandbox-table sandbox-table-sandboxes">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Promotion State</th>
+                  <th>Location</th>
+                  <th>Release Type</th>
+                  <th>Current Org Id</th>
+                  <th>Completed On</th>
+                  <th>Diff Summary</th>
+                  <th>Description</th>
+                  <th>Copied From</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sandboxRows.map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <div className="sandbox-action-links">
+                        {row.actionLinks.map((link, index) => (
+                          <span key={link}>
+                            <button className="sandbox-link-button" onClick={() => handleSandboxAction(row, link)} type="button">{link}</button>
+                            {index < row.actionLinks.length - 1 ? <span className="sandbox-link-divider">|</span> : null}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td>
+                      <button className="sandbox-link-button is-name" onClick={() => void handleOpenSandboxAccess(row)} type="button">{row.name}</button>
+                      <div className="sandbox-row-secondary-action">
+                        <button className="sandbox-link-button" onClick={() => void handleOpenSandboxAccess(row)} type="button">
+                          {activeAccessSandboxId === row.id ? "Hide Access" : "View Access"}
+                        </button>
+                      </div>
+                    </td>
+                    <td>{row.type}</td>
+                    <td>{row.status}</td>
+                    <td>
+                      <span className={`sandbox-status-pill${row.status === "Promoted" ? " is-promoted" : row.status === "Active" ? " is-active" : ""}`}>
+                        {getPromotionStateLabel(row.status)}
+                      </span>
+                    </td>
+                    <td>{row.location}</td>
+                    <td>{row.releaseType}</td>
+                    <td>{row.currentOrgId}</td>
+                    <td>{row.completedOn}</td>
+                    <td>{row.diffSummary}</td>
+                    <td>{row.description}</td>
+                    <td>{row.copiedFrom}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {!isTemplatesTab && !isHistoryTab && activeAccessRow ? (
+          <section className="sandbox-access-card" aria-live="polite">
+            <div className="sandbox-access-card-header">
+              <div>
+                <span className="sandbox-access-eyebrow">Sandbox Login Access</span>
+                <h3>{activeAccessRow.name}</h3>
+                <p>{activeSandboxAccess?.readOnlyNotice ?? `Loading access details for ${activeAccessRow.name}...`}</p>
+              </div>
+              <div className="sandbox-access-card-actions">
+                <button className="sandbox-new-button" onClick={() => navigate(`/login/sandbox/${activeAccessRow.id}`)} type="button">
+                  Open Sandbox Login
+                </button>
+                <button className="sandbox-new-button" onClick={() => setActiveAccessSandboxId(null)} type="button">
+                  Close
+                </button>
+              </div>
+            </div>
+
+            {loadingSandboxAccessId === activeAccessRow.id && !activeSandboxAccess ? (
+              <p className="sandbox-access-loading">Loading generated sandbox credentials...</p>
+            ) : activeSandboxAccess ? (
+              <div className="sandbox-access-grid">
+                <article className="sandbox-access-item">
+                  <span>Sandbox Account</span>
+                  <div className="sandbox-access-value-row">
+                    <code className="sandbox-access-value">{activeSandboxAccess.loginEmail}</code>
+                    <button className="sandbox-link-button" onClick={() => void handleCopySandboxAccess("Sandbox account", activeSandboxAccess.loginEmail)} type="button">
+                      Copy Login
+                    </button>
+                  </div>
+                </article>
+                <article className="sandbox-access-item">
+                  <span>API Key</span>
+                  <div className="sandbox-access-value-row">
+                    <code className="sandbox-access-value">{activeSandboxAccess.apiKey}</code>
+                    <button className="sandbox-link-button" onClick={() => void handleCopySandboxAccess("Sandbox API key", activeSandboxAccess.apiKey)} type="button">
+                      Copy API Key
+                    </button>
+                  </div>
+                </article>
+                <article className="sandbox-access-item">
+                  <span>Dealer Group Scope</span>
+                  <strong>{activeSandboxAccess.dealerGroupName}</strong>
+                </article>
+                <article className="sandbox-access-item">
+                  <span>Source Store</span>
+                  <strong>{activeSandboxAccess.sourceStoreName}</strong>
+                </article>
+                <article className="sandbox-access-item">
+                  <span>Source Store Id</span>
+                  <strong>{activeSandboxAccess.sourceStoreId}</strong>
+                </article>
+                <article className="sandbox-access-item">
+                  <span>Access Mode</span>
+                  <strong>Read-only production mirror</strong>
+                </article>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+      </section>
+    </div>
+  );
+}
+
 function SyncMonitorCustomSettingsPage({
   connectorReadinessScore,
   onRunTool,
@@ -625,9 +2619,14 @@ function SyncMonitorCustomSettingsPage({
 }
 
 export function WebsiteWorkspace({
+  activeStoreId,
   activityEntries,
+  activeUserEmail,
+  activeUserName,
   entries,
   fallbackStatusLine,
+  sandboxContext,
+  isSandboxSession,
   isFilteredByOperator,
   onAddTaskNote,
   onAssignTask,
@@ -650,6 +2649,7 @@ export function WebsiteWorkspace({
   const [connectionType, setConnectionType] = useState<WebsiteConnectionType>("website");
   const [environment, setEnvironment] = useState<WebsiteIntegrationEnvironment>("sandbox");
   const [authMode, setAuthMode] = useState<WebsiteAuthMode>("API Key");
+  const [activeSidebarPanel, setActiveSidebarPanel] = useState<WebsiteSidebarPanel>("overview");
   const [isHeroCollapsed, setIsHeroCollapsed] = useState(true);
   const [activeMappingLaneId, setActiveMappingLaneId] = useState<WebsiteMappingLaneId>("inventory");
   const [mappingSurfaceSelections, setMappingSurfaceSelections] = useState<Record<WebsiteMappingLaneId, string>>({
@@ -671,6 +2671,7 @@ export function WebsiteWorkspace({
     leads: websiteMappingLanes[3].defaultValidation
   });
   const [websitePreviewState, setWebsitePreviewState] = useState<"idle" | "loading" | "ready" | "blocked">("idle");
+  const [showSandboxDeploymentWorkbench, setShowSandboxDeploymentWorkbench] = useState(() => isSandboxSession && readSandboxShellPendingSurfaceMode() === "deploy");
   const [connectorUrl, setConnectorUrl] = useState("");
   const [validationNotice, setValidationNotice] = useState("Connection settings are ready for validation.");
   const [isTestingConnection, setIsTestingConnection] = useState(false);
@@ -728,6 +2729,31 @@ export function WebsiteWorkspace({
   const previewHighlights = buildWebsitePreviewHighlights(selectedRow, selectedInventoryShare, selectedLeadShare);
   const activeMappingLane = websiteMappingLanes.find((lane) => lane.id === activeMappingLaneId) ?? websiteMappingLanes[0];
   const blockedPreviewSnapshotUrl = buildWebsitePreviewSnapshotUrl(activePreviewUrl);
+  const routeHostLabel = formatWebsitePreviewHost(normalizedConnectorUrl || getWebsiteDefaultBaseUrl(connectionType));
+  const sidebarLeadRows = [...rows].sort((left, right) => right.leadsToday - left.leadsToday).slice(0, 4);
+  const sidebarPanelTabs: Array<{ id: WebsiteSidebarPanel; label: string; meta: string }> = [
+    {
+      id: "overview",
+      label: "Snapshot",
+      meta: selectedRow ? selectedRow.brand : "Pick a website"
+    },
+    {
+      id: "mapping",
+      label: "Data Setup",
+      meta: `${activeMappingLane.fields.length} links`
+    },
+    {
+      id: "queue",
+      label: "Tasks",
+      meta: `${filteredQueueEntries.length} visible`
+    },
+    {
+      id: "history",
+      label: "Activity",
+      meta: `${filteredHistoryEntries.length} events`
+    }
+  ];
+  const activeSidebarTab = sidebarPanelTabs.find((tab) => tab.id === activeSidebarPanel) ?? sidebarPanelTabs[0];
 
   async function handleTestConnection() {
     setIsTestingConnection(true);
@@ -781,6 +2807,38 @@ export function WebsiteWorkspace({
     return () => window.clearTimeout(timeoutId);
   }, [activePreviewUrl, selectedRow]);
 
+  useEffect(() => {
+    if (!isSandboxSession) {
+      setShowSandboxDeploymentWorkbench(false);
+      return;
+    }
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleSandboxShellAction = (event: Event) => {
+      const customEvent = event as CustomEvent<string>;
+
+      if (customEvent.detail === "deploy") {
+        setShowSandboxDeploymentWorkbench(true);
+      }
+    };
+
+    window.addEventListener(SANDBOX_SHELL_ACTION_EVENT, handleSandboxShellAction as EventListener);
+    return () => window.removeEventListener(SANDBOX_SHELL_ACTION_EVENT, handleSandboxShellAction as EventListener);
+  }, [isSandboxSession]);
+
+  useEffect(() => {
+    if (!isSandboxSession || view !== "feed") {
+      return;
+    }
+
+    if (readSandboxShellPendingSurfaceMode() === "deploy") {
+      setShowSandboxDeploymentWorkbench(true);
+    }
+  }, [isSandboxSession, view]);
+
   if (view === "customSettings") {
     return (
       <SyncMonitorCustomSettingsPage
@@ -791,6 +2849,32 @@ export function WebsiteWorkspace({
         totalInventory={totalInventory}
         totalLeads={totalLeads}
       />
+    );
+  }
+
+  if (view === "sandbox") {
+    return <SandboxesPage activeUserEmail={activeUserEmail} activeUserName={activeUserName} onViewChange={onViewChange} storeId={activeStoreId} />;
+  }
+
+  if (isSandboxSession && view === "feed" && showSandboxDeploymentWorkbench) {
+    return (
+      <section aria-label="Sandbox deployment workbench" className="sandbox-shell-studio-shell">
+        <div className="sandbox-shell-studio-main">
+          <div className="sandbox-shell-mode-frame">
+            <div className="sandbox-shell-mode-banner">
+              <div>
+                <span className="sandbox-shell-mode-eyebrow">Sandbox Deployment</span>
+                <strong>Push to Production</strong>
+                <p>Review deployment records, comparisons, and checks, then return to the current workspace page when you are done.</p>
+              </div>
+              <button className="sandbox-new-button" onClick={() => setShowSandboxDeploymentWorkbench(false)} type="button">
+                Return to Page
+              </button>
+            </div>
+            <SandboxDeploymentWorkbench activeStoreId={activeStoreId} activeUserName={activeUserName} sandboxContext={sandboxContext} startOpen={true} />
+          </div>
+        </div>
+      </section>
     );
   }
 
@@ -875,16 +2959,32 @@ export function WebsiteWorkspace({
             <div className="legacy-command-log-header">
               <div>
                 <h3>Connection Setup</h3>
-                <span>
-                  {selectedConnectionOption.label} / {environment}
-                </span>
+                <span>Step 1: set up how this website connects before anything goes live</span>
               </div>
               <span className="legacy-chip tone-stable">{authMode}</span>
             </div>
 
-            <div className="website-feed-setup-grid">
+            <div className="website-feed-sidebar-step-strip">
+              <article className="website-feed-sidebar-step is-active">
+                <span>Step 1</span>
+                <strong>Pick connection type</strong>
+                <p>{selectedConnectionOption.label} in {environment === "production" ? "Production" : "Sandbox"}</p>
+              </article>
+              <article className={`website-feed-sidebar-step${testConnectionResult?.ok ? " is-complete" : ""}`}>
+                <span>Step 2</span>
+                <strong>Test access</strong>
+                <p>{testConnectionResult?.ok ? "Connection passed validation." : "Confirm the host and auth mode."}</p>
+              </article>
+              <article className={`website-feed-sidebar-step${selectedRow ? " is-complete" : ""}`}>
+                <span>Step 3</span>
+                <strong>Choose website</strong>
+                <p>{selectedRow ? `${selectedRow.brand} is ready for review.` : "Pick a destination below to continue."}</p>
+              </article>
+            </div>
+
+            <div className="website-feed-setup-grid website-feed-setup-grid--compact">
               <div className="website-feed-control-panel">
-                <span className="website-feed-control-label">Connector Type</span>
+                <span className="website-feed-control-label">Connection Type</span>
                 <div className="website-feed-segmented" role="group" aria-label="Website feed connector type">
                   {websiteConnectionOptions.map((option) => (
                     <button
@@ -906,7 +3006,7 @@ export function WebsiteWorkspace({
                   <p>{selectedConnectionOption.detail}</p>
                 </article>
 
-                <span className="website-feed-control-label">Environment</span>
+                <span className="website-feed-control-label">Where You Are Working</span>
                 <div className="website-feed-segmented is-compact" role="group" aria-label="Website feed environment">
                   {(["sandbox", "production"] as WebsiteIntegrationEnvironment[]).map((option) => (
                     <button
@@ -925,9 +3025,9 @@ export function WebsiteWorkspace({
                 </div>
               </div>
 
-              <div className="website-feed-control-panel">
+              <div className="website-feed-control-panel website-feed-control-panel-emphasis">
                 <label className="website-feed-field">
-                  <span>Base URL / Host</span>
+                  <span>Website Address</span>
                   <input
                     onChange={(event) => {
                       setConnectorUrl(event.target.value);
@@ -938,7 +3038,7 @@ export function WebsiteWorkspace({
                   />
                 </label>
                 <label className="website-feed-field">
-                  <span>Authentication</span>
+                  <span>Login Method</span>
                   <select onChange={(event) => setAuthMode(event.target.value as WebsiteAuthMode)} value={authMode}>
                     {authModeOptions.map((option) => (
                       <option key={option} value={option}>
@@ -968,7 +3068,7 @@ export function WebsiteWorkspace({
                     onClick={() => void handleTestConnection()}
                     type="button"
                   >
-                    {isTestingConnection ? "Testing…" : "Validate Connection"}
+                    {isTestingConnection ? "Testing..." : "Test Connection"}
                   </button>
                   <button
                     className="legacy-task-status-button"
@@ -979,49 +3079,52 @@ export function WebsiteWorkspace({
                     }}
                     type="button"
                   >
-                    Create Credential
+                    Add Login
                   </button>
                   <button className="legacy-task-status-button" onClick={() => onRunTool("Open Queue")} type="button">
-                    Queue Setup
+                    Open Setup Queue
                   </button>
                 </div>
               </div>
 
-              <div className="website-feed-control-panel">
+              <div className="website-feed-control-panel website-feed-connection-plan">
                 <div className="website-feed-panel-heading">
-                  <span className="website-feed-control-label">Generated Endpoints</span>
+                  <div className="website-feed-panel-copy">
+                    <span className="website-feed-control-label">What This Connection Sends</span>
+                    <p>{integrationEndpoints.length} auto-generated routes will publish through {routeHostLabel}.</p>
+                  </div>
                   <span>{integrationEndpoints.length} routes</span>
                 </div>
-                <div className="website-feed-generated-list">
+                <div className="website-feed-generated-list is-compact">
                   {integrationEndpoints.map((endpoint) => (
-                    <article className="website-feed-generated-endpoint" key={`${endpoint.method}-${endpoint.label}`}>
-                      <span>{endpoint.method}</span>
-                      <strong>{endpoint.label}</strong>
-                      <code>{endpoint.url}</code>
+                    <article className="website-feed-generated-endpoint is-compact" key={`${endpoint.method}-${endpoint.label}`}>
+                      <div className="website-feed-generated-endpoint-header">
+                        <span>{endpoint.method}</span>
+                        <strong>{endpoint.label}</strong>
+                      </div>
                       <p>{endpoint.detail}</p>
+                      <code>{formatWebsiteEndpointPath(endpoint.url)}</code>
+                    </article>
+                  ))}
+                </div>
+                <div className="website-feed-contract-summary">
+                  {contractRows.map((contractRow) => (
+                    <article className="website-feed-contract-summary-item" key={contractRow.route}>
+                      <strong>{contractRow.route}</strong>
+                      <span>{contractRow.method}</span>
+                      <p>{contractRow.detail}</p>
                     </article>
                   ))}
                 </div>
               </div>
-            </div>
-
-            <div className="website-feed-contract-list">
-              {contractRows.map((contractRow) => (
-                <article className="website-feed-contract-card" key={contractRow.route}>
-                  <span>{contractRow.method}</span>
-                  <strong>{contractRow.route}</strong>
-                  <p>{contractRow.detail}</p>
-                  <code>{contractRow.schema}</code>
-                </article>
-              ))}
             </div>
           </section>
 
           <section className="legacy-info-card website-feed-endpoints website-feed-sidebar-card">
             <div className="legacy-command-log-header">
               <div>
-                <h3>Connected Websites</h3>
-                <span>{rows.length} {endpointLabel}</span>
+                <h3>Choose Website</h3>
+                <span>{selectedRow ? `${selectedRow.brand} selected` : "Step 2: choose which website your team is working on"}</span>
               </div>
               <span>{publishingCount} live push</span>
             </div>
@@ -1038,7 +3141,10 @@ export function WebsiteWorkspace({
                     <button
                       className={`website-feed-endpoint${feed.id === selectedRowId ? " is-selected" : ""}`}
                       key={feed.id}
-                      onClick={() => onSelectRow(feed)}
+                      onClick={() => {
+                        onSelectRow(feed);
+                        setActiveSidebarPanel("overview");
+                      }}
                       type="button"
                     >
                       <div className="website-feed-endpoint-header">
@@ -1064,450 +3170,471 @@ export function WebsiteWorkspace({
             )}
           </section>
 
-          <section className="legacy-info-card website-feed-focus website-feed-sidebar-card">
+          <section className="legacy-info-card website-feed-sidebar-workspace website-feed-sidebar-card">
             <div className="legacy-command-log-header">
               <div>
-                <h3>Destination Profile</h3>
-                <span>{selectedRow?.brand ?? "No endpoint selected"}</span>
+                <h3>Website Details</h3>
+                <span>One place for status, data setup, tasks, and recent activity</span>
               </div>
-              {selectedRow ? <span className={`legacy-chip tone-${selectedRow.status.toLowerCase()}`}>{selectedRow.status}</span> : null}
+              <span>{activeSidebarTab.label}</span>
             </div>
 
-            {!selectedRow ? (
-              <p>Select a website endpoint to inspect connector posture.</p>
-            ) : (
-              <>
-                <div className="website-feed-profile-grid">
-                  <LabelValue label="Website" value={selectedRow.domain} />
-                  <LabelValue label="DMS Source" value="Premier Marine Cloud" />
-                  <LabelValue label="Inventory Share" value={`${selectedInventoryShare}%`} />
-                  <LabelValue label="Lead Share" value={`${selectedLeadShare}%`} />
-                  <LabelValue label="Last Sync" value={selectedRow.lastSyncLabel} />
-                  <LabelValue label="Endpoint" value={formatWebsiteFeedEndpoint(selectedRow)} />
-                </div>
-                <div className="legacy-chip-row">
-                  <span className={`legacy-chip tone-${buildWebsiteLeadTone(selectedRow.leadsToday)}`}>{buildWebsiteLeadLabel(selectedRow.leadsToday)}</span>
-                  <span className={`legacy-chip tone-${buildWebsiteConnectionTone(selectedRow)}`}>{buildWebsiteConnectionLabel(selectedRow)}</span>
-                  <span className="legacy-chip tone-neutral">
-                    {selectedRow.inventoryCount >= 100 ? "Full catalog" : "Featured catalog"}
-                  </span>
-                </div>
-                <p>{buildWebsitePublishGuidance(selectedRow)}</p>
-              </>
-            )}
-          </section>
-
-          <section className="legacy-info-card website-feed-mapping website-feed-sidebar-card">
-            <div className="legacy-command-log-header">
-              <div>
-                <h3>Field Mapping</h3>
-                <span>Live endpoint connections for managers</span>
-              </div>
+            <div className="website-feed-sidebar-tabs" role="tablist" aria-label="Website sidebar workspace views">
+              {sidebarPanelTabs.map((tab) => (
+                <button
+                  aria-selected={tab.id === activeSidebarPanel}
+                  className={tab.id === activeSidebarPanel ? "is-selected" : ""}
+                  key={tab.id}
+                  onClick={() => setActiveSidebarPanel(tab.id)}
+                  role="tab"
+                  type="button"
+                >
+                  <strong>{tab.label}</strong>
+                  <span>{tab.meta}</span>
+                </button>
+              ))}
             </div>
 
-            {!selectedRow ? (
-              <p>Select a website endpoint to open the live field mapping board.</p>
-            ) : (
-              <div className="website-feed-mapper-shell">
-                <div className="website-feed-mapper-lane-tabs" role="tablist" aria-label="Website field mapping lanes">
-                  {websiteMappingLanes.map((lane) => (
-                    <button
-                      aria-selected={lane.id === activeMappingLaneId}
-                      className={lane.id === activeMappingLaneId ? "is-selected" : ""}
-                      key={lane.id}
-                      onClick={() => setActiveMappingLaneId(lane.id)}
-                      role="tab"
-                      type="button"
-                    >
-                      <div className="website-feed-mapper-tab-meta">
-                        <span className={`legacy-chip tone-${lane.tone}`}>{lane.status}</span>
-                        <span>{lane.fields.length} links</span>
+            {activeSidebarPanel === "overview" ? (
+              <div className="website-feed-sidebar-panel-stack" role="tabpanel">
+                <div className="website-feed-sidebar-monitor-card">
+                  <div className="website-feed-panel-heading">
+                    <strong>Selected Website</strong>
+                    <span>{selectedRow?.brand ?? "No endpoint selected"}</span>
+                  </div>
+
+                  {!selectedRow ? (
+                    <p>Select a website endpoint to inspect connector posture.</p>
+                  ) : (
+                    <>
+                      <div className="website-feed-profile-grid website-feed-sidebar-profile-grid">
+                        <LabelValue label="Website" value={selectedRow.domain} />
+                        <LabelValue label="DMS Source" value="Premier Marine Cloud" />
+                        <LabelValue label="Inventory Share" value={`${selectedInventoryShare}%`} />
+                        <LabelValue label="Lead Share" value={`${selectedLeadShare}%`} />
+                        <LabelValue label="Last Sync" value={selectedRow.lastSyncLabel} />
+                        <LabelValue label="Endpoint" value={formatWebsiteFeedEndpoint(selectedRow)} />
                       </div>
-                      <strong>{lane.label}</strong>
-                      <span className="website-feed-mapper-tab-audience">{lane.audienceLabel}</span>
-                    </button>
-                  ))}
+                      <div className="legacy-chip-row">
+                        <span className={`legacy-chip tone-${buildWebsiteLeadTone(selectedRow.leadsToday)}`}>{buildWebsiteLeadLabel(selectedRow.leadsToday)}</span>
+                        <span className={`legacy-chip tone-${buildWebsiteConnectionTone(selectedRow)}`}>{buildWebsiteConnectionLabel(selectedRow)}</span>
+                        <span className="legacy-chip tone-neutral">
+                          {selectedRow.inventoryCount >= 100 ? "Full catalog" : "Featured catalog"}
+                        </span>
+                      </div>
+                      <p>{buildWebsitePublishGuidance(selectedRow)}</p>
+                    </>
+                  )}
                 </div>
 
-                <div className="website-feed-mapper-panel" role="tabpanel">
-                  <div className="website-feed-mapper-toolbar">
-                    <div>
-                      <span className="website-feed-control-label">Active lane</span>
-                      <h4>{activeMappingLane.label}</h4>
-                      <p>{activeMappingLane.detail}</p>
-                    </div>
-                    <div className="website-feed-mapper-context-strip">
-                      <span className={`legacy-chip tone-${activeMappingLane.tone}`}>{activeMappingLane.status}</span>
-                      <span className="legacy-chip tone-neutral">Premier Marine Cloud to {selectedRow.brand}</span>
-                      <span className="legacy-chip tone-neutral">{selectedRow.brand}</span>
-                    </div>
-                  </div>
-
-                  <div className="website-feed-mapper-toolbar-fields">
-                    <label className="website-feed-field">
-                      <span>Website Surface</span>
-                      <select
-                        onChange={(event) =>
-                          setMappingSurfaceSelections((current) => ({
-                            ...current,
-                            [activeMappingLane.id]: event.target.value
-                          }))
-                        }
-                        value={mappingSurfaceSelections[activeMappingLane.id]}
-                      >
-                        {websiteMappingSurfaceOptions[activeMappingLane.id].map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="website-feed-field">
-                      <span>Sync Mode</span>
-                      <select
-                        onChange={(event) =>
-                          setMappingSyncSelections((current) => ({
-                            ...current,
-                            [activeMappingLane.id]: event.target.value
-                          }))
-                        }
-                        value={mappingSyncSelections[activeMappingLane.id]}
-                      >
-                        {websiteMappingSyncOptions[activeMappingLane.id].map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="website-feed-field">
-                      <span>Approval Guardrail</span>
-                      <select
-                        onChange={(event) =>
-                          setMappingValidationSelections((current) => ({
-                            ...current,
-                            [activeMappingLane.id]: event.target.value
-                          }))
-                        }
-                        value={mappingValidationSelections[activeMappingLane.id]}
-                      >
-                        {websiteMappingValidationOptions[activeMappingLane.id].map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-
-                  <div className="website-feed-mapper-meta-bar">
-                    <span>DMS source: Premier Marine Cloud</span>
-                    <span>Website destination: {selectedRow.domain}</span>
-                    <span>Sync: {mappingSyncSelections[activeMappingLane.id]}</span>
-                    <span>Approval: {mappingValidationSelections[activeMappingLane.id]}</span>
-                  </div>
-
-                  <div className="website-feed-mapper-table-wrap">
-                    <table className="website-feed-mapper-table">
-                      <thead>
-                        <tr>
-                          <th>DMS Field</th>
-                          <th>Website Field</th>
-                          <th>Surface</th>
-                          <th>Sync</th>
-                          <th>Approval</th>
-                          <th>Manager Guidance</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {activeMappingLane.fields.map((field) => (
-                          <tr key={`${activeMappingLane.id}-${field.source}-${field.destination}`}>
-                            <td>
-                              <strong>{field.source}</strong>
-                              <span>Premier Marine Cloud</span>
-                            </td>
-                            <td>
-                              <strong>{field.destination}</strong>
-                              <span>{selectedRow.brand}</span>
-                            </td>
-                            <td>{mappingSurfaceSelections[activeMappingLane.id]}</td>
-                            <td>{mappingSyncSelections[activeMappingLane.id]}</td>
-                            <td>{mappingValidationSelections[activeMappingLane.id]}</td>
-                            <td>{field.guidance}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            )}
-          </section>
-
-          <section className="legacy-info-card website-feed-support-card website-feed-sidebar-card">
-            <div className="legacy-command-log-header">
-              <div>
-                <h3>Lead Sync Monitor</h3>
-                <span>Live website response path</span>
-              </div>
-            </div>
-            <p>{fallbackStatusLine}</p>
-            <div className="legacy-activity-stack">
-              {rows.map((feed) => {
-                const leadShare = totalLeads > 0 ? Math.round((feed.leadsToday / totalLeads) * 100) : 0;
-
-                return (
-                  <article className={`legacy-activity-line tone-${buildWebsiteLeadTone(feed.leadsToday)}`} key={`${feed.id}-lead`}>
-                    <strong>{feed.brand}</strong>
-                    <p>
-                      {feed.leadsToday} leads today · {leadShare}% of store web leads · {feed.lastSyncLabel}
-                    </p>
+                <div className="legacy-feed-health-strip website-feed-sidebar-health-strip">
+                  <article className="legacy-feed-health-card">
+                    <span>Total Inventory</span>
+                    <strong>{totalInventory}</strong>
+                    <p>Units currently staged across every public website surface for this store.</p>
                   </article>
-                );
-              })}
-            </div>
-          </section>
+                  <article className="legacy-feed-health-card">
+                    <span>Web Leads</span>
+                    <strong>{totalLeads}</strong>
+                    <p>Combined website leads captured today across the active domain lanes.</p>
+                  </article>
+                  <article className="legacy-feed-health-card">
+                    <span>Publishing Now</span>
+                    <strong>{publishingCount}</strong>
+                    <p>Feeds actively pushing inventory updates or waiting for the publish window to close.</p>
+                  </article>
+                </div>
 
-          <section className="legacy-info-card website-feed-support-card website-feed-sidebar-card">
-            <div className="legacy-command-log-header">
-              <div>
-                <h3>Feed Totals</h3>
-                <span>Storewide publishing posture</span>
+                <div className="website-feed-sidebar-monitor-card">
+                  <div className="website-feed-panel-heading">
+                    <strong>Lead Activity</strong>
+                    <span>What is coming back from the website today</span>
+                  </div>
+                  <p>{fallbackStatusLine}</p>
+                  <div className="legacy-activity-stack">
+                    {sidebarLeadRows.map((feed) => {
+                      const leadShare = totalLeads > 0 ? Math.round((feed.leadsToday / totalLeads) * 100) : 0;
+
+                      return (
+                        <article className={`legacy-activity-line tone-${buildWebsiteLeadTone(feed.leadsToday)}`} key={`${feed.id}-lead`}>
+                          <strong>{feed.brand}</strong>
+                          <p>
+                            {feed.leadsToday} leads today · {leadShare}% of store web leads · {feed.lastSyncLabel}
+                          </p>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="legacy-feed-health-strip">
-              <article className="legacy-feed-health-card">
-                <span>Total Inventory</span>
-                <strong>{totalInventory}</strong>
-                <p>Units currently staged across every public website surface for this store.</p>
-              </article>
-              <article className="legacy-feed-health-card">
-                <span>Web Leads</span>
-                <strong>{totalLeads}</strong>
-                <p>Combined website leads captured today across the active domain lanes.</p>
-              </article>
-              <article className="legacy-feed-health-card">
-                <span>Publishing Now</span>
-                <strong>{publishingCount}</strong>
-                <p>Feeds actively pushing inventory updates or waiting for the publish window to close.</p>
-              </article>
-            </div>
-          </section>
+            ) : null}
 
-          <section className="legacy-info-card website-feed-queue-panel website-feed-sidebar-card">
-            <div className="legacy-command-log-header">
-              <div>
-                <h3>Digital Ops Queue</h3>
-                <span>{filteredQueueEntries.length} task{filteredQueueEntries.length === 1 ? "" : "s"} visible</span>
-              </div>
-              <span>{overdueQueueCount} overdue</span>
-            </div>
+            {activeSidebarPanel === "mapping" ? (
+              <div className="website-feed-sidebar-panel-stack" role="tabpanel">
+                <div className="website-feed-panel-heading">
+                  <strong>What Data Goes Where</strong>
+                  <span>Review how website fields line up with your DMS data</span>
+                </div>
 
-            <div className="legacy-website-filter-row">
-              <label className="legacy-audit-filter-control">
-                <span>Queue Action</span>
-                <select onChange={(event) => setQueueActionFilter(event.target.value)} value={queueActionFilter}>
-                  {queueActionOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="legacy-audit-filter-control">
-                <span>Queue Status</span>
-                <select onChange={(event) => setQueueStatusFilter(event.target.value)} value={queueStatusFilter}>
-                  {queueStatusOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            {isFilteredByOperator ? <span className="legacy-command-meta legacy-website-inline-meta">Mine only is active in the shared rails for this workspace.</span> : null}
-
-            {entries.length === 0 ? (
-              <p>{isFilteredByOperator ? "No website tasks are queued for this operator right now." : "No website tasks are queued for Digital Ops right now."}</p>
-            ) : filteredQueueEntries.length === 0 ? (
-              <p>No website tasks match the current queue filters.</p>
-            ) : (
-              <div className="legacy-command-list">
-                {filteredQueueEntries.map((entry) => (
-                  <article className={`legacy-command-line tone-${entry.tone}`} key={entry.id}>
-                    <span className="legacy-command-time">{entry.status}</span>
-                    <div>
-                      <strong>{entry.action}</strong>
-                      <p>{entry.detail}</p>
-                      <span className="legacy-command-meta">Created by {entry.actorName}</span>
-                      <span className="legacy-command-meta">
-                        Owner {entry.assignedName} · Updated by {entry.lastUpdatedByName} · {entry.timeLabel}
-                      </span>
-                      <span className={`legacy-command-meta${entry.isOverdue ? " is-overdue" : ""}`}>
-                        Age {entry.ageLabel} · SLA {entry.slaLabel} · {entry.breachLabel}
-                      </span>
-                      {entry.latestCommentPreview ? <span className="legacy-command-meta">Latest note: {entry.latestCommentPreview}</span> : null}
-                      {entry.resolutionNote ? <span className="legacy-command-meta">Resolution: {entry.resolutionNote}</span> : null}
-                      {entry.commentCount > 0 ? (
-                        <span className="legacy-command-meta">{entry.commentCount} note{entry.commentCount === 1 ? "" : "s"} recorded</span>
-                      ) : null}
-                      {updatingTaskId === entry.id ? <span className="legacy-command-meta">Updating task status...</span> : null}
-                      {entry.notes.length > 0 ? (
-                        <div className="legacy-task-note-list">
-                          {entry.notes.map((note) => (
-                            <article className="legacy-task-note-line" key={note.id}>
-                              <strong>{note.kind}</strong>
-                              <p>{note.body}</p>
-                              <span className="legacy-command-meta">
-                                {note.authorName} · {note.timeLabel}
-                              </span>
-                            </article>
-                          ))}
-                        </div>
-                      ) : null}
-                      <div className="legacy-task-note-composer">
-                        <textarea
-                          aria-label={`Website task note for ${entry.action}`}
-                          className="legacy-task-note-input"
-                          disabled={Boolean(updatingTaskId)}
-                          onChange={(event) =>
-                            setNoteDrafts((current) => ({
-                              ...current,
-                              [entry.id]: event.target.value
-                            }))
-                          }
-                          placeholder="Add digital-ops context, blocker detail, or a resolution note"
-                          rows={2}
-                          value={noteDrafts[entry.id] ?? ""}
-                        />
-                        <div className="legacy-task-status-actions">
-                          <button
-                            className="legacy-task-status-button"
-                            disabled={Boolean(updatingTaskId) || !(noteDrafts[entry.id] ?? "").trim()}
-                            onClick={() => {
-                              void onAddTaskNote(entry.id, (noteDrafts[entry.id] ?? "").trim(), "Comment").then((saved) => {
-                                if (saved) {
-                                  setNoteDrafts((current) => ({
-                                    ...current,
-                                    [entry.id]: ""
-                                  }));
-                                }
-                              });
-                            }}
-                            type="button"
-                          >
-                            Add note
-                          </button>
-                          <button
-                            className="legacy-task-status-button"
-                            disabled={Boolean(updatingTaskId) || !(noteDrafts[entry.id] ?? "").trim()}
-                            onClick={() => {
-                              void onAddTaskNote(entry.id, (noteDrafts[entry.id] ?? "").trim(), "Resolution").then((saved) => {
-                                if (saved) {
-                                  setNoteDrafts((current) => ({
-                                    ...current,
-                                    [entry.id]: ""
-                                  }));
-                                }
-                              });
-                            }}
-                            type="button"
-                          >
-                            {entry.status === "Done" ? "Update resolution" : "Resolve"}
-                          </button>
-                        </div>
-                      </div>
-                      <div className="legacy-task-handoff-row">
-                        <select
-                          aria-label={`Assign website task ${entry.action}`}
-                          className="legacy-task-assignee-select"
-                          disabled={Boolean(updatingTaskId)}
-                          onChange={(event) =>
-                            setHandoffSelections((current) => ({
-                              ...current,
-                              [entry.id]: event.target.value
-                            }))
-                          }
-                          value={handoffSelections[entry.id] ?? entry.assignedUserId ?? ""}
-                        >
-                          <option value="">Unassigned</option>
-                          {operators.map((operator) => (
-                            <option key={operator.id} value={operator.id}>
-                              {operator.name} · {operator.title}
-                            </option>
-                          ))}
-                        </select>
+                {!selectedRow ? (
+                  <p>Select a website endpoint to open the live field mapping board.</p>
+                ) : (
+                  <div className="website-feed-mapper-shell">
+                    <div className="website-feed-mapper-lane-tabs" role="tablist" aria-label="Website field mapping lanes">
+                      {websiteMappingLanes.map((lane) => (
                         <button
-                          className="legacy-task-status-button"
-                          disabled={Boolean(updatingTaskId) || (handoffSelections[entry.id] ?? entry.assignedUserId ?? "") === (entry.assignedUserId ?? "")}
-                          onClick={() => onAssignTask(entry.id, (handoffSelections[entry.id] ?? entry.assignedUserId ?? "") || null)}
+                          aria-selected={lane.id === activeMappingLaneId}
+                          className={lane.id === activeMappingLaneId ? "is-selected" : ""}
+                          key={lane.id}
+                          onClick={() => setActiveMappingLaneId(lane.id)}
+                          role="tab"
                           type="button"
                         >
-                          Hand off
+                          <div className="website-feed-mapper-tab-meta">
+                            <span className={`legacy-chip tone-${lane.tone}`}>{lane.status}</span>
+                            <span>{lane.fields.length} links</span>
+                          </div>
+                          <strong>{lane.label}</strong>
+                          <span className="website-feed-mapper-tab-audience">{lane.audienceLabel}</span>
                         </button>
+                      ))}
+                    </div>
+
+                    <div className="website-feed-mapper-panel" role="tabpanel">
+                      <div className="website-feed-mapper-toolbar">
+                        <div>
+                          <span className="website-feed-control-label">Active lane</span>
+                          <h4>{activeMappingLane.label}</h4>
+                          <p>{activeMappingLane.detail}</p>
+                        </div>
+                        <div className="website-feed-mapper-context-strip">
+                          <span className={`legacy-chip tone-${activeMappingLane.tone}`}>{activeMappingLane.status}</span>
+                          <span className="legacy-chip tone-neutral">Premier Marine Cloud to {selectedRow.brand}</span>
+                          <span className="legacy-chip tone-neutral">{selectedRow.brand}</span>
+                        </div>
                       </div>
-                      <div className="legacy-task-status-actions">
-                        {getTaskStatusActions(entry.status).map((action) => (
-                          <button
-                            className="legacy-task-status-button"
-                            disabled={Boolean(updatingTaskId)}
-                            key={`${entry.id}-${action.status}`}
-                            onClick={() => onUpdateStatus(entry.id, action.status)}
-                            type="button"
+
+                      <div className="website-feed-mapper-toolbar-fields">
+                        <label className="website-feed-field">
+                          <span>Website Surface</span>
+                          <select
+                            onChange={(event) =>
+                              setMappingSurfaceSelections((current) => ({
+                                ...current,
+                                [activeMappingLane.id]: event.target.value
+                              }))
+                            }
+                            value={mappingSurfaceSelections[activeMappingLane.id]}
                           >
-                            {action.label}
-                          </button>
-                        ))}
+                            {websiteMappingSurfaceOptions[activeMappingLane.id].map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="website-feed-field">
+                          <span>Sync Mode</span>
+                          <select
+                            onChange={(event) =>
+                              setMappingSyncSelections((current) => ({
+                                ...current,
+                                [activeMappingLane.id]: event.target.value
+                              }))
+                            }
+                            value={mappingSyncSelections[activeMappingLane.id]}
+                          >
+                            {websiteMappingSyncOptions[activeMappingLane.id].map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="website-feed-field">
+                          <span>Approval Guardrail</span>
+                          <select
+                            onChange={(event) =>
+                              setMappingValidationSelections((current) => ({
+                                ...current,
+                                [activeMappingLane.id]: event.target.value
+                              }))
+                            }
+                            value={mappingValidationSelections[activeMappingLane.id]}
+                          >
+                            {websiteMappingValidationOptions[activeMappingLane.id].map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+
+                      <div className="website-feed-mapper-meta-bar">
+                        <span>DMS source: Premier Marine Cloud</span>
+                        <span>Website destination: {selectedRow.domain}</span>
+                        <span>Sync: {mappingSyncSelections[activeMappingLane.id]}</span>
+                        <span>Approval: {mappingValidationSelections[activeMappingLane.id]}</span>
+                      </div>
+
+                      <div className="website-feed-mapper-table-wrap">
+                        <table className="website-feed-mapper-table">
+                          <thead>
+                            <tr>
+                              <th>DMS Field</th>
+                              <th>Website Field</th>
+                              <th>Surface</th>
+                              <th>Sync</th>
+                              <th>Approval</th>
+                              <th>Manager Guidance</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {activeMappingLane.fields.map((field) => (
+                              <tr key={`${activeMappingLane.id}-${field.source}-${field.destination}`}>
+                                <td>
+                                  <strong>{field.source}</strong>
+                                  <span>Premier Marine Cloud</span>
+                                </td>
+                                <td>
+                                  <strong>{field.destination}</strong>
+                                  <span>{selectedRow.brand}</span>
+                                </td>
+                                <td>{mappingSurfaceSelections[activeMappingLane.id]}</td>
+                                <td>{mappingSyncSelections[activeMappingLane.id]}</td>
+                                <td>{mappingValidationSelections[activeMappingLane.id]}</td>
+                                <td>{field.guidance}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
-                  </article>
-                ))}
+                  </div>
+                )}
               </div>
-            )}
-          </section>
+            ) : null}
 
-          <section className="legacy-info-card website-feed-history-panel website-feed-sidebar-card">
-            <div className="legacy-command-log-header">
-              <div>
-                <h3>Publish History</h3>
-                <span>{filteredHistoryEntries.length} event{filteredHistoryEntries.length === 1 ? "" : "s"}</span>
+            {activeSidebarPanel === "queue" ? (
+              <div className="website-feed-sidebar-panel-stack" role="tabpanel">
+                <div className="website-feed-panel-heading">
+                  <div>
+                    <strong>Work Queue</strong>
+                    <p>{filteredQueueEntries.length} task{filteredQueueEntries.length === 1 ? "" : "s"} visible</p>
+                  </div>
+                  <span>{overdueQueueCount} overdue</span>
+                </div>
+
+                <div className="legacy-website-filter-row">
+                  <label className="legacy-audit-filter-control">
+                    <span>Task Type</span>
+                    <select onChange={(event) => setQueueActionFilter(event.target.value)} value={queueActionFilter}>
+                      {queueActionOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="legacy-audit-filter-control">
+                    <span>Task Status</span>
+                    <select onChange={(event) => setQueueStatusFilter(event.target.value)} value={queueStatusFilter}>
+                      {queueStatusOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                {isFilteredByOperator ? <span className="legacy-command-meta legacy-website-inline-meta">Mine only is active in the shared rails for this workspace.</span> : null}
+
+                {entries.length === 0 ? (
+                  <p>{isFilteredByOperator ? "No website tasks are queued for this operator right now." : "No website tasks are queued for Digital Ops right now."}</p>
+                ) : filteredQueueEntries.length === 0 ? (
+                  <p>No website tasks match the current queue filters.</p>
+                ) : (
+                  <div className="legacy-command-list">
+                    {filteredQueueEntries.map((entry) => (
+                      <article className={`legacy-command-line tone-${entry.tone}`} key={entry.id}>
+                        <span className="legacy-command-time">{entry.status}</span>
+                        <div>
+                          <strong>{entry.action}</strong>
+                          <p>{entry.detail}</p>
+                          <span className="legacy-command-meta">Created by {entry.actorName}</span>
+                          <span className="legacy-command-meta">
+                            Owner {entry.assignedName} · Updated by {entry.lastUpdatedByName} · {entry.timeLabel}
+                          </span>
+                          <span className={`legacy-command-meta${entry.isOverdue ? " is-overdue" : ""}`}>
+                            Age {entry.ageLabel} · SLA {entry.slaLabel} · {entry.breachLabel}
+                          </span>
+                          {entry.latestCommentPreview ? <span className="legacy-command-meta">Latest note: {entry.latestCommentPreview}</span> : null}
+                          {entry.resolutionNote ? <span className="legacy-command-meta">Resolution: {entry.resolutionNote}</span> : null}
+                          {entry.commentCount > 0 ? (
+                            <span className="legacy-command-meta">{entry.commentCount} note{entry.commentCount === 1 ? "" : "s"} recorded</span>
+                          ) : null}
+                          {updatingTaskId === entry.id ? <span className="legacy-command-meta">Updating task status...</span> : null}
+                          {entry.notes.length > 0 ? (
+                            <div className="legacy-task-note-list">
+                              {entry.notes.map((note) => (
+                                <article className="legacy-task-note-line" key={note.id}>
+                                  <strong>{note.kind}</strong>
+                                  <p>{note.body}</p>
+                                  <span className="legacy-command-meta">
+                                    {note.authorName} · {note.timeLabel}
+                                  </span>
+                                </article>
+                              ))}
+                            </div>
+                          ) : null}
+                          <div className="legacy-task-note-composer">
+                            <textarea
+                              aria-label={`Website task note for ${entry.action}`}
+                              className="legacy-task-note-input"
+                              disabled={Boolean(updatingTaskId)}
+                              onChange={(event) =>
+                                setNoteDrafts((current) => ({
+                                  ...current,
+                                  [entry.id]: event.target.value
+                                }))
+                              }
+                              placeholder="Add digital-ops context, blocker detail, or a resolution note"
+                              rows={2}
+                              value={noteDrafts[entry.id] ?? ""}
+                            />
+                            <div className="legacy-task-status-actions">
+                              <button
+                                className="legacy-task-status-button"
+                                disabled={Boolean(updatingTaskId) || !(noteDrafts[entry.id] ?? "").trim()}
+                                onClick={() => {
+                                  void onAddTaskNote(entry.id, (noteDrafts[entry.id] ?? "").trim(), "Comment").then((saved) => {
+                                    if (saved) {
+                                      setNoteDrafts((current) => ({
+                                        ...current,
+                                        [entry.id]: ""
+                                      }));
+                                    }
+                                  });
+                                }}
+                                type="button"
+                              >
+                                Add note
+                              </button>
+                              <button
+                                className="legacy-task-status-button"
+                                disabled={Boolean(updatingTaskId) || !(noteDrafts[entry.id] ?? "").trim()}
+                                onClick={() => {
+                                  void onAddTaskNote(entry.id, (noteDrafts[entry.id] ?? "").trim(), "Resolution").then((saved) => {
+                                    if (saved) {
+                                      setNoteDrafts((current) => ({
+                                        ...current,
+                                        [entry.id]: ""
+                                      }));
+                                    }
+                                  });
+                                }}
+                                type="button"
+                              >
+                                {entry.status === "Done" ? "Update resolution" : "Resolve"}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="legacy-task-handoff-row">
+                            <select
+                              aria-label={`Assign website task ${entry.action}`}
+                              className="legacy-task-assignee-select"
+                              disabled={Boolean(updatingTaskId)}
+                              onChange={(event) =>
+                                setHandoffSelections((current) => ({
+                                  ...current,
+                                  [entry.id]: event.target.value
+                                }))
+                              }
+                              value={handoffSelections[entry.id] ?? entry.assignedUserId ?? ""}
+                            >
+                              <option value="">Unassigned</option>
+                              {operators.map((operator) => (
+                                <option key={operator.id} value={operator.id}>
+                                  {operator.name} · {operator.title}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              className="legacy-task-status-button"
+                              disabled={Boolean(updatingTaskId) || (handoffSelections[entry.id] ?? entry.assignedUserId ?? "") === (entry.assignedUserId ?? "")}
+                              onClick={() => onAssignTask(entry.id, (handoffSelections[entry.id] ?? entry.assignedUserId ?? "") || null)}
+                              type="button"
+                            >
+                              Hand off
+                            </button>
+                          </div>
+                          <div className="legacy-task-status-actions">
+                            {getTaskStatusActions(entry.status).map((action) => (
+                              <button
+                                className="legacy-task-status-button"
+                                disabled={Boolean(updatingTaskId)}
+                                key={`${entry.id}-${action.status}`}
+                                onClick={() => onUpdateStatus(entry.id, action.status)}
+                                type="button"
+                              >
+                                {action.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
+            ) : null}
 
-            <div className="legacy-website-filter-row">
-              <label className="legacy-audit-filter-control">
-                <span>History Type</span>
-                <select onChange={(event) => setHistoryFilter(event.target.value)} value={historyFilter}>
-                  {historyTypeOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+            {activeSidebarPanel === "history" ? (
+              <div className="website-feed-sidebar-panel-stack" role="tabpanel">
+                <div className="website-feed-panel-heading">
+                  <div>
+                    <strong>Recent Activity</strong>
+                    <p>{filteredHistoryEntries.length} event{filteredHistoryEntries.length === 1 ? "" : "s"}</p>
+                  </div>
+                </div>
 
-            {historyEntries.length === 0 ? (
-              <p>No website activity has been logged for this store yet.</p>
-            ) : filteredHistoryEntries.length === 0 ? (
-              <p>No website history rows match the current history filter.</p>
-            ) : (
-              <div className="legacy-command-list">
-                {filteredHistoryEntries.map((entry) => (
-                  <article className={`legacy-command-line tone-${entry.tone}`} key={entry.id}>
-                    <span className="legacy-command-time">{entry.timeLabel}</span>
-                    <div>
-                      <strong>{entry.label}</strong>
-                      <p>{entry.detail}</p>
-                      <span className="legacy-command-meta">{entry.actorName}</span>
-                    </div>
-                  </article>
-                ))}
+                <div className="legacy-website-filter-row">
+                  <label className="legacy-audit-filter-control">
+                    <span>Activity Type</span>
+                    <select onChange={(event) => setHistoryFilter(event.target.value)} value={historyFilter}>
+                      {historyTypeOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                {historyEntries.length === 0 ? (
+                  <p>No website activity has been logged for this store yet.</p>
+                ) : filteredHistoryEntries.length === 0 ? (
+                  <p>No website history rows match the current history filter.</p>
+                ) : (
+                  <div className="legacy-command-list">
+                    {filteredHistoryEntries.map((entry) => (
+                      <article className={`legacy-command-line tone-${entry.tone}`} key={entry.id}>
+                        <span className="legacy-command-time">{entry.timeLabel}</span>
+                        <div>
+                          <strong>{entry.label}</strong>
+                          <p>{entry.detail}</p>
+                          <span className="legacy-command-meta">{entry.actorName}</span>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
+            ) : null}
           </section>
         </aside>
 
@@ -1746,6 +3873,13 @@ function formatWebsiteFeedEndpoint(feed: WebsiteWorkspaceRow) {
   const normalizedDomain = feed.domain.replace(/^https?:\/\//i, "").replace(/\/$/, "");
 
   return `${normalizedDomain}/inventory-feed`;
+}
+
+function formatWebsiteEndpointPath(value: string) {
+  const normalizedValue = value.replace(/^(https?|sftp):\/\//i, "");
+  const firstSlashIndex = normalizedValue.indexOf("/");
+
+  return firstSlashIndex >= 0 ? normalizedValue.slice(firstSlashIndex) : normalizedValue;
 }
 
 function normalizeWebsiteBaseUrl(value: string) {

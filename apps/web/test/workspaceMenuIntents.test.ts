@@ -56,6 +56,14 @@ test("management activity leaf stays page-routed instead of opening a workflow i
   assert.equal(resolveWorkspaceFromMenuItem("Management Activity", "Cashier Reconciliation"), "analytics");
 });
 
+test("receivables AR Aging Doc leaf stays page-routed into analytics", () => {
+  const intent = resolveReceivablesMenuIntent("AR Aging Doc");
+
+  assert.equal(intent, null);
+  assert.equal(resolveWorkspaceMenuIntent("Receivables", "AR Aging Doc"), null);
+  assert.equal(resolveWorkspaceFromMenuItem("Receivables", "AR Aging Doc"), "analytics");
+});
+
 test("crm communicate leaf stays page-routed into the sales communication center", () => {
   const intent = resolveCrmMenuIntent("Communicate");
 
@@ -64,8 +72,33 @@ test("crm communicate leaf stays page-routed into the sales communication center
   assert.equal(resolveWorkspaceFromMenuItem("CRM", "Communicate"), "sales");
 });
 
+test("application favorites and estimate worksheets stay page-routed in production mode", () => {
+  const pageRoutedApplicationLeaves = [
+    "Favorite Audit Trail",
+    "Favorite Desktop",
+    "Favorite Executive Board",
+    "Favorite Parts Board",
+    "Favorite Sales Board",
+    "Favorite Service Board",
+    "Favorite Website Feed",
+    "Estimate Worksheets"
+  ];
+
+  for (const item of pageRoutedApplicationLeaves) {
+    assert.equal(resolveApplicationMenuIntent(item), null);
+    assert.equal(resolveWorkspaceMenuIntent("Application", item), null);
+  }
+
+  assert.equal(resolveServiceMenuIntent("Estimate Worksheets"), null);
+  assert.equal(resolveWorkspaceMenuIntent("Service", "Estimate Worksheets"), null);
+  assert.equal(resolveWorkspaceFromMenuItem("Application", "Favorite Website Feed"), "website");
+  assert.equal(resolveWorkspaceFromMenuItem("Application", "Favorite Service Board"), "service");
+  assert.equal(resolveWorkspaceFromMenuItem("Service", "Estimate Worksheets"), "service");
+});
+
 test("management website intents keep the dedicated UI builder but submit the legacy backend website action", () => {
   const intent = resolveManagementMenuIntent("Favorite Website Pulse");
+  const websiteActivityIntent = resolveManagementMenuIntent("Website Activity");
 
   assert.ok(intent);
   assert.equal(intent.workspaceId, "website");
@@ -73,6 +106,10 @@ test("management website intents keep the dedicated UI builder but submit the le
   assert.equal(intent.workflowOverrides?.commandLabel, "Favorite Website Pulse");
   assert.equal(intent.workflowOverrides?.submitAction, "Publish Feed");
   assert.equal(intent.initialValues?.pulseType, "Inventory freshness");
+
+  assert.equal(websiteActivityIntent, null);
+  assert.equal(resolveWorkspaceMenuIntent("Management Activity", "Website Activity"), null);
+  assert.equal(resolveWorkspaceFromMenuItem("Management Activity", "Website Activity"), "website");
 });
 
 test("remaining top-nav groups resolve to dedicated workspace intents", () => {
@@ -80,6 +117,7 @@ test("remaining top-nav groups resolve to dedicated workspace intents", () => {
   const generalLedgerIntent = resolveGeneralLedgerMenuIntent("Deal Posting");
   const systemIntent = resolveSystemMenuIntent("Audit Trail");
   const routedIntent = resolveWorkspaceMenuIntent("System", "Website Feed");
+  const myStoresIntent = resolveWorkspaceMenuIntent("System", "My Stores");
 
   assert.ok(receivablesIntent);
   assert.equal(receivablesIntent.workspaceId, "analytics");
@@ -90,14 +128,13 @@ test("remaining top-nav groups resolve to dedicated workspace intents", () => {
   assert.equal(generalLedgerIntent.tool, "GL Deal Posting");
   assert.equal(generalLedgerIntent.workflowOverrides?.submitAction, "GL Deal Posting");
 
-  assert.ok(systemIntent);
-  assert.equal(systemIntent.workspaceId, "audit");
-  assert.equal(systemIntent.tool, "System Audit Review");
+  assert.equal(systemIntent, null);
+  assert.equal(resolveWorkspaceFromMenuItem("System", "Audit Trail"), "audit");
 
-  assert.ok(routedIntent);
-  assert.equal(routedIntent.workspaceId, "website");
-  assert.equal(routedIntent.tool, "System Website Feed");
-  assert.equal(routedIntent.workflowOverrides?.submitAction, "Publish Feed");
+  assert.equal(routedIntent, null);
+  assert.equal(resolveWorkspaceFromMenuItem("System", "Website Feed"), "website");
+  assert.equal(myStoresIntent, null);
+  assert.equal(resolveWorkspaceFromMenuItem("System", "My Stores"), "analytics");
 });
 
 test("new submenu aliases stay routed to the existing workspace flows", () => {
@@ -173,7 +210,6 @@ test("new deeper receivables, ledger, system, and help leaves map to workflow-be
 test("application and help items can open behavior-bearing workflows instead of only navigating", () => {
   const applicationIntent = resolveApplicationMenuIntent("Preferences");
   const applicationQueueIntent = resolveApplicationMenuIntent("Task Queue Monitor");
-  const applicationWebsiteIntent = resolveApplicationMenuIntent("Favorite Website Feed");
   const helpIntent = resolveHelpMenuIntent("Operator Guide");
   const helpSupportIntent = resolveHelpMenuIntent("Open Ticket");
   const routedHelpIntent = resolveWorkspaceMenuIntent("Help", "Operator Guide");
@@ -186,10 +222,6 @@ test("application and help items can open behavior-bearing workflows instead of 
   assert.ok(applicationQueueIntent);
   assert.equal(applicationQueueIntent.workspaceId, "desktop");
   assert.equal(applicationQueueIntent.tool, "Application Task Queue Review");
-
-  assert.ok(applicationWebsiteIntent);
-  assert.equal(applicationWebsiteIntent.workspaceId, "website");
-  assert.equal(applicationWebsiteIntent.tool, "Application Favorite Website Feed");
 
   assert.ok(helpIntent);
   assert.equal(helpIntent.workspaceId, "desktop");

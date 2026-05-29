@@ -61,6 +61,10 @@ model Store {
   pricingRules    PricingRule[]
   approvalRequests ApprovalRequest[]
   boatInventoryUnits BoatInventoryUnit[]
+  sandboxTemplates SandboxTemplate[]
+  sandboxes        Sandbox[]
+  sandboxHistory   SandboxHistoryEntry[]
+  sandboxPromotionDiffs SandboxPromotionDiff[]
   crmContacts      CrmContact[]
   crmConversations CrmConversation[]
   crmMessages      CrmMessage[]
@@ -69,6 +73,101 @@ model Store {
   crmActivities    CrmActivity[]
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+}
+
+model SandboxTemplate {
+  id                  String    @id @default(cuid())
+  name                String
+  description         String    @default("")
+  selectedModulesJson String    @default("[]")
+  storeId             String
+  store               Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sandboxes           Sandbox[]
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@unique([storeId, name])
+  @@index([storeId, updatedAt])
+}
+
+model Sandbox {
+  id                  String    @id @default(cuid())
+  name                String
+  type                String
+  status              String
+  location            String
+  releaseType         String
+  currentOrgId        String
+  description         String
+  copiedFromLabel     String
+  selectedModulesJson String    @default("[]")
+  diffSummary         String    @default("")
+  requestedBy         String    @default("")
+  activatedBy         String    @default("")
+  createdByName       String    @default("")
+  createdByEmail      String    @default("")
+  loginEmail          String    @default("")
+  apiKey              String    @default("")
+  completedAt         DateTime?
+  refreshedAt         DateTime?
+  activatedAt         DateTime?
+  deletedAt           DateTime?
+  templateId          String?
+  template            SandboxTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  storeId             String
+  store               Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  historyEntries      SandboxHistoryEntry[] @relation("SandboxHistorySandbox")
+  promotionDiffs      SandboxPromotionDiff[]
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@unique([storeId, name])
+  @@index([storeId, updatedAt])
+  @@index([storeId, deletedAt])
+}
+
+model SandboxHistoryEntry {
+  id          String   @id @default(cuid())
+  sandboxId   String?
+  sandbox     Sandbox? @relation("SandboxHistorySandbox", fields: [sandboxId], references: [id], onDelete: SetNull)
+  sandboxName String
+  eventType   String
+  detail      String
+  diffSummary String   @default("")
+  requestedBy String
+  activatedBy String   @default("")
+  refreshedAt DateTime?
+  finishedAt  DateTime?
+  activatedAt DateTime?
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@index([storeId, createdAt])
+  @@index([sandboxId, createdAt])
+}
+
+model SandboxPromotionDiff {
+  id              String   @id @default(cuid())
+  moduleName      String
+  leafName        String
+  viewName        String
+  entityName      String
+  fieldName       String
+  productionValue String
+  sandboxValue    String
+  sourceFile      String
+  impactSummary   String
+  riskLevel       String
+  sandboxId       String
+  sandbox         Sandbox  @relation(fields: [sandboxId], references: [id], onDelete: Cascade)
+  storeId         String
+  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([sandboxId, moduleName])
+  @@index([storeId, moduleName])
 }
 
 model UserStore {

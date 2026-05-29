@@ -47,9 +47,12 @@ import { EmptyState } from "../components/EmptyState";
 import { StoreSelectModal } from "../components/StoreSelectModal";
 import { BoatInventoryWorkspace } from "./BoatInventoryWorkspace";
 import { CashierAccountabilityWorkspace } from "./CashierAccountabilityWorkspace";
+import { ARAgingDocWorkspace } from "./ARAgingDocWorkspace";
 import { ChartOfAccountsWorkspace } from "./ChartOfAccountsWorkspace";
 import { CrmCommunicateWorkspace } from "./CrmCommunicateWorkspace";
+import { DealerSetupWorkspace } from "./DealerSetupWorkspace";
 import { ManagementActivitiesWorkspace } from "./ManagementActivitiesWorkspace";
+import { MyStoresWorkspace } from "./MyStoresWorkspace";
 import { ProfitLossWorkspace } from "./ProfitLossWorkspace";
 import { ReportCenterWorkspace, fiProductLibrary } from "./ReportCenterWorkspace";
 import { TechnicianWorkloadWorkspace } from "./TechnicianWorkloadWorkspace";
@@ -278,14 +281,37 @@ interface DesktopFunnelStep {
 const OPEN_WINDOWS_STORAGE_PREFIX = "marine-cloud-open-windows";
 const OPEN_WINDOW_ORDER_STORAGE_PREFIX = "marine-cloud-open-window-order";
 const OPEN_WINDOW_ROUTE_STORAGE_PREFIX = "marine-cloud-open-window-routes";
+const DISMISSED_OPEN_WINDOW_STORAGE_PREFIX = "marine-cloud-dismissed-open-window";
+const SANDBOX_SHELL_ACTION_EVENT = "marine-cloud-sandbox-shell-action";
+const SANDBOX_SHELL_ACTION_STORAGE_KEY = "marine-cloud-sandbox-shell-action";
+const QUICK_LAUNCH_ASSIGNED_STORAGE_PREFIX = "marine-cloud-assigned-quick-launch-slots";
 const QUICK_LAUNCH_HIDDEN_STORAGE_PREFIX = "marine-cloud-hidden-quick-launch-slots";
 const OPEN_WINDOW_WORKSPACE_DRAG_MIME = "application/x-marine-open-window-workspace";
 const QUICK_LAUNCH_ORDER_STORAGE_PREFIX = "marine-cloud-quick-launch-order";
 const QUICK_LAUNCH_ROUTE_STORAGE_PREFIX = "marine-cloud-quick-launch-routes";
 const QUICK_LAUNCH_SLOT_DRAG_MIME = "application/x-marine-quick-launch-slot";
 const OPEN_SERVICE_DETAIL_WINDOWS_STORAGE_PREFIX = "marine-cloud-open-service-detail-windows";
-const defaultPageOnlyDropdownGroups = new Set(["Receivables"]);
+const defaultPageOnlyDropdownGroups = new Set<string>();
 const generalLedgerVisibleLeafs = new Set(["Chart of Accounts", "Profit & Loss"]);
+const hiddenSystemLeafs = new Set([
+  "Users & Roles",
+  "Store Access Matrix",
+  "MFA Reset Queue",
+  "Permission Changes",
+  "Login Watch",
+  "Password Policy Review",
+  "Workflow Rules",
+  "Notification Escalations",
+  "Background Jobs",
+  "Feature Flags",
+  "Environment Review",
+  "Audit Trail",
+  "Policy Change Log",
+  "API Connectors",
+  "Vendor Endpoints",
+  "Template Library",
+  "Webhook Retry Log"
+]);
 const generalLedgerPinnedLeafs: NavigationMenuItem[] = ["Chart of Accounts", "Profit & Loss"];
 
 interface QuickLaunchDropState {
@@ -332,6 +358,72 @@ function ensureGeneralLedgerPinnedLeafs(groups: NavigationGroup[]): NavigationGr
       ]
     };
   });
+}
+
+function ensureSystemPinnedLeafs(groups: NavigationGroup[]): NavigationGroup[] {
+  let foundSystemGroup = false;
+
+  const nextGroups = groups.map((group) => {
+    if (group.label !== "System") {
+      return group;
+    }
+
+    foundSystemGroup = true;
+    const operationBranch = group.items.find(
+      (item): item is Exclude<NavigationMenuItem, string> & { items: NavigationMenuItem[] } =>
+        isNavigationBranchItem(item) && item.label === "Operation"
+    );
+
+    if (operationBranch && navigationItemsContainLeaf(operationBranch.items, "My Stores")) {
+      return group;
+    }
+
+    if (operationBranch) {
+      return {
+        ...group,
+        items: group.items.map((item) => {
+          if (!isNavigationBranchItem(item) || item.label !== "Operation") {
+            return item;
+          }
+
+          return {
+            ...item,
+            items: [...item.items, "My Stores"]
+          };
+        })
+      };
+    }
+
+    const dealersIndex = group.items.findIndex((item) => getNavigationItemLabel(item) === "Dealers");
+    const nextItems = [...group.items];
+
+    nextItems.splice(dealersIndex >= 0 ? dealersIndex + 1 : nextItems.length, 0, {
+      label: "Operation",
+      items: ["My Stores"]
+    });
+
+    return {
+      ...group,
+      items: nextItems
+    };
+  });
+
+  if (foundSystemGroup) {
+    return nextGroups;
+  }
+
+  return [
+    ...nextGroups,
+    {
+      label: "System",
+      items: [
+        {
+          label: "Operation",
+          items: ["My Stores"]
+        }
+      ]
+    }
+  ];
 }
 
 interface QuickLaunchRouteMetadata {
@@ -1084,13 +1176,16 @@ const partsLookupColumns: LegacyGridColumn<PartsWorkspaceRow>[] = [
 export function DashboardPage({ session, activeStoreId, workspaceId, onSelectStore, onSignOut }: DashboardPageProps) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const isSandboxSession = session.mode === "sandbox";
   const activeStore = session.stores.find((store) => store.id === activeStoreId) ?? session.stores[0];
   const openWindowsStorageKey = `${OPEN_WINDOWS_STORAGE_PREFIX}:${session.user.id}`;
   const openWindowOrderStorageKey = `${OPEN_WINDOW_ORDER_STORAGE_PREFIX}:${session.user.id}`;
   const openWindowRouteStorageKey = `${OPEN_WINDOW_ROUTE_STORAGE_PREFIX}:${session.user.id}`;
+  const dismissedOpenWindowStorageKey = `${DISMISSED_OPEN_WINDOW_STORAGE_PREFIX}:${session.user.id}`;
   const quickLaunchHiddenStorageKey = `${QUICK_LAUNCH_HIDDEN_STORAGE_PREFIX}:${session.user.id}`;
   const quickLaunchOrderStorageKey = `${QUICK_LAUNCH_ORDER_STORAGE_PREFIX}:${session.user.id}`;
   const quickLaunchRouteStorageKey = `${QUICK_LAUNCH_ROUTE_STORAGE_PREFIX}:${session.user.id}`;
+  const quickLaunchAssignedStorageKey = `${QUICK_LAUNCH_ASSIGNED_STORAGE_PREFIX}:${session.user.id}`;
   const desktopWidgetsStorageKey = `${DESKTOP_WIDGETS_STORAGE_PREFIX}:${session.user.id}:${activeStore.id}`;
   const serviceDetailWindowsStorageKey = `${OPEN_SERVICE_DETAIL_WINDOWS_STORAGE_PREFIX}:${session.user.id}`;
   const partsInventoryDetailWindowsStorageKey = `${OPEN_PARTS_INVENTORY_DETAIL_WINDOWS_STORAGE_PREFIX}:${session.user.id}`;
@@ -1113,17 +1208,26 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       : workspaceId === "analytics" && searchParams.get("view") === "profit-loss"
         ? "profitLoss"
         : null;
+  const activeARAgingDocPage = workspaceId === "analytics" && searchParams.get("view") === "ar-aging-doc";
   const activeManagementActivitiesPage = workspaceId === "analytics" && searchParams.get("view") === "management-activities";
   const activeCashierAccountabilityPage = workspaceId === "analytics" && searchParams.get("view") === "cashier-accountability";
+  const activeDealerSetupPage = workspaceId === "analytics" && searchParams.get("view") === "dealer-setup";
+  const activeMyStoresPage = workspaceId === "analytics" && searchParams.get("view") === "my-stores";
   const activeAnalyticsQuery =
     activeGeneralLedgerPage === "chartOfAccounts"
       ? "view=chart-of-accounts"
       : activeGeneralLedgerPage === "profitLoss"
         ? "view=profit-loss"
+        : activeARAgingDocPage
+          ? "view=ar-aging-doc"
         : activeManagementActivitiesPage
           ? "view=management-activities"
           : activeCashierAccountabilityPage
             ? "view=cashier-accountability"
+          : activeDealerSetupPage
+            ? "view=dealer-setup"
+            : activeMyStoresPage
+              ? "view=my-stores"
           : "";
   const activeWorkspaceQuery = activeSalesCommunicatePage
     ? "view=communicate"
@@ -1143,6 +1247,9 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const [portalPreviewMode, setPortalPreviewMode] = useState<{ roNumber: string; customerName: string } | null>(null);
   const [isStorePickerOpen, setIsStorePickerOpen] = useState(false);
   const [openWindowsContextMenu, setOpenWindowsContextMenu] = useState<OpenWindowsContextMenuState | null>(null);
+  const [dismissedOpenWindowKey, setDismissedOpenWindowKey] = useState<string | null>(() =>
+    readInitialDismissedOpenWindowKeyPreference(session.user.id, workspaceId)
+  );
   const [quickLaunchContextMenu, setQuickLaunchContextMenu] = useState<QuickLaunchContextMenuState | null>(null);
   const [searchState, setSearchState] = useState<WorkspaceSearchState>({ searchTerm: "", filterValue: "All" });
   const [headerSearchTerm, setHeaderSearchTerm] = useState("");
@@ -1207,6 +1314,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const [quickLaunchRoutesBySlot, setQuickLaunchRoutesBySlot] = useState<Record<string, QuickLaunchRouteMetadata>>(() =>
     readQuickLaunchRouteMetadataPreference(session.user.id)
   );
+  const [assignedQuickLaunchSlots, setAssignedQuickLaunchSlots] = useState<string[]>(() => readAssignedQuickLaunchSlots(session.user.id));
   const [hiddenQuickLaunchSlots, setHiddenQuickLaunchSlots] = useState<string[]>(() => readHiddenQuickLaunchSlots(session.user.id));
   const [configuredOpenWorkspaceIds, setConfiguredOpenWorkspaceIds] = useState<WorkspaceId[]>(() => readOpenWorkspacePreference(session.user.id));
   const [openWorkspaceRoutesById, setOpenWorkspaceRoutesById] = useState<Partial<Record<WorkspaceId, QuickLaunchRouteMetadata>>>(() =>
@@ -1240,7 +1348,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const currentActivityKeyRef = useRef(`${activeStore.id}:${workspaceId}`);
   const quickLaunchDropHandledRef = useRef(false);
 
-  const menuGroups = ensureGeneralLedgerPinnedLeafs(dashboard?.navigation ?? legacyFallbackNavigation).filter(
+  const menuGroups = ensureSystemPinnedLeafs(ensureGeneralLedgerPinnedLeafs(dashboard?.navigation ?? legacyFallbackNavigation)).filter(
     (group) => !defaultPageOnlyDropdownGroups.has(group.label)
   );
   const orderedQuickLaunchButtons = sortQuickLaunchButtonsByOrder(quickLaunchButtons, quickLaunchOrderSlots);
@@ -1250,7 +1358,28 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const headerSearchResults = searchHeaderCommands(buildHeaderSearchCommands(menuGroups), headerSearchTerm);
   const serviceRows = workspace?.workspaceId === "service" ? workspace.rows : [];
   const activeWorkspace =
-    activeManagementActivitiesPage
+    activeARAgingDocPage
+      ? {
+          ...workspaceDefinitions.analytics,
+          title: "AR Aging Doc",
+          subtitle: "Receivables aging report options, filters, and document preview",
+          tools: [] as string[]
+        }
+      : activeDealerSetupPage
+      ? {
+          ...workspaceDefinitions.analytics,
+          title: "Dealer Setup",
+          subtitle: "Dealer onboarding, readiness tracking, and launch configuration",
+          tools: [] as string[]
+        }
+      : activeMyStoresPage
+      ? {
+          ...workspaceDefinitions.analytics,
+          title: "My Stores",
+          subtitle: "Store directory, department access, integrations, and setup health",
+          tools: [] as string[]
+        }
+      : activeManagementActivitiesPage
       ? {
           ...workspaceDefinitions.analytics,
           title: "Management Activities",
@@ -1391,9 +1520,6 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         }
       : null;
   const contextMenuTargetWorkspaceId = openWindowsContextMenu?.targetWorkspaceId ?? null;
-  const contextMenuTargetIsPinned = contextMenuTargetWorkspaceId
-    ? configuredOpenWorkspaceIds.includes(contextMenuTargetWorkspaceId)
-    : false;
   const hasAnyOpenWindows = configuredOpenWorkspaceIds.length > 0 || serviceDetailWindows.length > 0 || partsInventoryDetailWindows.length > 0 || salesDealDetailWindows.length > 0;
   const activeOpenWindowKey = activeServiceDetailWindow
     ? buildOpenWindowDetailKey(activeServiceDetailWindow)
@@ -1402,7 +1528,9 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     : activeSalesDealDetailWindow
       ? buildOpenWindowSalesDealKey(activeSalesDealDetailWindow)
     : buildOpenWindowWorkspaceKey(workspaceId);
-  const shouldRenderActiveWorkspace = visibleOpenWindowItems.some((item) => item.key === activeOpenWindowKey);
+  const shouldRenderActiveWorkspace =
+    dismissedOpenWindowKey !== activeOpenWindowKey &&
+    (activeOpenWindowKey === buildOpenWindowWorkspaceKey(workspaceId) || visibleOpenWindowItems.some((item) => item.key === activeOpenWindowKey));
   const basePartsRows = workspace?.workspaceId === "parts" ? workspace.rows : [];
   const partsRows = workspace?.workspaceId === "parts" ? mergePurchasePadRows(basePartsRows, purchasePadRows) : [];
   const selectedSalesRow = workspace?.workspaceId === "sales" ? resolveSelectedRow(workspace.rows, selectedSalesRowId) : null;
@@ -1412,9 +1540,22 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const partsLookupRows = filterPartsLookupRows(partsRows, partsLookupSearchTerm, partsLookupSearchField);
   const activePartsLookupRow = resolveSelectedRow(partsLookupRows, partsLookupSelectedRowId);
   const serviceNotificationEntries = workspace?.workspaceId === "service" ? workspace.notifications ?? [] : [];
-  const websiteWindowTitle = websiteWorkspaceView === "customSettings" ? "Sync Monitor" : activeWorkspace.title;
+  const websiteWindowTitle =
+    websiteWorkspaceView === "customSettings"
+      ? "Sync Monitor"
+      : websiteWorkspaceView === "sandbox"
+        ? "Sandboxes"
+        : isSandboxSession
+          ? "Sandbox"
+          : activeWorkspace.title;
   const websiteWindowSubtitle =
-    websiteWorkspaceView === "customSettings" ? "Custom Settings / integrations, rules, and configurations" : activeWorkspace.subtitle;
+    websiteWorkspaceView === "customSettings"
+      ? "Custom Settings / integrations, rules, and configurations"
+      : websiteWorkspaceView === "sandbox"
+        ? "Sandbox management / preview orgs, templates, and history"
+        : isSandboxSession
+          ? "Blank sandbox app canvas"
+          : activeWorkspace.subtitle;
   const activeWindowTitle = activeServiceDetailWindow
     ? formatServiceDetailWindowTitle(activeServiceDetailWindow)
     : activePartsInventoryDetailWindow
@@ -1444,8 +1585,13 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         ? ["New", "Delete", "Duplicate", "List"]
         : workspaceId === "parts" && partsWorkspaceView === "inventory"
           ? ["New", "Delete", "Duplicate", "Detail"]
+          : workspaceId === "website" && isSandboxSession && websiteWorkspaceView === "feed"
+            ? []
           : activeWorkspace.tools;
   const isLoading = isDashboardLoading || isWorkspaceLoading;
+  const shouldShowWorkspaceLoadingPanel =
+    isLoading &&
+    !(workspaceId === "analytics" && (activeGeneralLedgerPage !== null || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage || activeDealerSetupPage || activeMyStoresPage));
   const serviceReturnStore = serviceReturnStoreId ? session.stores.find((store) => store.id === serviceReturnStoreId) ?? null : null;
   const serviceReturnCleanupStore = requestedAuditCleanupStoreId
     ? session.stores.find((store) => store.id === requestedAuditCleanupStoreId) ?? null
@@ -1529,6 +1675,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   useEffect(() => {
     setQuickLaunchOrderSlots(readQuickLaunchOrderPreference(session.user.id));
     setQuickLaunchRoutesBySlot(readQuickLaunchRouteMetadataPreference(session.user.id));
+    setAssignedQuickLaunchSlots(readAssignedQuickLaunchSlots(session.user.id));
     setConfiguredOpenWorkspaceIds(readOpenWorkspacePreference(session.user.id));
     setOpenWorkspaceRoutesById(readOpenWorkspaceRouteMetadataPreference(session.user.id));
     setOpenWindowOrderKeys(readOpenWindowOrderPreference(session.user.id));
@@ -1539,6 +1686,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     setIsServiceNotificationRailCollapsed(readServiceNotificationRailCollapsedPreference(session.user.id));
     setOpenWindowsContextMenu(null);
     setQuickLaunchContextMenu(null);
+    setDismissedOpenWindowKey(readInitialDismissedOpenWindowKeyPreference(session.user.id, workspaceId));
   }, [session.user.id]);
 
   useEffect(() => {
@@ -1565,31 +1713,6 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       }));
       return;
     }
-
-    if (workspaceId !== "sales" && workspaceId !== "service") {
-      return;
-    }
-
-    setOpenWorkspaceRoutesById((current) => {
-      const hasSalesRoute = workspaceId === "sales" && "sales" in current;
-      const hasServiceRoute = workspaceId === "service" && "service" in current;
-
-      if (!hasSalesRoute && !hasServiceRoute) {
-        return current;
-      }
-
-      const next = { ...current };
-
-      if (hasSalesRoute) {
-        delete next.sales;
-      }
-
-      if (hasServiceRoute) {
-        delete next.service;
-      }
-
-      return next;
-    });
   }, [activeSalesCommunicatePage, activeTechnicianWorkloadPage, workspaceId]);
 
   useEffect(() => {
@@ -1625,6 +1748,12 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   }, [openWindowsContextMenu]);
 
   useEffect(() => {
+    if (dismissedOpenWindowKey && dismissedOpenWindowKey !== activeOpenWindowKey) {
+      setDismissedOpenWindowKey(null);
+    }
+  }, [activeOpenWindowKey, dismissedOpenWindowKey]);
+
+  useEffect(() => {
     if (!quickLaunchContextMenu || typeof window === "undefined") {
       return;
     }
@@ -1653,7 +1782,8 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       return;
     }
 
-    window.sessionStorage.setItem(quickLaunchOrderStorageKey, JSON.stringify(quickLaunchOrderSlots));
+    window.localStorage.setItem(quickLaunchOrderStorageKey, JSON.stringify(quickLaunchOrderSlots));
+    window.sessionStorage.removeItem(quickLaunchOrderStorageKey);
   }, [quickLaunchOrderSlots, quickLaunchOrderStorageKey]);
 
   useEffect(() => {
@@ -1661,8 +1791,18 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       return;
     }
 
-    window.sessionStorage.setItem(quickLaunchRouteStorageKey, JSON.stringify(quickLaunchRoutesBySlot));
+    window.localStorage.setItem(quickLaunchRouteStorageKey, JSON.stringify(quickLaunchRoutesBySlot));
+    window.sessionStorage.removeItem(quickLaunchRouteStorageKey);
   }, [quickLaunchRouteStorageKey, quickLaunchRoutesBySlot]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(quickLaunchAssignedStorageKey, JSON.stringify(assignedQuickLaunchSlots));
+    window.sessionStorage.removeItem(quickLaunchAssignedStorageKey);
+  }, [assignedQuickLaunchSlots, quickLaunchAssignedStorageKey]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -1693,7 +1833,21 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       return;
     }
 
-    window.sessionStorage.setItem(quickLaunchHiddenStorageKey, JSON.stringify(hiddenQuickLaunchSlots));
+    if (!dismissedOpenWindowKey) {
+      window.sessionStorage.removeItem(dismissedOpenWindowStorageKey);
+      return;
+    }
+
+    window.sessionStorage.setItem(dismissedOpenWindowStorageKey, JSON.stringify(dismissedOpenWindowKey));
+  }, [dismissedOpenWindowKey, dismissedOpenWindowStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(quickLaunchHiddenStorageKey, JSON.stringify(hiddenQuickLaunchSlots));
+    window.sessionStorage.removeItem(quickLaunchHiddenStorageKey);
   }, [hiddenQuickLaunchSlots, quickLaunchHiddenStorageKey]);
 
   useEffect(() => {
@@ -2079,18 +2233,16 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   }, [workspace, workspaceId]);
 
   function navigateToWorkspace(nextWorkspaceId: WorkspaceId, sourceLabel?: string) {
+    setDismissedOpenWindowKey(null);
+
     if (
       nextWorkspaceId === workspaceId &&
       !(nextWorkspaceId === "service" && (activeServiceDetailRoNumber || activeTechnicianWorkloadPage)) &&
       !(nextWorkspaceId === "parts" && partsWorkspaceView !== "ordering") &&
       !(nextWorkspaceId === "sales" && activeSalesCommunicatePage) &&
-      !(nextWorkspaceId === "analytics" && (activeGeneralLedgerPage !== null || activeManagementActivitiesPage || activeCashierAccountabilityPage))
+      !(nextWorkspaceId === "analytics" && (activeGeneralLedgerPage !== null || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage || activeDealerSetupPage || activeMyStoresPage))
     ) {
       return;
-    }
-
-    if (availableOpenWorkspaceIds.includes(nextWorkspaceId)) {
-      addOpenWorkspace(nextWorkspaceId);
     }
 
     if (nextWorkspaceId === "sales") {
@@ -2122,8 +2274,27 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     navigate(`/dashboard/${activeStore.id}/${nextWorkspaceId}`);
   }
 
+  function openSandboxDeploymentWorkbench() {
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(SANDBOX_SHELL_ACTION_STORAGE_KEY, "deploy");
+      window.dispatchEvent(new CustomEvent(SANDBOX_SHELL_ACTION_EVENT, { detail: "deploy" }));
+    }
+
+    setWebsiteWorkspaceRouteMetadata({
+      groupLabel: "System",
+      item: "Push to Production",
+      label: "Push to Production"
+    });
+    setWebsiteWorkspaceView("feed");
+    setToolbarNotice("Sandbox deployment workbench ready.");
+
+    if (workspaceId !== "website") {
+      navigateToWorkspace("website", "Sandbox deploy workbench");
+    }
+  }
+
   function navigateToPartsInventory(sourceLabel: string) {
-    addOpenWorkspace("parts");
+    setDismissedOpenWindowKey(null);
     setActiveWorkflow(null);
     setPendingWorkspaceMenuIntent(null);
     setToolbarNotice("Parts Inventory ready. Search a term, or enter % to pull inventory.");
@@ -2139,6 +2310,85 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       }
     );
     navigate(`/dashboard/${activeStore.id}/parts?view=inventory`);
+  }
+
+  function resolveExplicitPageLeafRoute(groupLabel: string, item: string): { workspaceId: WorkspaceId; resetWebsiteFeed?: boolean; view?: string } | null {
+    const lookupKey = `${groupLabel}:${item}`.toLowerCase();
+
+    switch (lookupKey) {
+      case "application:desktop":
+      case "application:favorite desktop":
+        return { workspaceId: "desktop" };
+      case "application:favorite service board":
+      case "application:estimate worksheets":
+      case "service:estimate worksheets":
+        return { workspaceId: "service" };
+      case "application:favorite parts board":
+        return { workspaceId: "parts" };
+      case "application:favorite sales board":
+        return { workspaceId: "sales" };
+      case "application:favorite executive board":
+        return { workspaceId: "analytics" };
+      case "receivables:ar aging doc":
+        return { workspaceId: "analytics", view: "ar-aging-doc" };
+      case "system:dealer setup":
+        return { workspaceId: "analytics", view: "dealer-setup" };
+      case "system:my stores":
+        return { workspaceId: "analytics", view: "my-stores" };
+      case "management activity:website activity":
+      case "system:website feed":
+        return { workspaceId: "website", resetWebsiteFeed: true };
+      case "application:favorite audit trail":
+      case "system:audit trail":
+        return { workspaceId: "audit" };
+      case "application:favorite website feed":
+        return { workspaceId: "website", resetWebsiteFeed: true };
+      default:
+        return null;
+    }
+  }
+
+  function openExplicitPageLeaf(groupLabel: string, item: string) {
+    setDismissedOpenWindowKey(null);
+
+    const pageLeafRoute = resolveExplicitPageLeafRoute(groupLabel, item);
+
+    if (!pageLeafRoute) {
+      return false;
+    }
+
+    setActiveWorkflow(null);
+    setPendingSalesMenuIntent(null);
+    setPendingServiceMenuIntent(null);
+    setPendingWorkspaceMenuIntent(null);
+    setToolbarNotice(`${item} ready.`);
+
+    rememberOpenWorkspaceLeaf(pageLeafRoute.workspaceId, {
+      groupLabel,
+      item,
+      label: item
+    });
+
+    if (pageLeafRoute.workspaceId === "website" && pageLeafRoute.resetWebsiteFeed) {
+      setWebsiteWorkspaceView("feed");
+    }
+
+    appendCommandLog(
+      {
+        label: "Workspace opened",
+        detail: `${workspaceDefinitions[pageLeafRoute.workspaceId].title} via ${groupLabel} / ${item}.`,
+        tone: "neutral"
+      },
+      {
+        optimistic: false,
+        workspaceId: pageLeafRoute.workspaceId
+      }
+    );
+
+    navigate(
+      `/dashboard/${activeStore.id}/${pageLeafRoute.workspaceId}${pageLeafRoute.view ? `?view=${pageLeafRoute.view}` : ""}`
+    );
+    return true;
   }
 
   function openWorkspaceTools(target: ApplicationWorkspaceToolsTarget, sourceLabel: string) {
@@ -2159,6 +2409,11 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
 
   function removeOpenWorkspace(targetWorkspaceId: WorkspaceId) {
     setConfiguredOpenWorkspaceIds((current) => current.filter((workspaceId) => workspaceId !== targetWorkspaceId));
+    setOpenWindowsContextMenu(null);
+
+    if (activeOpenWindowKey === buildOpenWindowWorkspaceKey(targetWorkspaceId)) {
+      setDismissedOpenWindowKey(buildOpenWindowWorkspaceKey(targetWorkspaceId));
+    }
   }
 
   function clearAllOpenWindows() {
@@ -2166,6 +2421,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       return;
     }
 
+    setDismissedOpenWindowKey(buildOpenWindowWorkspaceKey(workspaceId));
     setConfiguredOpenWorkspaceIds([]);
     setOpenWindowOrderKeys([]);
     setServiceDetailWindows([]);
@@ -2238,13 +2494,13 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   function hideQuickLaunchButton(button: QuickLaunchButton) {
     setHiddenQuickLaunchSlots((current) => normalizeHiddenQuickLaunchSlots([...current, button.slot]));
     setQuickLaunchContextMenu(null);
-    setToolbarNotice(`${resolveQuickLaunchButtonDisplayLabel(button)} removed from top buttons.`);
+    setToolbarNotice(`${resolveQuickLaunchButtonManagementLabel(button)} removed from top buttons.`);
   }
 
   function showQuickLaunchButton(button: QuickLaunchButton) {
     setHiddenQuickLaunchSlots((current) => current.filter((slot) => slot !== button.slot));
     setQuickLaunchContextMenu(null);
-    setToolbarNotice(`${resolveQuickLaunchButtonDisplayLabel(button)} added to top buttons.`);
+    setToolbarNotice(`${resolveQuickLaunchButtonManagementLabel(button)} added to top buttons.`);
   }
 
   function handleQuickLaunchStripContextMenu(event: React.MouseEvent<HTMLElement>) {
@@ -2461,10 +2717,63 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   }
 
   function resolveQuickLaunchButtonDisplayLabel(button: QuickLaunchButton) {
-    return quickLaunchRoutesBySlot[button.slot]?.label ?? button.label;
+    if (!assignedQuickLaunchSlots.includes(button.slot)) {
+      return "";
+    }
+
+    return quickLaunchRoutesBySlot[button.slot]?.label ?? "";
+  }
+
+  function resolveQuickLaunchButtonManagementLabel(button: QuickLaunchButton) {
+    return resolveQuickLaunchButtonDisplayLabel(button) || `Slot ${button.slot}`;
+  }
+
+  function setOpenWorkspaceRouteMetadata(workspace: WorkspaceId, routeMetadata: QuickLaunchRouteMetadata | null) {
+    setOpenWorkspaceRoutesById((current) => {
+      if (!routeMetadata) {
+        if (!(workspace in current)) {
+          return current;
+        }
+
+        const next = { ...current };
+        delete next[workspace];
+        return next;
+      }
+
+      return {
+        ...current,
+        [workspace]: routeMetadata
+      };
+    });
+  }
+
+  function rememberOpenWorkspaceLeaf(workspace: WorkspaceId, routeMetadata: QuickLaunchRouteMetadata) {
+    if (availableOpenWorkspaceIds.includes(workspace)) {
+      addOpenWorkspace(workspace);
+    }
+
+    if (workspace === "website") {
+      setWebsiteWorkspaceRouteMetadata(routeMetadata);
+      return;
+    }
+
+    setOpenWorkspaceRouteMetadata(workspace, routeMetadata);
+  }
+
+  function setWebsiteWorkspaceRouteMetadata(routeMetadata: QuickLaunchRouteMetadata | null) {
+    setOpenWorkspaceRouteMetadata("website", routeMetadata);
+
   }
 
   function inferQuickLaunchRouteMetadataForWorkspace(workspace: WorkspaceId): QuickLaunchRouteMetadata | null {
+    if (workspace === "desktop") {
+      return {
+        groupLabel: "Application",
+        item: "Desktop",
+        label: "Desktop"
+      };
+    }
+
     if (workspace === "parts" && workspaceId === "parts" && partsWorkspaceView === "inventory") {
       return {
         groupLabel: "Parts",
@@ -2489,11 +2798,44 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       };
     }
 
+    if (workspace === "parts") {
+      return {
+        groupLabel: "Parts",
+        item: "Ordering",
+        label: "Parts Ordering"
+      };
+    }
+
+    if (workspace === "sales") {
+      return {
+        groupLabel: "Sales",
+        item: "Leads, Quotes & Deals",
+        label: "Leads, Quotes & Deals"
+      };
+    }
+
+    if (workspace === "website") {
+      return {
+        groupLabel: "System",
+        item: "Website Feed",
+        label: "Website Feed"
+      };
+    }
+
+    if (workspace === "audit") {
+      return {
+        groupLabel: "System",
+        item: "Audit Trail",
+        label: "Audit Trail"
+      };
+    }
+
     return null;
   }
 
   function pinQuickLaunchWorkspaceButton(workspace: WorkspaceId, routeMetadata?: QuickLaunchRouteMetadata | null) {
     const targetQuickLaunchButton = resolveQuickLaunchButtonForWorkspace(workspace);
+    const nextRouteMetadata = routeMetadata ?? inferQuickLaunchRouteMetadataForWorkspace(workspace);
 
     if (!targetQuickLaunchButton) {
       setToolbarNotice(`No top button is configured for ${workspaceDefinitions[workspace].title}.`);
@@ -2502,14 +2844,15 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
 
     setQuickLaunchContextMenu(null);
 
-    if (routeMetadata) {
+    if (nextRouteMetadata) {
       setQuickLaunchRoutesBySlot((current) => ({
         ...current,
-        [targetQuickLaunchButton.slot]: routeMetadata
+        [targetQuickLaunchButton.slot]: nextRouteMetadata
       }));
+      setAssignedQuickLaunchSlots((current) => normalizeAssignedQuickLaunchSlots([...current, targetQuickLaunchButton.slot]));
     }
 
-    const quickLaunchLabel = routeMetadata?.label ?? resolveQuickLaunchButtonDisplayLabel(targetQuickLaunchButton);
+    const quickLaunchLabel = nextRouteMetadata?.label ?? resolveQuickLaunchButtonManagementLabel(targetQuickLaunchButton);
 
     if (!hiddenQuickLaunchSlots.includes(targetQuickLaunchButton.slot)) {
       setToolbarNotice(`${quickLaunchLabel} is already pinned in top buttons.`);
@@ -2518,6 +2861,49 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
 
     setHiddenQuickLaunchSlots((current) => current.filter((slot) => slot !== targetQuickLaunchButton.slot));
     setToolbarNotice(`${quickLaunchLabel} added to top buttons.`);
+  }
+
+  function findQuickLaunchSlotForRoute(routeMetadata: QuickLaunchRouteMetadata) {
+    return orderedQuickLaunchButtons.find(
+      (button) =>
+        button.slot !== "0" &&
+        assignedQuickLaunchSlots.includes(button.slot) &&
+        quickLaunchRoutesBySlot[button.slot]?.groupLabel === routeMetadata.groupLabel &&
+        quickLaunchRoutesBySlot[button.slot]?.item === routeMetadata.item
+    );
+  }
+
+  function findFirstAvailableQuickLaunchButton() {
+    return orderedQuickLaunchButtons.find((button) => button.slot !== "0" && !assignedQuickLaunchSlots.includes(button.slot)) ?? null;
+  }
+
+  function assignRouteToQuickLaunchSlot(button: QuickLaunchButton, routeMetadata: QuickLaunchRouteMetadata) {
+    setQuickLaunchRoutesBySlot((current) => ({
+      ...current,
+      [button.slot]: routeMetadata
+    }));
+    setAssignedQuickLaunchSlots((current) => normalizeAssignedQuickLaunchSlots([...current, button.slot]));
+    setHiddenQuickLaunchSlots((current) => current.filter((slot) => slot !== button.slot));
+  }
+
+  function pinRouteToFirstAvailableQuickLaunchSlot(routeMetadata: QuickLaunchRouteMetadata) {
+    const existingButton = findQuickLaunchSlotForRoute(routeMetadata);
+
+    if (existingButton) {
+      setHiddenQuickLaunchSlots((current) => current.filter((slot) => slot !== existingButton.slot));
+      setToolbarNotice(`${routeMetadata.label} is already saved in top tab ${existingButton.slot}.`);
+      return;
+    }
+
+    const nextButton = findFirstAvailableQuickLaunchButton();
+
+    if (!nextButton) {
+      setToolbarNotice("No blank top tab slots are available.");
+      return;
+    }
+
+    assignRouteToQuickLaunchSlot(nextButton, routeMetadata);
+    setToolbarNotice(`${routeMetadata.label} saved to top tab ${nextButton.slot}.`);
   }
 
   function handleQuickLaunchStripDragOver(event: React.DragEvent<HTMLElement>) {
@@ -2565,6 +2951,8 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   }
 
   function openServiceRepairOrder(targetStoreId: string, options: OpenServiceRepairOrderOptions) {
+    setDismissedOpenWindowKey(null);
+
     const nextSearchParams = new URLSearchParams({ detailRo: options.roNumber });
 
     if (options.taskId) {
@@ -2593,7 +2981,6 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   function openPartsInventoryDetail(targetStoreId: string, row: PartsWorkspaceRow) {
     const nextSearchParams = new URLSearchParams({ view: "inventory", inventoryPart: row.partNumber });
 
-    addOpenWorkspace("parts");
     setActiveWorkflow(null);
     setPendingWorkspaceMenuIntent(null);
     setPartsInventoryDetailWindows((current) =>
@@ -2653,6 +3040,8 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   }
 
   function handleMenuSelect(groupLabel: string, item: string) {
+    setDismissedOpenWindowKey(null);
+
     if (item === "Switch Store") {
       setIsStorePickerOpen(true);
       return;
@@ -2663,11 +3052,19 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       return;
     }
 
+    if (openExplicitPageLeaf(groupLabel, item)) {
+      return;
+    }
+
     if (groupLabel === "General Ledger" && (item === "Chart of Accounts" || item === "Profit & Loss")) {
       setActiveWorkflow(null);
       setPendingWorkspaceMenuIntent(null);
       setToolbarNotice(`${item} ready.`);
-      addOpenWorkspace("analytics");
+      rememberOpenWorkspaceLeaf("analytics", {
+        groupLabel,
+        item,
+        label: item
+      });
       appendCommandLog(
         {
           label: "Workspace opened",
@@ -2689,15 +3086,11 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       setPendingSalesMenuIntent(null);
       setPendingWorkspaceMenuIntent(null);
       setToolbarNotice("Communication center ready.");
-      addOpenWorkspace("sales");
-      setOpenWorkspaceRoutesById((current) => ({
-        ...current,
-        sales: {
-          groupLabel: "CRM",
-          item: "Communicate",
-          label: "Communicate"
-        }
-      }));
+      rememberOpenWorkspaceLeaf("sales", {
+        groupLabel: "CRM",
+        item: "Communicate",
+        label: "Communicate"
+      });
       appendCommandLog(
         {
           label: "Workspace opened",
@@ -2718,12 +3111,22 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       const workspaceToolsTarget = resolveApplicationWorkspaceToolsTarget(item);
 
       if (workspaceToolsTarget) {
+        rememberOpenWorkspaceLeaf(workspaceToolsTarget.workspaceId, {
+          groupLabel,
+          item,
+          label: item
+        });
         openWorkspaceTools(workspaceToolsTarget, `${groupLabel} / ${item}`);
         return;
       }
     }
 
     if (groupLabel === "Parts" && (item === "Parts Inventory" || item === "Part Number Lookup")) {
+      rememberOpenWorkspaceLeaf("parts", {
+        groupLabel,
+        item,
+        label: item
+      });
       navigateToPartsInventory(`${groupLabel} / ${item}`);
       return;
     }
@@ -2732,7 +3135,11 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       setActiveWorkflow(null);
       setPendingWorkspaceMenuIntent(null);
       setToolbarNotice("Management activities ready.");
-      addOpenWorkspace("analytics");
+      rememberOpenWorkspaceLeaf("analytics", {
+        groupLabel,
+        item,
+        label: "Management Activities"
+      });
       appendCommandLog(
         {
           label: "Workspace opened",
@@ -2753,7 +3160,11 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       setActiveWorkflow(null);
       setPendingWorkspaceMenuIntent(null);
       setToolbarNotice("Cashier accountability ready.");
-      addOpenWorkspace("analytics");
+      rememberOpenWorkspaceLeaf("analytics", {
+        groupLabel,
+        item,
+        label: item
+      });
       appendCommandLog(
         {
           label: "Workspace opened",
@@ -2774,7 +3185,11 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       setActiveWorkflow(null);
       setPendingWorkspaceMenuIntent(null);
       setToolbarNotice("Management activities ready.");
-      addOpenWorkspace("analytics");
+      rememberOpenWorkspaceLeaf("analytics", {
+        groupLabel,
+        item,
+        label: "Management Activities"
+      });
       appendCommandLog(
         {
           label: "Workspace opened",
@@ -2796,15 +3211,11 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       setPendingServiceMenuIntent(null);
       setPendingWorkspaceMenuIntent(null);
       setToolbarNotice("Technician workload ready.");
-      addOpenWorkspace("service");
-      setOpenWorkspaceRoutesById((current) => ({
-        ...current,
-        service: {
-          groupLabel: "Service",
-          item: "Technician Workload",
-          label: "Technician Workload"
-        }
-      }));
+      rememberOpenWorkspaceLeaf("service", {
+        groupLabel: "Service",
+        item: "Technician Workload",
+        label: "Technician Workload"
+      });
       appendCommandLog(
         {
           label: "Workspace opened",
@@ -2825,12 +3236,17 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
 
     if (workspaceMenuIntent) {
       setPendingWorkspaceMenuIntent(workspaceMenuIntent);
+      rememberOpenWorkspaceLeaf(workspaceMenuIntent.workspaceId, {
+        groupLabel,
+        item,
+        label: item
+      });
 
       if (
         workspaceId !== workspaceMenuIntent.workspaceId ||
         (workspaceMenuIntent.workspaceId === "service" && activeTechnicianWorkloadPage) ||
         (workspaceMenuIntent.workspaceId === "sales" && activeSalesCommunicatePage) ||
-        (workspaceMenuIntent.workspaceId === "analytics" && (activeGeneralLedgerPage !== null || activeManagementActivitiesPage || activeCashierAccountabilityPage))
+        (workspaceMenuIntent.workspaceId === "analytics" && (activeGeneralLedgerPage !== null || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage))
       ) {
         navigateToWorkspace(workspaceMenuIntent.workspaceId, `${groupLabel} / ${item}`);
       }
@@ -2843,6 +3259,11 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
 
       if (salesMenuIntent) {
         setPendingSalesMenuIntent(salesMenuIntent);
+        rememberOpenWorkspaceLeaf("sales", {
+          groupLabel,
+          item,
+          label: item
+        });
 
         if (workspaceId !== "sales") {
           navigateToWorkspace("sales", `${groupLabel} / ${item}`);
@@ -2857,6 +3278,11 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
 
       if (serviceMenuIntent) {
         setPendingServiceMenuIntent(serviceMenuIntent);
+        rememberOpenWorkspaceLeaf("service", {
+          groupLabel,
+          item,
+          label: item
+        });
 
         if (workspaceId !== "service" || activeServiceDetailRoNumber || activeTechnicianWorkloadPage) {
           navigateToWorkspace("service", `${groupLabel} / ${item}`);
@@ -2869,6 +3295,11 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     const nextWorkspaceId = resolveWorkspaceFromMenuItem(groupLabel, item);
 
     if (nextWorkspaceId) {
+      rememberOpenWorkspaceLeaf(nextWorkspaceId, {
+        groupLabel,
+        item,
+        label: item
+      });
       navigateToWorkspace(nextWorkspaceId, `${groupLabel} / ${item}`);
     }
   }
@@ -2880,34 +3311,16 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       return;
     }
 
-    const targetQuickLaunchButton = resolveQuickLaunchButtonForMenuItem(groupLabel, item, nextWorkspaceId);
-
-    if (!targetQuickLaunchButton) {
-      setToolbarNotice(`No top button is configured for ${item}.`);
-      return;
-    }
-
     if (!availableOpenWorkspaceIds.includes(nextWorkspaceId)) {
       setToolbarNotice(`${workspaceDefinitions[nextWorkspaceId].title} is not available for this store yet.`);
       return;
     }
 
-    setQuickLaunchRoutesBySlot((current) => ({
-      ...current,
-      [targetQuickLaunchButton.slot]: {
-        groupLabel,
-        item,
-        label: item
-      }
-    }));
-
-    if (!hiddenQuickLaunchSlots.includes(targetQuickLaunchButton.slot)) {
-      setToolbarNotice(`${item} is already pinned in top buttons.`);
-      return;
-    }
-
-    setHiddenQuickLaunchSlots((current) => current.filter((slot) => slot !== targetQuickLaunchButton.slot));
-    setToolbarNotice(`${item} added to top buttons.`);
+    pinRouteToFirstAvailableQuickLaunchSlot({
+      groupLabel,
+      item,
+      label: item
+    });
   }
 
   function isMenuItemVisible(groupLabel: string, item: string) {
@@ -2917,6 +3330,10 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
 
     if (groupLabel === "General Ledger") {
       return generalLedgerVisibleLeafs.has(item) && hasExplicitWorkspaceAssignment(groupLabel, item);
+    }
+
+    if (groupLabel === "System" && hiddenSystemLeafs.has(item)) {
+      return false;
     }
 
     if (item === "Switch Store" || item === "Logout" || item === "Exit") {
@@ -2933,7 +3350,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       return false;
     }
 
-    return Boolean(resolveQuickLaunchButtonForMenuItem(groupLabel, item, nextWorkspaceId));
+    return Boolean(findQuickLaunchSlotForRoute({ groupLabel, item, label: item }) || findFirstAvailableQuickLaunchButton());
   }
 
   function isMenuItemPinned(groupLabel: string, item: string) {
@@ -2943,51 +3360,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       return false;
     }
 
-    const targetQuickLaunchButton = resolveQuickLaunchButtonForMenuItem(groupLabel, item, nextWorkspaceId);
-
-    if (!targetQuickLaunchButton) {
-      return false;
-    }
-
-    return !hiddenQuickLaunchSlots.includes(targetQuickLaunchButton.slot);
-  }
-
-  function resolveQuickLaunchButtonForMenuItem(groupLabel: string, item: string, workspace: WorkspaceId) {
-    const itemLookupLabel = item.trim().toLowerCase();
-    const groupLookupLabel = groupLabel.trim().toLowerCase();
-
-    if (workspace === "analytics") {
-      const analyticsQuickLaunchLookup: Array<{ buttonLabel: string; match: boolean }> = [
-        {
-          buttonLabel: "Receivables",
-          match: groupLookupLabel === "receivables" || itemLookupLabel.includes("receivable")
-        },
-        {
-          buttonLabel: "Payroll Review",
-          match: itemLookupLabel.includes("payroll")
-        }
-      ];
-
-      for (const candidate of analyticsQuickLaunchLookup) {
-        if (!candidate.match) {
-          continue;
-        }
-
-        const foundButton = quickLaunchButtons.find((button) => button.label.toLowerCase() === candidate.buttonLabel.toLowerCase());
-
-        if (foundButton) {
-          return foundButton;
-        }
-      }
-    }
-
-    const exactLabelMatch = quickLaunchButtons.find((button) => button.label.toLowerCase() === itemLookupLabel);
-
-    if (exactLabelMatch) {
-      return exactLabelMatch;
-    }
-
-    return resolveQuickLaunchButtonForWorkspace(workspace);
+    return Boolean(findQuickLaunchSlotForRoute({ groupLabel, item, label: item }));
   }
 
   function handleQuickLaunch(button: QuickLaunchButton) {
@@ -2995,24 +3368,12 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
 
     const routeMetadata = quickLaunchRoutesBySlot[button.slot];
 
-    if (routeMetadata) {
-      handleMenuSelect(routeMetadata.groupLabel, routeMetadata.item);
+    if (!assignedQuickLaunchSlots.includes(button.slot) || !routeMetadata) {
+      setToolbarNotice(`Top button slot ${button.slot} is unassigned.`);
       return;
     }
 
-    if (button.action === "switchStore") {
-      setIsStorePickerOpen(true);
-      return;
-    }
-
-    if (button.action === "logout") {
-      onSignOut();
-      return;
-    }
-
-    if (button.workspaceId) {
-      navigateToWorkspace(button.workspaceId, `Quick launch ${button.slot}`);
-    }
+    handleMenuSelect(routeMetadata.groupLabel, routeMetadata.item);
   }
 
   function handleSalesRowSelect(row: SalesWorkspaceRow) {
@@ -3021,7 +3382,8 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   }
 
   function openSalesDeal(row: SalesWorkspaceRow) {
-    addOpenWorkspace("sales");
+    setDismissedOpenWindowKey(null);
+
     setSalesDealDetailWindows((current) =>
       upsertSalesDealDetailWindow(current, {
         customer: row.customer,
@@ -3357,8 +3719,29 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
 
     if (
       pendingWorkspaceMenuIntent.workspaceId === "website" &&
+      pendingWorkspaceMenuIntent.workflowOverrides?.submitAction === "System Sandbox Review"
+    ) {
+      setWebsiteWorkspaceRouteMetadata({
+        groupLabel: "System",
+        item: "Sandbox",
+        label: "Sandbox"
+      });
+      setWebsiteWorkspaceView("sandbox");
+      setActiveWorkflow(null);
+      setToolbarNotice("System sandbox ready.");
+      setPendingWorkspaceMenuIntent(null);
+      return;
+    }
+
+    if (
+      pendingWorkspaceMenuIntent.workspaceId === "website" &&
       pendingWorkspaceMenuIntent.workflowOverrides?.submitAction === "System Sync Monitor"
     ) {
+      setWebsiteWorkspaceRouteMetadata({
+        groupLabel: "System",
+        item: "Sync Monitor",
+        label: "Sync Monitor"
+      });
       setWebsiteWorkspaceView("customSettings");
       setActiveWorkflow(null);
       setToolbarNotice("Sync monitor custom settings ready.");
@@ -3367,6 +3750,12 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     }
 
     if (pendingWorkspaceMenuIntent.workspaceId === "website") {
+      const websiteLabel = pendingWorkspaceMenuIntent.workflowOverrides?.commandLabel ?? pendingWorkspaceMenuIntent.workflowOverrides?.title ?? "Website Feed";
+      setWebsiteWorkspaceRouteMetadata({
+        groupLabel: "System",
+        item: websiteLabel,
+        label: websiteLabel
+      });
       setWebsiteWorkspaceView("feed");
     }
 
@@ -4119,10 +4508,8 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         onDrop={handleQuickLaunchStripDrop}
       >
         <div className="legacy-title-strip">
-          <span>Premier Marine Cloud DMS</span>
-          <span>
-            {dashboard?.store.name ?? activeStore.name} · {session.user.name}
-          </span>
+          <span>{isSandboxSession ? "Premier Marine Cloud DMS - Sandbox" : "Premier Marine Cloud DMS"}</span>
+          {isSandboxSession ? null : <span>{`${dashboard?.store.name ?? activeStore.name} · ${session.user.name}`}</span>}
         </div>
 
         <div className="legacy-menu-row">
@@ -4175,6 +4562,11 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                 </div>
               ) : null}
             </div>
+            {isSandboxSession ? (
+              <button className="legacy-header-button" onClick={openSandboxDeploymentWorkbench} type="button">
+                Push to Production
+              </button>
+            ) : null}
             <button className="legacy-header-button" onClick={() => setIsStorePickerOpen(true)} type="button">
               Switch Store
             </button>
@@ -4184,80 +4576,90 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
           </div>
         </div>
 
-        <div
-          className={`legacy-launch-strip${isQuickLaunchStripDropTarget ? " is-drop-target" : ""}`}
-          onContextMenu={handleQuickLaunchStripContextMenu}
-          onDragLeave={handleQuickLaunchStripDragLeave}
-          onDragOver={handleQuickLaunchStripDragOver}
-          onDrop={handleQuickLaunchStripDrop}
-        >
-          {visibleQuickLaunchButtons.map((button) => {
-            const isActiveQuickLaunch = button.workspaceId === workspaceId;
-            const isQuickLaunchContextTarget = quickLaunchContextTarget?.slot === button.slot;
-            const isQuickLaunchDragging = draggingQuickLaunchSlot === button.slot;
-            const quickLaunchDropClass = quickLaunchDropState?.slot === button.slot ? ` is-drop-${quickLaunchDropState.position}` : "";
-            const quickLaunchLabel = resolveQuickLaunchButtonDisplayLabel(button);
+        {isSandboxSession ? null : (
+          <>
+            <div
+              className={`legacy-launch-strip${isQuickLaunchStripDropTarget ? " is-drop-target" : ""}`}
+              onContextMenu={handleQuickLaunchStripContextMenu}
+              onDragLeave={handleQuickLaunchStripDragLeave}
+              onDragOver={handleQuickLaunchStripDragOver}
+              onDrop={handleQuickLaunchStripDrop}
+            >
+              {visibleQuickLaunchButtons.map((button) => {
+                const isQuickLaunchAssigned = assignedQuickLaunchSlots.includes(button.slot);
+                const isActiveQuickLaunch = isQuickLaunchAssigned && button.workspaceId === workspaceId;
+                const isQuickLaunchContextTarget = quickLaunchContextTarget?.slot === button.slot;
+                const isQuickLaunchDragging = draggingQuickLaunchSlot === button.slot;
+                const quickLaunchDropClass = quickLaunchDropState?.slot === button.slot ? ` is-drop-${quickLaunchDropState.position}` : "";
+                const quickLaunchLabel = resolveQuickLaunchButtonDisplayLabel(button);
+                const quickLaunchManagementLabel = resolveQuickLaunchButtonManagementLabel(button);
 
-            return (
-              <div
-                className={`legacy-launch-button-shell${isQuickLaunchContextTarget ? " is-context-open" : ""}${isQuickLaunchDragging ? " is-dragging" : ""}${quickLaunchDropClass}`}
-                key={button.slot}
-                onDragOver={(event) => handleQuickLaunchDragOver(event, button.slot)}
-                onDrop={(event) => handleQuickLaunchDrop(event, button.slot)}
-              >
-                <button
-                  aria-current={isActiveQuickLaunch ? "page" : undefined}
-                  className={`legacy-launch-button${isActiveQuickLaunch ? " is-active" : ""}`}
-                  draggable
-                  onDragEnd={handleQuickLaunchDragEnd}
-                  onDragStart={(event) => handleQuickLaunchDragStart(event, button.slot)}
-                  onClick={() => handleQuickLaunch(button)}
-                  onContextMenu={
-                    (event) => {
-                      openQuickLaunchContext(event, button.slot);
-                    }
-                  }
-                  type="button"
-                >
-                  <span>{button.slot}</span>
-                  <strong>{quickLaunchLabel}</strong>
-                </button>
-                  {isQuickLaunchContextTarget ? (
-                  <button
-                    aria-label={`Remove ${quickLaunchLabel} from top buttons`}
-                    className="legacy-launch-context-button"
-                    onClick={() => hideQuickLaunchButton(button)}
-                    type="button"
+                return (
+                  <div
+                    className={`legacy-launch-button-shell${isQuickLaunchContextTarget ? " is-context-open" : ""}${isQuickLaunchDragging ? " is-dragging" : ""}${quickLaunchDropClass}`}
+                    key={button.slot}
+                    onDragOver={(event) => handleQuickLaunchDragOver(event, button.slot)}
+                    onDrop={(event) => handleQuickLaunchDrop(event, button.slot)}
                   >
-                    X
-                  </button>
-                ) : null}
+                    <button
+                      aria-label={isQuickLaunchAssigned ? `Quick launch ${quickLaunchManagementLabel}` : `Quick launch slot ${button.slot} is blank`}
+                      aria-current={isActiveQuickLaunch ? "page" : undefined}
+                      className={`legacy-launch-button${isActiveQuickLaunch ? " is-active" : ""}`}
+                      draggable
+                      onDragEnd={handleQuickLaunchDragEnd}
+                      onDragStart={(event) => handleQuickLaunchDragStart(event, button.slot)}
+                      onClick={() => handleQuickLaunch(button)}
+                      onContextMenu={
+                        (event) => {
+                          openQuickLaunchContext(event, button.slot);
+                        }
+                      }
+                      type="button"
+                    >
+                      <span>{button.slot}</span>
+                      <strong>{quickLaunchLabel || " "}</strong>
+                    </button>
+                      {isQuickLaunchContextTarget ? (
+                      <button
+                        aria-label={`Remove ${quickLaunchManagementLabel} from top buttons`}
+                        className="legacy-launch-context-button"
+                        onClick={() => hideQuickLaunchButton(button)}
+                        type="button"
+                      >
+                        X
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+            {quickLaunchContextMenu && quickLaunchContextMenu.targetSlot === null ? (
+              <div className="legacy-open-context-inline is-rail">
+                {hiddenQuickLaunchButtons.length > 0 ? (
+                  <>
+                    <span className="legacy-open-context-label">Add Button</span>
+                    {hiddenQuickLaunchButtons.map((button) => (
+                      <button className="legacy-open-context-action" key={button.slot} onClick={() => showQuickLaunchButton(button)} type="button">
+                        Add {resolveQuickLaunchButtonManagementLabel(button)}
+                      </button>
+                    ))}
+                  </>
+                ) : quickLaunchContextTarget ? null : (
+                  <p className="legacy-open-context-empty">All top buttons are already visible.</p>
+                )}
               </div>
-            );
-          })}
-        </div>
-        {quickLaunchContextMenu && quickLaunchContextMenu.targetSlot === null ? (
-          <div className="legacy-open-context-inline is-rail">
-            {hiddenQuickLaunchButtons.length > 0 ? (
-              <>
-                <span className="legacy-open-context-label">Add Button</span>
-                {hiddenQuickLaunchButtons.map((button) => (
-                  <button className="legacy-open-context-action" key={button.slot} onClick={() => showQuickLaunchButton(button)} type="button">
-                    Add {resolveQuickLaunchButtonDisplayLabel(button)}
-                  </button>
-                ))}
-              </>
-            ) : quickLaunchContextTarget ? null : (
-              <p className="legacy-open-context-empty">All top buttons are already visible.</p>
-            )}
-          </div>
-        ) : null}
+            ) : null}
+          </>
+        )}
       </header>
 
       {errorMessage ? <p className="form-error banner-error">{errorMessage}</p> : null}
 
       <div className={`legacy-workspace-shell${workspaceId === "service" ? " is-service-shell" : ""}${workspaceId === "parts" ? " is-parts-shell" : ""}`}>
-        <aside className="legacy-open-windows" onContextMenu={handleOpenWindowsRailContextMenu}>
+        <aside
+          className={`legacy-open-windows${isSandboxSession ? " is-sandbox-open-windows" : ""}`}
+          onContextMenu={isSandboxSession ? undefined : handleOpenWindowsRailContextMenu}
+        >
           <div className="legacy-open-header">
             <div className="legacy-open-title-row">
               <div className="legacy-open-title">Open Windows</div>
@@ -4282,33 +4684,35 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
               </div>
             </div>
           </div>
-          {openWindowsContextMenu && openWindowsContextMenu.targetWorkspaceId === null ? (
-            <div className="legacy-open-context-inline is-rail">
-              {hiddenOpenWorkspaceIds.length > 0 ? (
-                <>
-                  <span className="legacy-open-context-label">Add Window</span>
-                  {hiddenOpenWorkspaceIds.map((candidateWorkspaceId) => (
-                    <button
-                      className="legacy-open-context-action"
-                      key={candidateWorkspaceId}
-                      onClick={() => {
-                        addOpenWorkspace(candidateWorkspaceId);
-                        setOpenWindowsContextMenu(null);
-                      }}
-                      type="button"
-                    >
-                      Add {openWorkspaceRoutesById[candidateWorkspaceId]?.label ?? workspaceDefinitions[candidateWorkspaceId].title}
-                    </button>
-                  ))}
-                </>
-              ) : (
-                <p className="legacy-open-context-empty">All available windows are already pinned in the rail.</p>
-              )}
-            </div>
-          ) : null}
-          <div className="legacy-open-window-list">
-            {visibleOpenWindowItems.length === 0 ? <div aria-hidden="true" className="legacy-open-window-canvas" /> : null}
-            {visibleOpenWindowItems.map((item) => {
+          {isSandboxSession ? null : (
+            <>
+              {openWindowsContextMenu && openWindowsContextMenu.targetWorkspaceId === null ? (
+                <div className="legacy-open-context-inline is-rail">
+                  {hiddenOpenWorkspaceIds.length > 0 ? (
+                    <>
+                      <span className="legacy-open-context-label">Add Window</span>
+                      {hiddenOpenWorkspaceIds.map((candidateWorkspaceId) => (
+                        <button
+                          className="legacy-open-context-action"
+                          key={candidateWorkspaceId}
+                          onClick={() => {
+                            addOpenWorkspace(candidateWorkspaceId);
+                            setOpenWindowsContextMenu(null);
+                          }}
+                          type="button"
+                        >
+                          Add {openWorkspaceRoutesById[candidateWorkspaceId]?.label ?? workspaceDefinitions[candidateWorkspaceId].title}
+                        </button>
+                      ))}
+                    </>
+                  ) : (
+                    <p className="legacy-open-context-empty">All available windows are already pinned in the rail.</p>
+                  )}
+                </div>
+              ) : null}
+              <div className="legacy-open-window-list">
+                {visibleOpenWindowItems.length === 0 ? <div aria-hidden="true" className="legacy-open-window-canvas" /> : null}
+                {visibleOpenWindowItems.map((item) => {
               const isWorkspaceItem = item.kind === "workspace";
               const workspaceIdForItem = isWorkspaceItem ? item.workspaceId : null;
               const workspaceRouteMetadata = workspaceIdForItem ? openWorkspaceRoutesById[workspaceIdForItem] ?? null : null;
@@ -4319,7 +4723,11 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                   workspaceTitle = "Parts Inventory";
                 } else if (workspaceIdForItem === "website" && websiteWorkspaceView === "customSettings") {
                   workspaceTitle = "Sync Monitor";
-                } else if (workspaceIdForItem === workspaceId && (activeGeneralLedgerPage !== null || activeManagementActivitiesPage || activeCashierAccountabilityPage)) {
+                } else if (workspaceIdForItem === "website" && websiteWorkspaceView === "sandbox") {
+                  workspaceTitle = "Sandbox";
+                } else if (workspaceIdForItem === "website" && isSandboxSession) {
+                  workspaceTitle = "Sandbox";
+                } else if (workspaceIdForItem === workspaceId && (activeGeneralLedgerPage !== null || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage)) {
                   workspaceTitle = activeWorkspace.title;
                 } else if (workspaceRouteMetadata?.label) {
                   workspaceTitle = workspaceRouteMetadata.label;
@@ -4373,21 +4781,15 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                       </button>
                       {isContextTarget ? (
                         <button
-                          className={`legacy-window-link-context-button${contextMenuTargetIsPinned ? " is-danger" : ""}`}
+                          aria-label={`Close ${workspaceTitle}`}
+                          className="legacy-window-link-context-button is-danger"
                           onClick={() => {
-                            if (contextMenuTargetIsPinned) {
-                              removeOpenWorkspace(workspaceIdForItem);
-                              setToolbarNotice(`${workspaceTitle} removed from Open Windows.`);
-                            } else {
-                              addOpenWorkspace(workspaceIdForItem);
-                              setToolbarNotice(`${workspaceTitle} added to Open Windows.`);
-                            }
-
-                            setOpenWindowsContextMenu(null);
+                            removeOpenWorkspace(workspaceIdForItem);
+                            setToolbarNotice(`${workspaceTitle} removed from Open Windows.`);
                           }}
                           type="button"
                         >
-                          {contextMenuTargetIsPinned ? "Delete" : "Pin"}
+                          X
                         </button>
                       ) : null}
                     </Fragment>
@@ -4482,8 +4884,10 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                   ) : null}
                 </div>
               );
-            })}
-          </div>
+                })}
+              </div>
+            </>
+          )}
         </aside>
 
         <section
@@ -4637,39 +5041,39 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                   }${workspaceId === "parts" ? " is-parts-layout" : ""}${workspaceId === "sales" && activeSalesCommunicatePage ? " is-sales-communicate-layout" : ""}${workspaceId === "sales" && activeSalesDealDetailWindow ? " is-sales-deal-layout" : ""}`}
                 >
                   <ErrorBoundary>
-                    {isLoading ? (
+                    {shouldShowWorkspaceLoadingPanel ? (
                       <div className="legacy-loading-panel">Loading workspace...</div>
                     ) : (
                       renderWorkspace(
-                      workspaceId,
-                      dashboard,
-                      workspace,
-                      {
-                        session,
-                        snapshots: workspaceSnapshots
-                      },
-                      openWorkspaceIds,
-                      activeStore.statusLine,
-                      searchState,
-                      setSearchState,
-                      {
-                        selectedSalesRowId,
-                        onSelectSalesRow: handleSalesRowSelect,
-                        selectedServiceRowId,
-                        onOpenServiceRow: handleServiceRowOpen,
-                        onSelectServiceRow: handleServiceRowSelect,
-                        selectedPartsRowId,
-                        onSelectPartsRow: handlePartsRowSelect,
-                        selectedWebsiteRowId,
-                        onSelectWebsiteRow: handleWebsiteRowSelect
-                      },
-                      navigateToWorkspace,
-                      handleWorkspaceTool,
-                      desktopWidgetsStorageKey,
-                      {
-                        workspaceToolsTarget
-                      },
-                      {
+                        workspaceId,
+                        dashboard,
+                        workspace,
+                        {
+                          session,
+                          snapshots: workspaceSnapshots
+                        },
+                        openWorkspaceIds,
+                        activeStore.statusLine,
+                        searchState,
+                        setSearchState,
+                        {
+                          selectedSalesRowId,
+                          onSelectSalesRow: handleSalesRowSelect,
+                          selectedServiceRowId,
+                          onOpenServiceRow: handleServiceRowOpen,
+                          onSelectServiceRow: handleServiceRowSelect,
+                          selectedPartsRowId,
+                          onSelectPartsRow: handlePartsRowSelect,
+                          selectedWebsiteRowId,
+                          onSelectWebsiteRow: handleWebsiteRowSelect
+                        },
+                        navigateToWorkspace,
+                        handleWorkspaceTool,
+                        desktopWidgetsStorageKey,
+                        {
+                          workspaceToolsTarget
+                        },
+                        {
                         activeStoreId: activeStore.id,
                         actorUserId: session.user.id,
                         availableStores: session.stores,
@@ -4685,8 +5089,8 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                         requestedCleanupStoreId: requestedAuditCleanupStoreId,
                         refreshKey: refreshToken,
                         updatingPolicyKey: updatingTaskPolicyKey
-                      },
-                      {
+                        },
+                        {
                         activeServiceDetailRoNumber,
                         activeSalesDealWindow: activeSalesDealDetailWindow,
                         entries: taskQueue,
@@ -4941,9 +5345,12 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                         purchasePadRows,
                         workspaceView: partsWorkspaceView
                       },
+                      activeARAgingDocPage,
                       activeGeneralLedgerPage,
                       activeManagementActivitiesPage,
                       activeCashierAccountabilityPage,
+                      activeDealerSetupPage,
+                      activeMyStoresPage,
                       activeTechnicianWorkloadPage,
                       activeSalesCommunicatePage,
                       (roNumber: string, customerName: string) => { setPortalPreviewMode({ roNumber, customerName }); }
@@ -5877,9 +6284,12 @@ function renderWorkspace(
     purchasePadRows: PartsWorkspaceRow[];
     workspaceView: PartsWorkspaceView;
   },
+  activeARAgingDocPage: boolean,
   activeGeneralLedgerPage: "chartOfAccounts" | "profitLoss" | null,
   activeManagementActivitiesPage: boolean,
   activeCashierAccountabilityPage: boolean,
+  activeDealerSetupPage: boolean,
+  activeMyStoresPage: boolean,
   activeTechnicianWorkloadPage: boolean,
   activeSalesCommunicatePage: boolean,
   onOpenPortalPreview: (roNumber: string, customerName: string) => void
@@ -6077,6 +6487,18 @@ function renderWorkspace(
     case "analytics": {
       const rows = workspace?.workspaceId === "analytics" ? workspace.rows : [];
 
+      if (activeARAgingDocPage) {
+        return <ARAgingDocWorkspace storeName={dashboard?.store.name ?? "Premier Marine"} />;
+      }
+
+      if (activeDealerSetupPage) {
+        return <DealerSetupWorkspace storeId={auditControls.activeStoreId} storeName={dashboard?.store.name ?? "Premier Marine"} />;
+      }
+
+      if (activeMyStoresPage) {
+        return <MyStoresWorkspace storeName={dashboard?.store.name ?? "Premier Marine"} />;
+      }
+
       if (activeCashierAccountabilityPage) {
         return <CashierAccountabilityWorkspace storeId={auditControls.activeStoreId} storeName={dashboard?.store.name ?? "Premier Marine"} />;
       }
@@ -6126,9 +6548,14 @@ function renderWorkspace(
 
       return (
         <WebsiteWorkspace
+          activeStoreId={auditControls.activeStoreId}
           activityEntries={taskControls.activityEntries}
+          activeUserEmail={reportContext.session.user.email}
+          activeUserName={reportContext.session.user.name}
           entries={taskControls.entries}
           fallbackStatusLine={fallbackStatusLine}
+          sandboxContext={reportContext.session.sandboxContext ?? null}
+          isSandboxSession={reportContext.session.mode === "sandbox"}
           isFilteredByOperator={taskControls.isFilteredByOperator}
           onAddTaskNote={taskControls.onAddTaskNote}
           onAssignTask={taskControls.onAssignTask}
@@ -17633,25 +18060,80 @@ function buildFilterOptions(values: string[], activeValue?: string) {
 
 function readOpenWorkspacePreference(userId: string) {
   if (typeof window === "undefined") {
-    return workspaceOrder;
+    return [];
   }
 
   const raw = window.sessionStorage.getItem(`${OPEN_WINDOWS_STORAGE_PREFIX}:${userId}`);
 
   if (!raw) {
-    return workspaceOrder;
+    return [];
   }
 
   try {
     const parsed = JSON.parse(raw);
 
     if (!Array.isArray(parsed)) {
-      return workspaceOrder;
+      return [];
     }
 
-    return normalizeOpenWorkspacePreference(parsed.filter((value): value is WorkspaceId => typeof value === "string" && isWorkspaceId(value)));
+    const normalized = normalizeOpenWorkspacePreference(parsed.filter((value): value is WorkspaceId => typeof value === "string" && isWorkspaceId(value)));
+    return normalized.length === workspaceOrder.length && normalized.every((workspaceId, index) => workspaceId === workspaceOrder[index]) ? [] : normalized;
   } catch {
-    return workspaceOrder;
+    return [];
+  }
+}
+
+function readInitialDismissedOpenWindowKeyPreference(userId: string, workspaceId: WorkspaceId) {
+  if (typeof window !== "undefined") {
+    const raw = window.sessionStorage.getItem(`${DISMISSED_OPEN_WINDOW_STORAGE_PREFIX}:${userId}`);
+
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+
+        if (typeof parsed === "string" && parsed.length > 0) {
+          return parsed;
+        }
+      } catch {
+        // Ignore malformed session state and fall back to default initialization.
+      }
+    }
+  }
+
+  if (workspaceId !== "desktop") {
+    return null;
+  }
+
+  const hasPersistedOpenWindows =
+    readOpenWorkspacePreference(userId).length > 0 ||
+    readOpenServiceDetailWindowPreference(userId).length > 0 ||
+    readOpenPartsInventoryDetailWindowPreference(userId).length > 0 ||
+    readOpenSalesDealDetailWindowPreference(userId).length > 0;
+
+  return hasPersistedOpenWindows ? null : buildOpenWindowWorkspaceKey(workspaceId);
+}
+
+function readAssignedQuickLaunchSlots(userId: string) {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const raw = readQuickLaunchPreferenceStorage(`${QUICK_LAUNCH_ASSIGNED_STORAGE_PREFIX}:${userId}`);
+
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return normalizeAssignedQuickLaunchSlots(parsed.filter((value): value is string => typeof value === "string"));
+  } catch {
+    return [];
   }
 }
 
@@ -17699,7 +18181,7 @@ function readHiddenQuickLaunchSlots(userId: string) {
     return [];
   }
 
-  const raw = window.sessionStorage.getItem(`${QUICK_LAUNCH_HIDDEN_STORAGE_PREFIX}:${userId}`);
+  const raw = readQuickLaunchPreferenceStorage(`${QUICK_LAUNCH_HIDDEN_STORAGE_PREFIX}:${userId}`);
 
   if (!raw) {
     return [];
@@ -17719,13 +18201,7 @@ function readHiddenQuickLaunchSlots(userId: string) {
 }
 
 function getDefaultQuickLaunchRouteMetadata(): Record<string, QuickLaunchRouteMetadata> {
-  return {
-    "2": {
-      groupLabel: "Service",
-      item: "Estimates & Repair Orders",
-      label: "Estimates & Repair Orders"
-    }
-  };
+  return {};
 }
 
 function normalizeOpenWorkspaceRouteMetadataPreference(value: unknown) {
@@ -17800,7 +18276,7 @@ function readQuickLaunchRouteMetadataPreference(userId: string) {
     return getDefaultQuickLaunchRouteMetadata();
   }
 
-  const raw = window.sessionStorage.getItem(`${QUICK_LAUNCH_ROUTE_STORAGE_PREFIX}:${userId}`);
+  const raw = readQuickLaunchPreferenceStorage(`${QUICK_LAUNCH_ROUTE_STORAGE_PREFIX}:${userId}`);
 
   if (!raw) {
     return getDefaultQuickLaunchRouteMetadata();
@@ -17819,7 +18295,7 @@ function readQuickLaunchOrderPreference(userId: string) {
     return quickLaunchButtons.map((button) => button.slot);
   }
 
-  const raw = window.sessionStorage.getItem(`${QUICK_LAUNCH_ORDER_STORAGE_PREFIX}:${userId}`);
+  const raw = readQuickLaunchPreferenceStorage(`${QUICK_LAUNCH_ORDER_STORAGE_PREFIX}:${userId}`);
 
   if (!raw) {
     return quickLaunchButtons.map((button) => button.slot);
@@ -17836,6 +18312,14 @@ function readQuickLaunchOrderPreference(userId: string) {
   } catch {
     return quickLaunchButtons.map((button) => button.slot);
   }
+}
+
+function readQuickLaunchPreferenceStorage(storageKey: string) {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return window.localStorage.getItem(storageKey) ?? window.sessionStorage.getItem(storageKey);
 }
 
 function normalizeQuickLaunchOrderPreference(slots: string[]) {
@@ -17878,6 +18362,13 @@ function reorderQuickLaunchOrderPreference(current: string[], sourceSlot: string
 }
 
 function normalizeHiddenQuickLaunchSlots(slots: string[]) {
+  const allowedSlots = new Set(quickLaunchButtons.map((button) => button.slot));
+  const uniqueSlots = new Set(slots.filter((slot) => allowedSlots.has(slot)));
+
+  return quickLaunchButtons.filter((button) => uniqueSlots.has(button.slot)).map((button) => button.slot);
+}
+
+function normalizeAssignedQuickLaunchSlots(slots: string[]) {
   const allowedSlots = new Set(quickLaunchButtons.map((button) => button.slot));
   const uniqueSlots = new Set(slots.filter((slot) => allowedSlots.has(slot)));
 

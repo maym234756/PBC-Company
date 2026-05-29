@@ -39,6 +39,167 @@ export interface WorkflowActionResponse {
   taskEntry?: TaskQueueEntry;
 }
 
+export interface SandboxBackendModule {
+  detail: string;
+  name: string;
+  sourceFiles: string[];
+}
+
+export interface SandboxTemplateRow {
+  id: string;
+  action: string;
+  description: string;
+  inUse: boolean;
+  name: string;
+  selectedModules: string[];
+}
+
+export interface SandboxRow {
+  id: string;
+  actionLinks: string[];
+  completedOn: string;
+  copiedFrom: string;
+  currentOrgId: string;
+  description: string;
+  diffSummary: string;
+  location: string;
+  name: string;
+  releaseType: string;
+  selectedModules: string[];
+  status: string;
+  templateId: string | null;
+  type: string;
+}
+
+export interface SandboxHistoryRow {
+  activated: string;
+  activatedBy: string;
+  detail: string;
+  diffSummary: string;
+  eventType: string;
+  finished: string;
+  id: string;
+  refreshed: string;
+  requestedBy: string;
+  sandbox: string;
+}
+
+export interface SandboxWorkspacePayload {
+  history: SandboxHistoryRow[];
+  sandboxes: SandboxRow[];
+  templates: SandboxTemplateRow[];
+}
+
+export interface SandboxLoginAccess {
+  apiKey: string;
+  dealerGroupName: string;
+  loginEmail: string;
+  readOnlyNotice: string;
+  sandboxId: string;
+  sandboxName: string;
+  sourceStoreId: string;
+  sourceStoreName: string;
+}
+
+export interface SandboxMutationResponse extends SandboxWorkspacePayload {
+  message: string;
+}
+
+export type SandboxPromotionCheckStatus = "ready" | "warning" | "attention";
+export type SandboxPromotionRiskLevel = "low" | "medium" | "high";
+
+export interface SandboxPromotionChange {
+  affectedLeafs: string[];
+  affectedViews: string[];
+  entityName: string;
+  fieldName: string;
+  id: string;
+  impactSummary: string;
+  leafName: string;
+  moduleName: string;
+  productionState: string;
+  productionValue: string;
+  riskLevel: SandboxPromotionRiskLevel;
+  sandboxState: string;
+  sandboxValue: string;
+  sourceFiles: string[];
+  viewName: string;
+}
+
+export interface SandboxPromotionComparison {
+  affectedLeafs: string[];
+  fieldDiffs: string[];
+  id: string;
+  impactSummary: string;
+  productionViewLabel: string;
+  riskLevel: SandboxPromotionRiskLevel;
+  sandboxViewLabel: string;
+  title: string;
+}
+
+export interface SandboxPromotionValidation {
+  detail: string;
+  id: string;
+  label: string;
+  status: SandboxPromotionCheckStatus;
+}
+
+export interface SandboxPromotionPreview {
+  changes: SandboxPromotionChange[];
+  comparisonViews: SandboxPromotionComparison[];
+  generatedAt: string;
+  healthScore: number;
+  hiddenContainerLabel: string;
+  sandboxId: string;
+  sandboxName: string;
+  summary: string;
+  validationChecks: SandboxPromotionValidation[];
+}
+
+export interface SandboxPushRequest {
+  actorName?: string;
+  selectedChangeIds: string[];
+  validatedCheckIds: string[];
+}
+
+export interface SandboxPushResponse extends SandboxWorkspacePayload {
+  deployedChangeCount: number;
+  deployedModules: string[];
+  message: string;
+  preview: SandboxPromotionPreview;
+}
+
+export interface SandboxTemplateMutationRequest {
+  description: string;
+  name: string;
+  selectedModules: string[];
+}
+
+export interface CreateSandboxRequest {
+  actorEmail?: string;
+  actorName?: string;
+  name: string;
+  purpose: string;
+  selectedModules: string[];
+  templateId?: string | null;
+  type: string;
+}
+
+export interface UpdateSandboxRequest {
+  description?: string;
+  location?: string;
+  name?: string;
+  releaseType?: string;
+  selectedModules?: string[];
+  status?: string;
+  type?: string;
+}
+
+export interface SandboxActionRequest {
+  actorName?: string;
+  mode: "activate" | "clone" | "delete" | "login" | "promote" | "refresh";
+}
+
 export interface CashierAccountabilityReportOperator {
   operatorKey: string;
   actorUserId: string | null;
@@ -696,12 +857,17 @@ const defaultApiBaseUrl =
     : `http://${window.location.hostname}:4000/api`;
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? defaultApiBaseUrl).replace(/\/$/, "");
+const SESSION_STORAGE_KEY = "marine-cloud-session";
 
-export async function login(email: string, password: string) {
+export async function login(email: string, password: string, sandboxId?: string | null) {
   return request<LoginPayload>("/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email, password })
+    body: JSON.stringify({ email, password, sandboxId: sandboxId ?? null })
   });
+}
+
+export async function getSandboxLoginAccess(sandboxId: string) {
+  return request<SandboxLoginAccess>(`/sandboxes/${sandboxId}/login-access`);
 }
 
 export async function getDashboard(storeId: string) {
@@ -950,6 +1116,66 @@ export async function globalSearch(storeId: string, query: string): Promise<Glob
   return request<GlobalSearchResult>(`/stores/${storeId}/search?q=${encodeURIComponent(query)}`);
 }
 
+export async function getSandboxBackendModules() {
+  return request<SandboxBackendModule[]>("/sandbox/backend-modules");
+}
+
+export async function getSandboxWorkspace(storeId: string) {
+  return request<SandboxWorkspacePayload>(`/stores/${storeId}/sandbox-workspace`);
+}
+
+export async function getSandboxPromotionPreview(storeId: string, sandboxId: string) {
+  return request<SandboxPromotionPreview>(`/stores/${storeId}/sandboxes/${sandboxId}/promotion-preview`);
+}
+
+export async function createSandboxTemplate(storeId: string, payload: SandboxTemplateMutationRequest) {
+  return request<SandboxMutationResponse>(`/stores/${storeId}/sandbox-templates`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateSandboxTemplate(storeId: string, templateId: string, payload: SandboxTemplateMutationRequest) {
+  return request<SandboxMutationResponse>(`/stores/${storeId}/sandbox-templates/${templateId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function deleteSandboxTemplate(storeId: string, templateId: string) {
+  return request<SandboxMutationResponse>(`/stores/${storeId}/sandbox-templates/${templateId}`, {
+    method: "DELETE"
+  });
+}
+
+export async function createSandbox(storeId: string, payload: CreateSandboxRequest) {
+  return request<SandboxMutationResponse>(`/stores/${storeId}/sandboxes`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateSandbox(storeId: string, sandboxId: string, payload: UpdateSandboxRequest) {
+  return request<SandboxMutationResponse>(`/stores/${storeId}/sandboxes/${sandboxId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function runSandboxAction(storeId: string, sandboxId: string, payload: SandboxActionRequest) {
+  return request<SandboxMutationResponse>(`/stores/${storeId}/sandboxes/${sandboxId}/actions`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function pushSandboxToProduction(storeId: string, sandboxId: string, payload: SandboxPushRequest) {
+  return request<SandboxPushResponse>(`/stores/${storeId}/sandboxes/${sandboxId}/push-to-production`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
 export async function getCrmCommunicate(storeId: string) {
   return request<CrmCommunicatePayload>(`/stores/${storeId}/crm/communicate`);
 }
@@ -975,11 +1201,25 @@ export async function sendCrmConversationSms(storeId: string, conversationId: st
   });
 }
 
+export async function getDealerSetupPersistedDealers<T>(storeId: string) {
+  return request<{ dealers: T[] }>(`/stores/${storeId}/dealer-setup/dealers`);
+}
+
+export async function createDealerSetupDealer<T>(storeId: string, payload: { dealer: T }) {
+  return request<{ dealer: T; message: string }>(`/stores/${storeId}/dealer-setup/dealers`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
 async function request<T>(path: string, init?: RequestInit) {
+  const sandboxHeaders = readSandboxSessionHeaders();
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...sandboxHeaders,
       ...(init?.headers ?? {})
     }
   });
@@ -990,4 +1230,36 @@ async function request<T>(path: string, init?: RequestInit) {
   }
 
   return response.json() as Promise<T>;
+}
+
+function readSandboxSessionHeaders(): Record<string, string> {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
+
+    if (!raw) {
+      return {};
+    }
+
+    const parsed = JSON.parse(raw) as {
+      mode?: string;
+      sandboxContext?: {
+        sandboxId?: string;
+      } | null;
+    };
+
+    if (parsed.mode !== "sandbox") {
+      return {};
+    }
+
+    return {
+      "X-Marine-Sandbox-Id": parsed.sandboxContext?.sandboxId ?? "",
+      "X-Marine-Session-Mode": "sandbox"
+    };
+  } catch {
+    return {};
+  }
 }

@@ -446,18 +446,7 @@ export function resolveManagementMenuIntent(item: string): WorkspaceMenuIntent |
         }
       });
     case "Website Activity":
-      return createWorkspaceMenuIntent("website", item, "Management Website Pulse", {
-        title: "Website Activity Pulse",
-        description: "Stage a website activity pulse for the latest publishing changes.",
-        notice: "Website activity ready.",
-        primaryActionLabel: "Queue Website Review",
-        submitAction: "Publish Feed",
-        initialValues: {
-          window: "Recent changes",
-          pulseType: "Merchandising",
-          note: item
-        }
-      });
+      return null;
     case "Lead Handoff Monitor":
       return createWorkspaceMenuIntent("website", item, "Management Lead Handoff", {
         description: "Run the lead handoff check between website queues and store teams.",
@@ -559,6 +548,8 @@ export function resolveManagementMenuIntent(item: string): WorkspaceMenuIntent |
 
 export function resolveReceivablesMenuIntent(item: string): WorkspaceMenuIntent | null {
   switch (item) {
+    case "AR Aging Doc":
+      return null;
     case "Customer Inquiry":
     case "Statement Requests":
     case "Promise to Pay":
@@ -1028,7 +1019,20 @@ export function resolveGeneralLedgerMenuIntent(item: string): WorkspaceMenuInten
 
 export function resolveSystemMenuIntent(item: string): WorkspaceMenuIntent | null {
   switch (item) {
+    case "Sandbox":
+      return createWorkspaceMenuIntent("website", item, "System Website Feed", {
+        description: "Open the website sandbox lane with environment-safe defaults for system validation.",
+        notice: "System sandbox ready.",
+        primaryActionLabel: "Open Sandbox",
+        submitAction: "System Sandbox Review",
+        initialValues: {
+          window: "Recent changes",
+          pulseType: "Sandbox validation",
+          note: "Sandbox"
+        }
+      });
     case "Website Feed":
+      return null;
     case "Feed Health":
     case "Lead Form Routing":
     case "Sync Monitor":
@@ -1232,6 +1236,7 @@ export function resolveSystemMenuIntent(item: string): WorkspaceMenuIntent | nul
         }
       });
     case "Audit Trail":
+      return null;
     case "Login Watch":
     case "Policy Change Log":
     case "Password Policy Review":
@@ -1490,6 +1495,8 @@ export function resolveSalesMenuIntent(item: string): WorkspaceMenuIntent | null
 
 export function resolveServiceMenuIntent(item: string): WorkspaceMenuIntent | null {
   switch (item) {
+    case "Estimate Worksheets":
+      return null;
     case "Technician Time Entry":
       return createAliasedWorkspaceMenuIntent("service", item, "Technician Time Entry", "Service Time", {
         description: "Queue technician time entry updates from the current service lane.",
@@ -1568,7 +1575,6 @@ export function resolveServiceMenuIntent(item: string): WorkspaceMenuIntent | nu
     case "Recommendations Queue":
     case "Detail Review":
     case "Repair Orders":
-    case "Estimate Worksheets":
       return createAliasedWorkspaceMenuIntent("service", item, "Service Workbench Review", "Service Workbench", {
         description: "Stage service workbench review with RO context and operator notes.",
         notice: `${item} ready.`,
@@ -1906,11 +1912,19 @@ export function resolvePartsMenuIntent(item: string): WorkspaceMenuIntent | null
 
 export function resolveApplicationMenuIntent(item: string): WorkspaceMenuIntent | null {
   switch (item) {
+    case "Favorite Audit Trail":
+    case "Favorite Desktop":
+    case "Favorite Executive Board":
+    case "Favorite Parts Board":
+    case "Favorite Sales Board":
+    case "Favorite Service Board":
+    case "Favorite Website Feed":
+    case "Estimate Worksheets":
+      return null;
     case "Desktop":
     case "Open Windows":
     case "Command Search":
     case "Workspace Overview":
-    case "Favorite Desktop":
       return createAliasedWorkspaceMenuIntent("desktop", item, "Application Workspace Surface", "Application Surface", {
         description: "Review the desktop surface, launch tools, and open-window shell behavior from one flow.",
         notice: `${item} ready.`,
@@ -2041,7 +2055,6 @@ export function resolveApplicationMenuIntent(item: string): WorkspaceMenuIntent 
       });
     case "Audit Notes":
     case "Exception Inbox":
-    case "Favorite Audit Trail":
       return createAliasedWorkspaceMenuIntent("audit", item, "Application Audit Review", "Application Audit", {
         description: "Open audit-side application review with ownership and follow-up notes attached.",
         notice: `${item} ready.`,
@@ -2053,7 +2066,6 @@ export function resolveApplicationMenuIntent(item: string): WorkspaceMenuIntent 
         }
       });
     case "Executive Snapshot":
-    case "Favorite Executive Board":
       return createAliasedWorkspaceMenuIntent("analytics", item, "Application Executive Snapshot", "Application Executive", {
         description: "Stage an executive application snapshot with reviewer and time-window context.",
         notice: `${item} ready.`,
@@ -2061,7 +2073,7 @@ export function resolveApplicationMenuIntent(item: string): WorkspaceMenuIntent 
         initialValues: {
           snapshotView: item,
           reviewer: "Leadership",
-          window: item === "Favorite Executive Board" ? "90 Days" : "30 Days"
+          window: "30 Days"
         }
       });
     case "Cash Pulse":
@@ -2119,7 +2131,6 @@ export function resolveApplicationMenuIntent(item: string): WorkspaceMenuIntent 
         }
       });
     case "Repair Orders":
-    case "Estimate Worksheets":
       return createAliasedWorkspaceMenuIntent("service", item, "Service Workbench Review", "Service Workbench", {
         description: "Open service documents from Application with workbench review context attached.",
         notice: `${item} ready.`,
@@ -2166,7 +2177,6 @@ export function resolveApplicationMenuIntent(item: string): WorkspaceMenuIntent 
     case "Sales Velocity":
     case "Lead Source Mix":
     case "Desk Productivity":
-    case "Favorite Sales Board":
       return createAliasedWorkspaceMenuIntent("sales", item, "Sales Report", "Sales Report", {
         description: "Open sales reporting from Application with the right report and delivery path preselected.",
         notice: `${item} ready.`,
@@ -2178,7 +2188,6 @@ export function resolveApplicationMenuIntent(item: string): WorkspaceMenuIntent 
     case "Service Promise Board":
     case "Technician Load":
     case "Comeback Watch":
-    case "Favorite Service Board":
       return createAliasedWorkspaceMenuIntent("service", item, "Report", "Service Report", {
         description: "Open service-side reporting from Application with the right board or report in focus.",
         notice: `${item} ready.`,
@@ -2190,7 +2199,6 @@ export function resolveApplicationMenuIntent(item: string): WorkspaceMenuIntent 
     case "Parts Fill Rate":
     case "Obsolescence Watch":
     case "Vendor Performance":
-    case "Favorite Parts Board":
       return createAliasedWorkspaceMenuIntent("parts", item, "Parts Report Review", "Parts Report", {
         description: "Open parts reporting from Application with the selected report or board already in focus.",
         notice: `${item} ready.`,
@@ -2199,17 +2207,6 @@ export function resolveApplicationMenuIntent(item: string): WorkspaceMenuIntent 
           reportName: item,
           window: "30 Days",
           delivery: "Operator Queue"
-        }
-      });
-    case "Favorite Website Feed":
-      return createWorkspaceMenuIntent("website", item, "Application Favorite Website Feed", {
-        description: "Load the preferred website feed setup with publishing scope and freshness controls.",
-        notice: "Favorite website feed ready.",
-        primaryActionLabel: "Load Favorite Feed",
-        initialValues: {
-          window: "Recent changes",
-          pulseType: "Inventory freshness",
-          note: item
         }
       });
     default:

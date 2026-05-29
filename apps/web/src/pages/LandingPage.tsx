@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import type { SessionState } from "../types";
 
+const DEFAULT_PRODUCTION_WORKSPACE_PATH = "desktop";
+
 interface LandingPageProps {
   session: SessionState | null;
 }
@@ -97,7 +99,7 @@ function buildDownloadHref(target: DownloadTarget) {
 }
 
 export function LandingPage({ session }: LandingPageProps) {
-  const signedInWorkspacePath = session?.selectedStoreId ? `/dashboard/${session.selectedStoreId}/website` : null;
+  const signedInWorkspacePath = session?.selectedStoreId ? `/dashboard/${session.selectedStoreId}/${DEFAULT_PRODUCTION_WORKSPACE_PATH}` : null;
   const primaryAccessPath = signedInWorkspacePath ?? "/login";
 
   return (
@@ -139,8 +141,8 @@ export function LandingPage({ session }: LandingPageProps) {
           <span className="section-eyebrow">Website access</span>
           <h2>Use Marine Cloud directly in the browser.</h2>
           <p>
-            No desktop install required. Sign in from the landing page to open the website workspace for inventory,
-            leads, customer updates, and store operations.
+            No desktop install required. Sign in from the landing page to open the desktop shell first, then move into
+            website, inventory, leads, customer updates, and store operations as needed.
           </p>
         </div>
         <Link className="primary-button landing-web-login-button" to={primaryAccessPath}>

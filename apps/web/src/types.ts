@@ -116,13 +116,30 @@ export interface StoreOption {
   statusLine: string;
 }
 
+export interface SandboxSessionContext {
+  dealerGroupName: string;
+  isReadOnly: boolean;
+  loginEmail: string;
+  readOnlyNotice: string;
+  sandboxId: string;
+  sandboxName: string;
+  sourceStoreId: string;
+  sourceStoreName: string;
+}
+
+export type SessionMode = "production" | "sandbox";
+
 export interface SessionState {
+  mode?: SessionMode;
   user: SessionUser;
   stores: StoreOption[];
   selectedStoreId: string | null;
+  sandboxContext?: SandboxSessionContext | null;
 }
 
 export interface LoginPayload {
+  mode?: SessionMode;
+  sandboxContext?: SandboxSessionContext | null;
   user: SessionUser;
   stores: StoreOption[];
 }
@@ -310,7 +327,7 @@ export interface WebsiteWorkspaceRow {
   lastSyncLabel: string;
 }
 
-export type WebsiteWorkspaceView = "feed" | "customSettings";
+export type WebsiteWorkspaceView = "feed" | "customSettings" | "sandbox";
 
 export type WorkspacePayload =
   | {

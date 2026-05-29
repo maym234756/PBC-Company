@@ -4,6 +4,16 @@ import { isWorkspaceId } from "./lightspeedReference";
 import type { SessionState, WorkspaceId } from "./types";
 
 const SESSION_STORAGE_KEY = "marine-cloud-session";
+const DEFAULT_PRODUCTION_WORKSPACE_ID: WorkspaceId = "desktop";
+const VOLATILE_DASHBOARD_SESSION_PREFIXES = [
+  "marine-cloud-open-windows",
+  "marine-cloud-open-window-order",
+  "marine-cloud-open-window-routes",
+  "marine-cloud-dismissed-open-window",
+  "marine-cloud-open-service-detail-windows",
+  "marine-cloud-open-parts-inventory-detail-windows",
+  "marine-cloud-open-sales-deal-detail-windows"
+];
 
 const DashboardPage = lazy(async () => {
   const module = await import("./pages/DashboardPage");
@@ -50,6 +60,10 @@ export default function App() {
               path="/login"
             />
             <Route
+              element={<LoginRoute onSessionChange={setSession} session={session} />}
+              path="/login/sandbox/:sandboxId"
+            />
+            <Route
               element={<DashboardIndexRoute session={session} />}
               path="/dashboard/:storeId"
             />
@@ -58,7 +72,7 @@ export default function App() {
               path="/dashboard/:storeId/:workspaceId"
             />
             <Route
-              element={<Navigate replace to={session?.selectedStoreId ? `/dashboard/${session.selectedStoreId}/website` : "/"} />}
+              element={<Navigate replace to={session?.selectedStoreId ? `/dashboard/${session.selectedStoreId}/${DEFAULT_PRODUCTION_WORKSPACE_ID}` : "/"} />}
               path="*"
             />
           </Routes>
@@ -78,11 +92,13 @@ interface DashboardRouteProps {
 }
 
 function LoginRoute({ session, onSessionChange }: DashboardRouteProps) {
-  if (session?.selectedStoreId) {
-    return <Navigate replace to={`/dashboard/${session.selectedStoreId}/website`} />;
+  const { sandboxId } = useParams<{ sandboxId?: string }>();
+
+  if (session?.selectedStoreId && !sandboxId) {
+    return <Navigate replace to={`/dashboard/${session.selectedStoreId}/${DEFAULT_PRODUCTION_WORKSPACE_ID}`} />;
   }
 
-  return <LoginPage onSessionReady={onSessionChange} />;
+  return <LoginPage onSessionReady={onSessionChange} sandboxId={sandboxId ?? null} />;
 }
 
 function DashboardIndexRoute({ session }: Pick<DashboardRouteProps, "session">) {
@@ -98,13 +114,13 @@ function DashboardIndexRoute({ session }: Pick<DashboardRouteProps, "session">) 
     return <Navigate replace to="/" />;
   }
 
-  return <Navigate replace to={`/dashboard/${nextStoreId}/website`} />;
+  return <Navigate replace to={`/dashboard/${nextStoreId}/${DEFAULT_PRODUCTION_WORKSPACE_ID}`} />;
 }
 
 function DashboardRoute({ session, onSessionChange }: DashboardRouteProps) {
   const navigate = useNavigate();
   const { storeId, workspaceId } = useParams<{ storeId: string; workspaceId: string }>();
-  const resolvedWorkspaceId: WorkspaceId = workspaceId && isWorkspaceId(workspaceId) ? workspaceId : "website";
+  const resolvedWorkspaceId: WorkspaceId = workspaceId && isWorkspaceId(workspaceId) ? workspaceId : DEFAULT_PRODUCTION_WORKSPACE_ID;
 
   useEffect(() => {
     if (!session) {
@@ -114,12 +130,12 @@ function DashboardRoute({ session, onSessionChange }: DashboardRouteProps) {
     const matchedStore = session.stores.find((store) => store.id === storeId);
 
     if (!matchedStore && session.selectedStoreId) {
-      navigate(`/dashboard/${session.selectedStoreId}/website`, { replace: true });
+      navigate(`/dashboard/${session.selectedStoreId}/${DEFAULT_PRODUCTION_WORKSPACE_ID}`, { replace: true });
       return;
     }
 
     if (matchedStore && !isWorkspaceId(workspaceId ?? "")) {
-      navigate(`/dashboard/${matchedStore.id}/website`, { replace: true });
+      navigate(`/dashboard/${matchedStore.id}/${DEFAULT_PRODUCTION_WORKSPACE_ID}`, { replace: true });
       return;
     }
 
@@ -146,11 +162,25 @@ function DashboardRoute({ session, onSessionChange }: DashboardRouteProps) {
           selectedStoreId
         });
       }}
-      onSignOut={() => onSessionChange(null)}
+      onSignOut={() => {
+        clearVolatileDashboardSessionState(session.user.id);
+        onSessionChange(null);
+        navigate("/", { replace: true });
+      }}
       session={session}
       workspaceId={resolvedWorkspaceId}
     />
   );
+}
+
+function clearVolatileDashboardSessionState(userId: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  for (const prefix of VOLATILE_DASHBOARD_SESSION_PREFIXES) {
+    window.sessionStorage.removeItem(`${prefix}:${userId}`);
+  }
 }
 
 function readSession() {

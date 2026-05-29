@@ -1,4 +1,80 @@
-import type { NavigationGroup, WorkspaceId } from "./types";
+import type { NavigationGroup, NavigationMenuItem, WorkspaceId } from "./types";
+
+const VISIBLE_NAVIGATION_KEYS = new Set([
+  "application:desktop",
+  "application:estimate worksheets",
+  "application:favorite desktop",
+  "application:favorite service board",
+  "application:favorite parts board",
+  "application:favorite sales board",
+  "application:favorite executive board",
+  "application:favorite website feed",
+  "application:favorite audit trail",
+  "application:switch store",
+  "application:logout",
+  "application:exit",
+  "parts:parts inventory",
+  "service:estimate worksheets",
+  "service:estimates & repair orders",
+  "service:technician workload",
+  "inventory:boat inventory",
+  "sales:leads, quotes & deals",
+  "crm:communicate",
+  "management activity:managements activitie's",
+  "management activity:cashier accountability",
+  "management activity:cashier reconciliation",
+  "management activity:desktop",
+  "management activity:executive board",
+  "management activity:website activity",
+  "management activity:audit trail",
+  "receivables:ar aging doc",
+  "general ledger:chart of accounts",
+  "general ledger:profit & loss",
+  "system:website feed",
+  "system:dealer setup",
+  "system:my stores",
+  "system:sandbox"
+]);
+
+function filterNavigationItems(groupLabel: string, items: NavigationMenuItem[]): NavigationMenuItem[] {
+  return items.reduce<NavigationMenuItem[]>((nextItems, item) => {
+    if (typeof item === "string") {
+      if (VISIBLE_NAVIGATION_KEYS.has(`${groupLabel}:${item}`.toLowerCase())) {
+        nextItems.push(item);
+      }
+
+      return nextItems;
+    }
+
+    if ("items" in item) {
+      const nextBranchItems = filterNavigationItems(groupLabel, item.items);
+
+      if (nextBranchItems.length > 0) {
+        nextItems.push({ ...item, items: nextBranchItems });
+      }
+
+      return nextItems;
+    }
+
+    if (VISIBLE_NAVIGATION_KEYS.has(`${groupLabel}:${item.label}`.toLowerCase())) {
+      nextItems.push(item);
+    }
+
+    return nextItems;
+  }, []);
+}
+
+function filterNavigationGroups(groups: NavigationGroup[]): NavigationGroup[] {
+  return groups.reduce<NavigationGroup[]>((nextGroups, group) => {
+    const nextItems = filterNavigationItems(group.label, group.items);
+
+    if (nextItems.length > 0) {
+      nextGroups.push({ ...group, items: nextItems });
+    }
+
+    return nextGroups;
+  }, []);
+}
 
 export interface QuickLaunchButton {
   slot: string;
@@ -14,7 +90,7 @@ export interface WorkspaceDefinition {
   tools: string[];
 }
 
-export const legacyFallbackNavigation: NavigationGroup[] = [
+export const legacyFallbackNavigation: NavigationGroup[] = filterNavigationGroups([
   {
     label: "Application",
     items: [
@@ -255,9 +331,10 @@ export const legacyFallbackNavigation: NavigationGroup[] = [
           {
             label: "Stock Visibility",
             items: [
+              "Parts Inventory",
               {
                 label: "Lookup Tools",
-                items: ["Parts Inventory", "Part Number Lookup"]
+                items: ["Part Number Lookup"]
               },
               {
                 label: "Cross-Reference Search",
@@ -609,6 +686,7 @@ export const legacyFallbackNavigation: NavigationGroup[] = [
       {
         label: "Order Intake",
         items: [
+          "Estimates & Repair Orders",
           {
             label: "Write-Up",
             items: [
@@ -618,7 +696,7 @@ export const legacyFallbackNavigation: NavigationGroup[] = [
               },
               {
                 label: "Open Orders",
-                items: ["Estimates & Repair Orders", "Express Write-Up"]
+                items: ["Express Write-Up"]
               }
             ]
           },
@@ -813,7 +891,7 @@ export const legacyFallbackNavigation: NavigationGroup[] = [
             items: [
               {
                 label: "Time & Promise",
-                items: ["Reports", "Elapsed Time Summary", "Promise-Date Performance", "Technician Workload"]
+                items: ["Reports", "Elapsed Time Summary", "Promise-Date Performance"]
               },
               {
                 label: "Warranty Throughput",
@@ -821,6 +899,7 @@ export const legacyFallbackNavigation: NavigationGroup[] = [
               }
             ]
           },
+          "Technician Workload",
           {
             label: "Financial Reports",
             items: [
@@ -963,9 +1042,10 @@ export const legacyFallbackNavigation: NavigationGroup[] = [
       {
         label: "Units",
         items: [
+          "Boat Inventory",
           {
             label: "Boat Stock",
-            items: ["Boat Inventory", "Unit Inventory", "Boats In Stock"]
+            items: ["Unit Inventory", "Boats In Stock"]
           }
         ]
       }
@@ -993,9 +1073,10 @@ export const legacyFallbackNavigation: NavigationGroup[] = [
           {
             label: "Follow-Up Queues",
             items: [
+              "Leads, Quotes & Deals",
               {
                 label: "Open Pipeline",
-                items: ["Leads, Quotes & Deals", "Unsold Follow-Up"]
+                items: ["Unsold Follow-Up"]
               },
               {
                 label: "Appointments & Calls",
@@ -1252,6 +1333,7 @@ export const legacyFallbackNavigation: NavigationGroup[] = [
   {
     label: "Receivables",
     items: [
+      "AR Aging Doc",
       {
         label: "Customer Accounts",
         items: [
@@ -1469,35 +1551,30 @@ export const legacyFallbackNavigation: NavigationGroup[] = [
     label: "System",
     items: [
       {
-        label: "Digital Operations",
+        label: "Website Publishing",
         items: [
+          "Website Feed",
           {
-            label: "Website Publishing",
-            items: [
-              {
-                label: "Feed Delivery",
-                items: ["Website Feed", "Feed Health"]
-              },
-              {
-                label: "Publishing Exceptions",
-                items: ["Feed Retry Queue"]
-              }
-            ]
+            label: "Feed Delivery",
+            items: ["Feed Health"]
           },
           {
-            label: "Lead & Sync",
-            items: [
-              {
-                label: "Lead Delivery",
-                items: ["Lead Form Routing", "Sync Monitor"]
-              },
-              {
-                label: "Retry & Recovery",
-                items: ["Lead Retry Queue"]
-              }
-            ]
+            label: "Publishing Exceptions",
+            items: ["Feed Retry Queue"]
           }
         ]
+      },
+      {
+        label: "Dealers",
+        items: ["Dealer Setup"]
+      },
+      {
+        label: "Operation",
+        items: ["My Stores"]
+      },
+      {
+        label: "Development",
+        items: ["Sandbox"]
       },
       {
         label: "Access & Security",
@@ -1704,7 +1781,7 @@ export const legacyFallbackNavigation: NavigationGroup[] = [
       }
     ]
   }
-];
+]);
 
 export const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
   desktop: {
@@ -1868,6 +1945,7 @@ const navigationMenuWorkspaceLookup: Record<string, WorkspaceId> = {
     "management activity:month-end readiness": "audit",
     "management activity:favorite website pulse": "website",
     "management activity:favorite approval log": "audit",
+    "receivables:ar aging doc": "analytics",
     "receivables:customer inquiry": "analytics",
     "receivables:credit hold review": "analytics",
     "receivables:statement requests": "analytics",
@@ -1914,6 +1992,9 @@ const navigationMenuWorkspaceLookup: Record<string, WorkspaceId> = {
     "general ledger:journal entry queue": "analytics",
     "general ledger:recurring journal review": "analytics",
     "system:website feed": "website",
+    "system:dealer setup": "analytics",
+    "system:my stores": "analytics",
+    "system:sandbox": "website",
     "system:feed health": "website",
     "system:feed retry queue": "website",
     "system:lead form routing": "website",

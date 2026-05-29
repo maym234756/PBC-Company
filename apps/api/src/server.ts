@@ -38,6 +38,20 @@ import {
   getTwilioWebhookUrl,
   validateTwilioRequestSignature
 } from "./twilioMessaging.js";
+import { sandboxBackendModules } from "./sandboxBackendModules.js";
+import {
+  authenticateSandboxLogin,
+  createSandboxRecord,
+  createSandboxTemplateRecord,
+  deleteSandboxTemplateRecord,
+  getSandboxLoginAccess,
+  getSandboxPromotionPreview,
+  getSandboxWorkspacePayload,
+  pushSandboxChangesToProduction,
+  runSandboxAction,
+  updateSandboxRecord,
+  updateSandboxTemplateRecord
+} from "./sandboxWorkspace.js";
 import { resolveWorkflowActionPlan } from "./workflowActionPlans.js";
 
 const serverModuleDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -52,6 +66,181 @@ const localHostnames = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const authLoginAttempts = new Map<string, { count: number; resetAt: number }>();
 const authLoginWindowMs = 60_000;
 const authLoginMaxAttempts = 60;
+type DealerSetupPersistedLocation = {
+  address: string;
+  id: string;
+  label: string;
+  launchReadiness: number;
+  moduleLabel: string;
+  status: string;
+  [key: string]: unknown;
+};
+
+type DealerSetupPersistedModule = {
+  enabled: boolean;
+  id: string;
+  label: string;
+  [key: string]: unknown;
+};
+
+type DealerSetupPersistedIntegration = {
+  id: string;
+  label: string;
+  note?: string;
+  owner?: string;
+  status: string;
+  [key: string]: unknown;
+};
+
+type DealerSetupPersistedPermissionRow = {
+  accounting: boolean;
+  crm?: boolean;
+  id?: string;
+  inventory?: boolean;
+  parts: boolean;
+  permission?: string;
+  role?: string;
+  sales: boolean;
+  service: boolean;
+  [key: string]: unknown;
+};
+
+type DealerSetupPersistedActivityItem = {
+  detail: string;
+  id: string;
+  label?: string;
+  timeLabel?: string;
+  timestamp?: string;
+  tone?: string;
+  user?: string;
+  [key: string]: unknown;
+};
+
+type DealerSetupPersistedChecklistItem = {
+  detail: string;
+  id: string;
+  label: string;
+  tone: string;
+  [key: string]: unknown;
+};
+
+type DealerSetupPersistedImportStage = {
+  complete: number;
+  id: string;
+  label: string;
+  total: number;
+  [key: string]: unknown;
+};
+
+type DealerSetupPersistedDealer = {
+  activity: DealerSetupPersistedActivityItem[];
+  checklist: DealerSetupPersistedChecklistItem[];
+  dealerId: string;
+  goLive: string;
+  groupLabel: string;
+  id: string;
+  importStages: DealerSetupPersistedImportStage[];
+  integration: string;
+  integrations: DealerSetupPersistedIntegration[];
+  legalEntity: string;
+  locations: DealerSetupPersistedLocation[];
+  modules: DealerSetupPersistedModule[];
+  name: string;
+  nextSteps: string[];
+  permissionRows: DealerSetupPersistedPermissionRow[];
+  progressPercent: number;
+  region: string;
+  rooftopCode: string;
+  status: string;
+  timeZone: string;
+  usersCount: number;
+  website: string;
+  [key: string]: unknown;
+};
+
+const dealerSetupPersistedDealersByStoreId = new Map<string, DealerSetupPersistedDealer[]>();
+
+function cloneDealerSetupPersistedValue<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+const VISIBLE_NAVIGATION_KEYS = new Set([
+  "application:desktop",
+  "application:estimate worksheets",
+  "application:favorite desktop",
+  "application:favorite service board",
+  "application:favorite parts board",
+  "application:favorite sales board",
+  "application:favorite executive board",
+  "application:favorite website feed",
+  "application:favorite audit trail",
+  "application:switch store",
+  "application:logout",
+  "application:exit",
+  "parts:parts inventory",
+  "service:estimate worksheets",
+  "service:estimates & repair orders",
+  "service:technician workload",
+  "inventory:boat inventory",
+  "sales:leads, quotes & deals",
+  "crm:communicate",
+  "management activity:managements activitie's",
+  "management activity:cashier accountability",
+  "management activity:cashier reconciliation",
+  "management activity:desktop",
+  "management activity:executive board",
+  "management activity:website activity",
+  "management activity:audit trail",
+  "receivables:ar aging doc",
+  "general ledger:chart of accounts",
+  "general ledger:profit & loss",
+  "system:website feed",
+  "system:dealer setup",
+  "system:sandbox"
+]);
+
+type NavigationItem = string | { label: string; items?: NavigationItem[]; keywords?: string[] };
+type NavigationGroup = { label: string; items: NavigationItem[] };
+
+function filterNavigationItems(groupLabel: string, items: NavigationItem[]): NavigationItem[] {
+  return items.reduce<NavigationItem[]>((nextItems, item) => {
+    if (typeof item === "string") {
+      if (VISIBLE_NAVIGATION_KEYS.has(`${groupLabel}:${item}`.toLowerCase())) {
+        nextItems.push(item);
+      }
+
+      return nextItems;
+    }
+
+    if (Array.isArray(item.items)) {
+      const nextBranchItems = filterNavigationItems(groupLabel, item.items);
+
+      if (nextBranchItems.length > 0) {
+        nextItems.push({ ...item, items: nextBranchItems });
+      }
+
+      return nextItems;
+    }
+
+    if (VISIBLE_NAVIGATION_KEYS.has(`${groupLabel}:${item.label}`.toLowerCase())) {
+      nextItems.push(item);
+    }
+
+    return nextItems;
+  }, []);
+}
+
+function filterNavigationGroups(groups: NavigationGroup[]): NavigationGroup[] {
+  return groups.reduce<NavigationGroup[]>((nextGroups, group) => {
+    const nextItems = filterNavigationItems(group.label, group.items);
+
+    if (nextItems.length > 0) {
+      nextGroups.push({ ...group, items: nextItems });
+    }
+
+    return nextGroups;
+  }, []);
+}
 
 function isAllowedOrigin(origin: string) {
   if (allowedOrigins.has(origin)) {
@@ -67,7 +256,7 @@ function isAllowedOrigin(origin: string) {
   }
 }
 
-const navigation = [
+const navigation = filterNavigationGroups([
   {
     label: "Application",
     items: [
@@ -308,9 +497,10 @@ const navigation = [
           {
             label: "Stock Visibility",
             items: [
+              "Parts Inventory",
               {
                 label: "Lookup Tools",
-                items: ["Parts Inventory", "Part Number Lookup"]
+                items: ["Part Number Lookup"]
               },
               {
                 label: "Cross-Reference Search",
@@ -662,6 +852,7 @@ const navigation = [
       {
         label: "Order Intake",
         items: [
+          "Estimates & Repair Orders",
           {
             label: "Write-Up",
             items: [
@@ -671,7 +862,7 @@ const navigation = [
               },
               {
                 label: "Open Orders",
-                items: ["Estimates & Repair Orders", "Express Write-Up"]
+                items: ["Express Write-Up"]
               }
             ]
           },
@@ -866,7 +1057,7 @@ const navigation = [
             items: [
               {
                 label: "Time & Promise",
-                items: ["Reports", "Elapsed Time Summary", "Promise-Date Performance", "Technician Workload"]
+                items: ["Reports", "Elapsed Time Summary", "Promise-Date Performance"]
               },
               {
                 label: "Warranty Throughput",
@@ -874,6 +1065,7 @@ const navigation = [
               }
             ]
           },
+          "Technician Workload",
           {
             label: "Financial Reports",
             items: [
@@ -1016,9 +1208,10 @@ const navigation = [
       {
         label: "Units",
         items: [
+          "Boat Inventory",
           {
             label: "Boat Stock",
-            items: ["Boat Inventory", "Unit Inventory", "Boats In Stock"]
+            items: ["Unit Inventory", "Boats In Stock"]
           }
         ]
       }
@@ -1046,9 +1239,10 @@ const navigation = [
           {
             label: "Follow-Up Queues",
             items: [
+              "Leads, Quotes & Deals",
               {
                 label: "Open Pipeline",
-                items: ["Leads, Quotes & Deals", "Unsold Follow-Up"]
+                items: ["Unsold Follow-Up"]
               },
               {
                 label: "Appointments & Calls",
@@ -1305,6 +1499,7 @@ const navigation = [
   {
     label: "Receivables",
     items: [
+      "AR Aging Doc",
       {
         label: "Customer Accounts",
         items: [
@@ -1522,35 +1717,30 @@ const navigation = [
     label: "System",
     items: [
       {
-        label: "Digital Operations",
+        label: "Website Publishing",
         items: [
+          "Website Feed",
           {
-            label: "Website Publishing",
-            items: [
-              {
-                label: "Feed Delivery",
-                items: ["Website Feed", "Feed Health"]
-              },
-              {
-                label: "Publishing Exceptions",
-                items: ["Feed Retry Queue"]
-              }
-            ]
+            label: "Feed Delivery",
+            items: ["Feed Health"]
           },
           {
-            label: "Lead & Sync",
-            items: [
-              {
-                label: "Lead Delivery",
-                items: ["Lead Form Routing", "Sync Monitor"]
-              },
-              {
-                label: "Retry & Recovery",
-                items: ["Lead Retry Queue"]
-              }
-            ]
+            label: "Publishing Exceptions",
+            items: ["Feed Retry Queue"]
           }
         ]
+      },
+      {
+        label: "Dealers",
+        items: ["Dealer Setup"]
+      },
+      {
+        label: "Operation",
+        items: ["My Stores"]
+      },
+      {
+        label: "Development",
+        items: ["Sandbox"]
       },
       {
         label: "Access & Security",
@@ -1757,7 +1947,7 @@ const navigation = [
       }
     ]
   }
-];
+]);
 
 interface SalesDealDepositEntry {
   id: string;
@@ -1786,7 +1976,8 @@ interface SalesDealDepositsState {
 
 const loginSchema = z.object({
   email: z.string().trim().email(),
-  password: z.string().trim().min(1)
+  password: z.string().trim().min(1),
+  sandboxId: z.string().trim().min(1).nullable().optional()
 });
 
 const workspaceSchema = z.enum(["desktop", "sales", "service", "parts", "analytics", "website", "audit", "reports", "boatInventory"]);
@@ -2081,6 +2272,101 @@ const workflowActionSchema = z.object({
   tone: activityToneSchema,
   values: z.record(z.string(), z.string()).default({})
 }).extend(actorContextSchema.shape);
+const dealerSetupPersistedDealerSchema = z
+  .object({
+    activity: z.array(
+      z
+        .object({
+          detail: z.string().trim(),
+          id: z.string().trim().min(1)
+        })
+        .passthrough()
+    ),
+    checklist: z.array(
+      z
+        .object({
+          detail: z.string().trim(),
+          id: z.string().trim().min(1),
+          label: z.string().trim().min(1),
+          tone: z.string().trim().min(1)
+        })
+        .passthrough()
+    ),
+    dealerId: z.string().trim().min(1),
+    goLive: z.string().trim(),
+    groupLabel: z.string().trim().min(1),
+    id: z.string().trim().min(1),
+    importStages: z.array(
+      z
+        .object({
+          complete: z.number(),
+          id: z.string().trim().min(1),
+          label: z.string().trim().min(1),
+          total: z.number()
+        })
+        .passthrough()
+    ),
+    integration: z.string().trim(),
+    integrations: z.array(
+      z
+        .object({
+          id: z.string().trim().min(1),
+          label: z.string().trim().min(1),
+          status: z.string().trim().min(1)
+        })
+        .passthrough()
+    ),
+    legalEntity: z.string().trim().min(1),
+    locations: z.array(
+      z
+        .object({
+          address: z.string().trim().min(1),
+          id: z.string().trim().min(1),
+          label: z.string().trim().min(1),
+          launchReadiness: z.number(),
+          moduleLabel: z.string().trim().min(1),
+          status: z.string().trim().min(1)
+        })
+        .passthrough()
+    ),
+    modules: z.array(
+      z
+        .object({
+          enabled: z.boolean(),
+          id: z.string().trim().min(1),
+          label: z.string().trim().min(1)
+        })
+        .passthrough()
+    ),
+    name: z.string().trim().min(1),
+    nextSteps: z.array(z.string().trim()),
+    permissionRows: z.array(
+      z
+        .object({
+          accounting: z.boolean(),
+          parts: z.boolean(),
+          sales: z.boolean(),
+          service: z.boolean(),
+          role: z.string().trim().min(1).optional(),
+          crm: z.boolean().optional(),
+          inventory: z.boolean().optional(),
+          id: z.string().trim().min(1).optional(),
+          permission: z.string().trim().min(1).optional()
+        })
+        .passthrough()
+    ),
+    progressPercent: z.number(),
+    region: z.string().trim().min(1),
+    rooftopCode: z.string().trim().min(1),
+    status: z.string().trim().min(1),
+    timeZone: z.string().trim().min(1),
+    usersCount: z.number().int().nonnegative(),
+    website: z.string().trim()
+  })
+  .passthrough();
+const dealerSetupCreateSchema = z.object({
+  dealer: dealerSetupPersistedDealerSchema
+});
 const createSalesDealDepositSchema = z.object({
   actorUserId: z.string().trim().min(1),
   cashier: z.string().trim().min(1).max(120),
@@ -2146,6 +2432,38 @@ const boatInventoryUnitMutationSchema = z.object({
   notes: z.string().trim().max(2000).default("")
 });
 const boatInventoryUnitUpdateSchema = boatInventoryUnitMutationSchema.partial();
+const sandboxTemplateMutationSchema = z.object({
+  description: z.string().trim().max(1000).default(""),
+  name: z.string().trim().min(1).max(120),
+  selectedModules: z.array(z.string().trim().min(1)).min(1)
+});
+const sandboxCreateSchema = z.object({
+  actorEmail: z.string().trim().email().optional(),
+  actorName: z.string().trim().max(120).optional(),
+  name: z.string().trim().min(1).max(120),
+  purpose: z.string().trim().max(1000).default(""),
+  selectedModules: z.array(z.string().trim().min(1)).min(1),
+  templateId: z.string().trim().min(1).nullable().optional(),
+  type: z.string().trim().min(1).max(80)
+});
+const sandboxUpdateSchema = z.object({
+  description: z.string().trim().max(1000).optional(),
+  location: z.string().trim().max(160).optional(),
+  name: z.string().trim().min(1).max(120).optional(),
+  releaseType: z.string().trim().min(1).max(80).optional(),
+  selectedModules: z.array(z.string().trim().min(1)).min(1).optional(),
+  status: z.string().trim().min(1).max(80).optional(),
+  type: z.string().trim().min(1).max(80).optional()
+});
+const sandboxActionSchema = z.object({
+  actorName: z.string().trim().max(120).optional(),
+  mode: z.enum(["activate", "clone", "delete", "login", "promote", "refresh"])
+});
+const sandboxPushSchema = z.object({
+  actorName: z.string().trim().max(120).optional(),
+  selectedChangeIds: z.array(z.string().trim().min(1)).min(1),
+  validatedCheckIds: z.array(z.string().trim().min(1))
+});
 const twilioSendMessageSchema = z.object({
   to: z.string().trim().min(1).max(40),
   body: z.string().trim().min(1).max(1600),
@@ -2252,6 +2570,30 @@ app.use(
   })
 );
 app.use(express.json());
+
+function isSandboxSessionRequest(request: express.Request) {
+  return request.header("x-marine-session-mode")?.trim().toLowerCase() === "sandbox";
+}
+
+function isSandboxWriteAllowedPath(pathname: string) {
+  return pathname.startsWith("/api/auth/") || /^\/api\/stores\/[^/]+\/sandboxes\/[^/]+\/push-to-production$/i.test(pathname);
+}
+
+app.use((request, response, next) => {
+  if (!isSandboxSessionRequest(request)) {
+    next();
+    return;
+  }
+
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method.toUpperCase()) && !isSandboxWriteAllowedPath(request.path)) {
+    response.status(403).json({
+      message: "Sandbox sessions are read-only mirrors of the assigned dealer-group state. Changes do not write back to production."
+    });
+    return;
+  }
+
+  next();
+});
 app.use((request, response, next) => {
   response.setHeader("X-Content-Type-Options", "nosniff");
   response.setHeader("X-Frame-Options", "SAMEORIGIN");
@@ -2262,6 +2604,19 @@ app.use("/api/auth/login", authLoginRateLimit);
 
 app.get("/api/health", (_request, response) => {
   response.json({ status: "ok" });
+});
+
+app.get("/api/sandbox/backend-modules", (_request, response) => {
+  response.json(sandboxBackendModules);
+});
+
+app.get("/api/sandboxes/:sandboxId/login-access", async (request, response) => {
+  try {
+    response.json(await getSandboxLoginAccess(request.params.sandboxId));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected server error.";
+    response.status(/not found/i.test(message) ? 404 : 400).json({ message });
+  }
 });
 
 app.get("/api/crm/twilio/config", (_request, response) => {
@@ -2458,9 +2813,37 @@ app.post("/api/auth/login", async (request, response) => {
     return;
   }
 
+  const normalizedEmail = parsed.data.email.toLowerCase();
+
+  if (normalizedEmail.endsWith(".sandbox") || parsed.data.sandboxId) {
+    try {
+      const sandboxPayload = await authenticateSandboxLogin(normalizedEmail, parsed.data.password, parsed.data.sandboxId);
+      response.json({
+        mode: "sandbox",
+        sandboxContext: {
+          dealerGroupName: sandboxPayload.sandbox.dealerGroupName,
+          isReadOnly: true,
+          loginEmail: sandboxPayload.sandbox.loginEmail,
+          readOnlyNotice: sandboxPayload.sandbox.readOnlyNotice,
+          sandboxId: sandboxPayload.sandbox.sandboxId,
+          sandboxName: sandboxPayload.sandbox.sandboxName,
+          sourceStoreId: sandboxPayload.sandbox.sourceStoreId,
+          sourceStoreName: sandboxPayload.sandbox.sourceStoreName
+        },
+        stores: sandboxPayload.stores,
+        user: sandboxPayload.user
+      });
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to authenticate sandbox account.";
+      response.status(/not found|invalid|different sandbox account/i.test(message) ? 401 : 400).json({ message });
+      return;
+    }
+  }
+
   const user = await prisma.user.findUnique({
     where: {
-      email: parsed.data.email.toLowerCase()
+      email: normalizedEmail
     },
     include: {
       dealerGroup: true,
@@ -2496,6 +2879,7 @@ app.post("/api/auth/login", async (request, response) => {
     }));
 
   response.json({
+    mode: "production",
     user: {
       id: user.id,
       name: user.name,
@@ -3628,6 +4012,63 @@ app.get("/api/stores/:storeId/activity", async (request, response) => {
   response.json(activity.map(formatStoreActivityEntry));
 });
 
+app.get("/api/stores/:storeId/dealer-setup/dealers", async (request, response) => {
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    select: {
+      id: true
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  response.json({
+    dealers: cloneDealerSetupPersistedValue(dealerSetupPersistedDealersByStoreId.get(store.id) ?? [])
+  });
+});
+
+app.post("/api/stores/:storeId/dealer-setup/dealers", async (request, response) => {
+  const parsedBody = dealerSetupCreateSchema.safeParse(request.body);
+
+  if (!parsedBody.success) {
+    response.status(400).json({ message: "Enter a valid Dealer Setup onboarding payload." });
+    return;
+  }
+
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    select: {
+      id: true,
+      name: true
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  const nextDealer = cloneDealerSetupPersistedValue(parsedBody.data.dealer);
+  const currentDealers = dealerSetupPersistedDealersByStoreId.get(store.id) ?? [];
+
+  dealerSetupPersistedDealersByStoreId.set(
+    store.id,
+    [nextDealer, ...currentDealers.filter((dealer) => dealer.id !== nextDealer.id)]
+  );
+
+  response.status(201).json({
+    dealer: nextDealer,
+    message: `${nextDealer.name} was saved for ${store.name} and will remain available after reload.`
+  });
+});
+
 app.get("/api/stores/:storeId/reports/cashier-accountability", async (request, response) => {
   const parsedQuery = cashierAccountabilityReportQuerySchema.safeParse(request.query);
 
@@ -4739,6 +5180,150 @@ app.use(
 
 app.listen(port, () => {
   console.log(`Marine cloud API listening on http://localhost:${port}`);
+});
+
+app.get("/api/stores/:storeId/sandbox-workspace", async (request, response) => {
+  try {
+    response.json(await getSandboxWorkspacePayload(request.params.storeId));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected server error.";
+    response.status(/not found/i.test(message) ? 404 : 400).json({ message });
+  }
+});
+
+app.get("/api/stores/:storeId/sandbox-templates", async (request, response) => {
+  try {
+    response.json((await getSandboxWorkspacePayload(request.params.storeId)).templates);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected server error.";
+    response.status(/not found/i.test(message) ? 404 : 400).json({ message });
+  }
+});
+
+app.post("/api/stores/:storeId/sandbox-templates", async (request, response) => {
+  const parsed = sandboxTemplateMutationSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter a template name and select at least one backend module." });
+    return;
+  }
+
+  try {
+    response.status(201).json(await createSandboxTemplateRecord(request.params.storeId, parsed.data));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected server error.";
+    response.status(/not found/i.test(message) ? 404 : 400).json({ message });
+  }
+});
+
+app.put("/api/stores/:storeId/sandbox-templates/:templateId", async (request, response) => {
+  const parsed = sandboxTemplateMutationSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter a template name and select at least one backend module." });
+    return;
+  }
+
+  try {
+    response.json(await updateSandboxTemplateRecord(request.params.storeId, request.params.templateId, parsed.data));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected server error.";
+    response.status(/not found/i.test(message) ? 404 : 400).json({ message });
+  }
+});
+
+app.delete("/api/stores/:storeId/sandbox-templates/:templateId", async (request, response) => {
+  try {
+    response.json(await deleteSandboxTemplateRecord(request.params.storeId, request.params.templateId));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected server error.";
+    response.status(/not found/i.test(message) ? 404 : 400).json({ message });
+  }
+});
+
+app.get("/api/stores/:storeId/sandboxes", async (request, response) => {
+  try {
+    response.json((await getSandboxWorkspacePayload(request.params.storeId)).sandboxes);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected server error.";
+    response.status(/not found/i.test(message) ? 404 : 400).json({ message });
+  }
+});
+
+app.post("/api/stores/:storeId/sandboxes", async (request, response) => {
+  const parsed = sandboxCreateSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter a Sandbox name, type, template, and at least one backend module." });
+    return;
+  }
+
+  try {
+    response.status(201).json(await createSandboxRecord(request.params.storeId, parsed.data));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected server error.";
+    response.status(/not found/i.test(message) ? 404 : 400).json({ message });
+  }
+});
+
+app.put("/api/stores/:storeId/sandboxes/:sandboxId", async (request, response) => {
+  const parsed = sandboxUpdateSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter valid Sandbox updates." });
+    return;
+  }
+
+  try {
+    response.json(await updateSandboxRecord(request.params.storeId, request.params.sandboxId, parsed.data));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected server error.";
+    response.status(/not found/i.test(message) ? 404 : 400).json({ message });
+  }
+});
+
+app.get("/api/stores/:storeId/sandboxes/:sandboxId/promotion-preview", async (request, response) => {
+  try {
+    response.json(await getSandboxPromotionPreview(request.params.storeId, request.params.sandboxId));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected server error.";
+    response.status(/not found/i.test(message) ? 404 : 400).json({ message });
+  }
+});
+
+app.post("/api/stores/:storeId/sandboxes/:sandboxId/actions", async (request, response) => {
+  const parsed = sandboxActionSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter a valid Sandbox action." });
+    return;
+  }
+
+  try {
+    response.json(await runSandboxAction(request.params.storeId, request.params.sandboxId, parsed.data));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected server error.";
+    response.status(/not found/i.test(message) ? 404 : 400).json({ message });
+  }
+});
+
+app.post("/api/stores/:storeId/sandboxes/:sandboxId/push-to-production", async (request, response) => {
+  const parsed = sandboxPushSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ message: "Select at least one changed item and review every validation check before pushing to production." });
+    return;
+  }
+
+  try {
+    response.json(await pushSandboxChangesToProduction(request.params.storeId, request.params.sandboxId, parsed.data));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected server error.";
+    response.status(/not found/i.test(message) ? 404 : 400).json({ message });
+  }
+});
+
+app.get("/api/stores/:storeId/sandbox-history", async (request, response) => {
+  try {
+    response.json((await getSandboxWorkspacePayload(request.params.storeId)).history);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected server error.";
+    response.status(/not found/i.test(message) ? 404 : 400).json({ message });
+  }
 });
 
 // Vendors CRUD

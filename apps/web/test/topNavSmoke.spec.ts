@@ -58,6 +58,39 @@ async function openWorkspace(page: Parameters<typeof test>[0]["page"], request: 
   return storeId;
 }
 
+async function restoreSession(page: Parameters<typeof test>[0]["page"], request: Parameters<typeof test>[0]["request"]) {
+  const response = await request.post(`${API_BASE_URL}/auth/login`, {
+    data: {
+      email: SMOKE_EMAIL,
+      password: SMOKE_PASSWORD
+    }
+  });
+
+  expect(response.ok()).toBeTruthy();
+
+  const payload = (await response.json()) as LoginPayload;
+  const selectedStoreId = process.env.MARINE_CLOUD_SMOKE_STORE_ID ?? payload.stores[0]?.id;
+
+  if (!selectedStoreId) {
+    throw new Error("Smoke login returned no stores.");
+  }
+
+  await page.evaluate(
+    ({ session, storageKey }) => {
+      window.sessionStorage.setItem(storageKey, JSON.stringify(session));
+    },
+    {
+      session: {
+        ...payload,
+        selectedStoreId
+      },
+      storageKey: SESSION_STORAGE_KEY
+    }
+  );
+
+  return selectedStoreId;
+}
+
 async function assertWorkflowPanel(
   page: Parameters<typeof test>[0]["page"],
   config: {
@@ -103,6 +136,135 @@ async function assertWorkspaceToolsPanel(
 }
 
 test.describe("top navigation smoke", () => {
+  test("logs into production on desktop instead of auto-opening Website Feed", async ({ page }) => {
+    await page.goto("/login", { waitUntil: "networkidle" });
+
+    await page.getByLabel("Email").fill(SMOKE_EMAIL);
+    await page.getByLabel("Password").fill(SMOKE_PASSWORD);
+    await page.getByRole("button", { name: "Enter Website", exact: true }).click();
+
+    const storePicker = page.getByRole("dialog");
+    await expect(storePicker).toBeVisible();
+    await storePicker.locator(".store-card").first().click();
+
+    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/desktop$/);
+    await expect(page.getByText("Website Feed Integration Console", { exact: true })).toHaveCount(0);
+    await expect(page.locator(".legacy-open-windows .legacy-window-link")).toHaveCount(0);
+    await expect(page.locator(".legacy-workspace-empty-canvas")).toBeVisible();
+  });
+
+  test("keeps saved top tabs through relogin and lands on desktop instead of Website Feed", async ({ page, request }) => {
+    await openWorkspace(page, request, "desktop");
+
+    await menuButton(page, "General Ledger").click();
+    await expect(menuButton(page, "Chart of Accounts")).toBeVisible();
+    await menuButton(page, "Chart of Accounts").click({ button: "right" });
+    await expect(page.locator(".legacy-launch-strip .legacy-launch-button").first().locator("strong")).toHaveText("Chart of Accounts");
+    await menuButton(page, "General Ledger").click();
+    await expect(page.locator(".tab-menu")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Logout", exact: true }).click();
+    await expect(page).toHaveURL(/\/$/);
+
+    const storeId = await restoreSession(page, request);
+    await page.goto("/login", { waitUntil: "networkidle" });
+
+    await expect(page).toHaveURL(new RegExp(`/dashboard/${storeId}/desktop$`));
+    await expect(page.locator(".legacy-launch-strip .legacy-launch-button").first().locator("strong")).toHaveText("Chart of Accounts");
+    await expect(page.locator(".legacy-open-windows .legacy-window-link")).toHaveCount(0);
+    await expect(page.getByText("Website Feed Integration Console", { exact: true })).toHaveCount(0);
+    await expect(page.locator(".legacy-workspace-empty-canvas")).toBeVisible();
+  });
+
+  test("keeps production quick-launch slots blank and Open Windows empty until assigned", async ({ page, request }) => {
+    await openWorkspace(page, request, "desktop");
+
+    const initialQuickLaunchLabels = await page.locator(".legacy-launch-strip .legacy-launch-button strong").allTextContents();
+
+    expect(initialQuickLaunchLabels.length).toBeGreaterThan(0);
+    expect(initialQuickLaunchLabels.every((label) => label.trim() === "")).toBeTruthy();
+    await expect(page.locator(".legacy-open-windows .legacy-window-link")).toHaveCount(0);
+
+    await menuButton(page, "Application").click();
+    await expect(menuButton(page, "Favorites")).toBeVisible();
+    await menuButton(page, "Favorites").hover();
+    await expect(menuButton(page, "My Workspaces")).toBeVisible();
+    await menuButton(page, "My Workspaces").hover();
+    await expect(menuButton(page, "Pinned Workspaces")).toBeVisible();
+    await menuButton(page, "Pinned Workspaces").hover();
+    await expect(menuButton(page, "Favorite Service Board")).toBeVisible();
+    await menuButton(page, "Favorite Service Board").click();
+
+    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/service$/);
+    await expect(page.locator(".legacy-open-windows .legacy-window-link")).toHaveCount(1);
+    await expect(page.locator(".legacy-open-windows .legacy-window-link-copy")).toHaveText("Favorite Service Board");
+
+    const postNavigationQuickLaunchLabels = await page.locator(".legacy-launch-strip .legacy-launch-button strong").allTextContents();
+
+    expect(postNavigationQuickLaunchLabels.length).toBeGreaterThan(0);
+    expect(postNavigationQuickLaunchLabels.every((label) => label.trim() === "")).toBeTruthy();
+
+    await menuButton(page, "Application").click();
+    await menuButton(page, "Favorites").hover();
+    await menuButton(page, "My Workspaces").hover();
+    await menuButton(page, "Pinned Workspaces").hover();
+    await menuButton(page, "Favorite Service Board").click({ button: "right" });
+    await expect(page.locator(".legacy-launch-strip .legacy-launch-button").first().locator("strong")).toHaveText("Favorite Service Board");
+    await menuButton(page, "Application").click();
+    await expect(page.locator(".tab-menu")).toHaveCount(0);
+
+    await page.locator(".legacy-open-windows .legacy-window-link").click({ button: "right" });
+    await expect(page.locator(".legacy-open-windows .legacy-window-link-context-button")).toHaveText("X");
+    await page.locator(".legacy-open-windows .legacy-window-link-context-button").click();
+    await expect(page.locator(".legacy-open-windows .legacy-window-link")).toHaveCount(0);
+    await expect(page.locator(".legacy-workspace-empty-canvas")).toBeVisible();
+  });
+
+  test("clearing all Open Windows also clears the active production page", async ({ page, request }) => {
+    await openWorkspace(page, request, "desktop");
+
+    await menuButton(page, "Application").click();
+    await menuButton(page, "Favorites").hover();
+    await menuButton(page, "My Workspaces").hover();
+    await menuButton(page, "Pinned Workspaces").hover();
+    await menuButton(page, "Favorite Service Board").click();
+
+    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/service$/);
+    await expect(page.locator(".legacy-open-windows .legacy-window-link")).toHaveCount(1);
+
+    await page.getByRole("button", { name: "Clear All", exact: true }).click();
+
+    await expect(page.locator(".legacy-open-windows .legacy-window-link")).toHaveCount(0);
+    await expect(page.locator(".legacy-workspace-empty-canvas")).toBeVisible();
+  });
+
+  test("clearing Website Feed from Open Windows stays blank after refresh", async ({ page, request }) => {
+    const storeId = await openWorkspace(page, request, "desktop");
+
+    await menuButton(page, "System").click();
+    await expect(menuButton(page, "Website Publishing")).toBeVisible();
+    await menuButton(page, "Website Publishing").hover();
+    await expect(menuButton(page, "Website Feed")).toBeVisible();
+    await menuButton(page, "Website Feed").click();
+
+    await expect(page).toHaveURL(new RegExp(`/dashboard/${storeId}/website$`));
+    await expect(page.getByText("Website Feed Integration Console", { exact: true })).toBeVisible();
+    await expect(page.locator(".legacy-open-windows .legacy-window-link-copy")).toHaveText("Website Feed");
+
+    await page.getByRole("button", { name: "Clear All", exact: true }).click();
+
+    await expect(page.locator(".legacy-open-windows .legacy-window-link")).toHaveCount(0);
+    await expect(page.getByText("Website Feed Integration Console", { exact: true })).toHaveCount(0);
+    await expect(page.locator(".legacy-workspace-empty-canvas")).toBeVisible();
+
+    await page.reload({ waitUntil: "networkidle" });
+
+    await expect(page).toHaveURL(new RegExp(`/dashboard/${storeId}/website$`));
+    await expect(page.locator(".legacy-open-windows .legacy-window-link")).toHaveCount(0);
+    await expect(page.getByText("Website Feed Integration Console", { exact: true })).toHaveCount(0);
+    await expect(page.locator(".legacy-workspace-empty-canvas")).toBeVisible();
+  });
+
   test("opens the new management activity leaf from the Management Activity menu", async ({ page, request }) => {
     await openWorkspace(page, request);
 
@@ -135,119 +297,239 @@ test.describe("top navigation smoke", () => {
     await expect(page.locator(".workflow-panel")).toHaveCount(0);
   });
 
-  test("opens statement requests from Receivables with a distinct queued action", async ({ page, request }) => {
-    await openWorkspace(page, request);
+  test("removes default-page branches and keeps page-routed leaves in production nav", async ({ page, request }) => {
+    await openWorkspace(page, request, "desktop");
+
+    await menuButton(page, "Application").click();
+    await expect(menuButton(page, "Workspace Tools")).toHaveCount(0);
+    await expect(menuButton(page, "Recent Reports")).toHaveCount(0);
+    await expect(menuButton(page, "Lock Screen")).toHaveCount(0);
+    await expect(menuButton(page, "Recent Documents")).toBeVisible();
+    await menuButton(page, "Recent Documents").hover();
+    await expect(menuButton(page, "Service Documents")).toBeVisible();
+    await menuButton(page, "Service Documents").hover();
+    await expect(menuButton(page, "Repair Intake")).toBeVisible();
+    await menuButton(page, "Repair Intake").hover();
+    await expect(menuButton(page, "Estimate Worksheets")).toBeVisible();
 
     await menuButton(page, "Receivables").click();
-    await expect(menuButton(page, "Customer Accounts")).toBeVisible();
-    await menuButton(page, "Customer Accounts").hover();
-    await expect(menuButton(page, "Inquiry & Statements")).toBeVisible();
-    await menuButton(page, "Inquiry & Statements").hover();
-    await expect(menuButton(page, "Statement Services")).toBeVisible();
-    await menuButton(page, "Statement Services").hover();
-    await expect(menuButton(page, "Statement Requests")).toBeVisible();
-    await menuButton(page, "Statement Requests").click();
+    await expect(menuButton(page, "AR Aging Doc")).toBeVisible();
+    await expect(menuButton(page, "Customer Accounts")).toHaveCount(0);
 
-    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/analytics$/);
-    await assertWorkflowPanel(page, {
-      title: "Statement Requests",
-      fields: ["Inquiry Type", "Contact Channel", "Follow-Up"],
-      primaryAction: "Send Statement"
-    });
-    await submitWorkflow(page, "Statement request queued.");
+    await menuButton(page, "Parts").click();
+    await expect(menuButton(page, "Inventory Control")).toBeVisible();
+    await menuButton(page, "Inventory Control").hover();
+    await expect(menuButton(page, "Stock Visibility")).toBeVisible();
+    await menuButton(page, "Stock Visibility").hover();
+    await expect(menuButton(page, "Parts Inventory")).toBeVisible();
+    await expect(menuButton(page, "Lookup Tools")).toHaveCount(0);
+
+    await menuButton(page, "Service").click();
+    await expect(menuButton(page, "Order Intake")).toBeVisible();
+    await menuButton(page, "Order Intake").hover();
+    await expect(menuButton(page, "Estimates & Repair Orders")).toBeVisible();
+    await expect(menuButton(page, "Write-Up")).toHaveCount(0);
+    await expect(menuButton(page, "Lists & Reporting")).toBeVisible();
+    await menuButton(page, "Lists & Reporting").hover();
+    await expect(menuButton(page, "Technician Workload")).toBeVisible();
+    await expect(menuButton(page, "Performance Reports")).toHaveCount(0);
+
+    await menuButton(page, "Inventory").click();
+    await expect(menuButton(page, "Units")).toBeVisible();
+    await menuButton(page, "Units").hover();
+    await expect(menuButton(page, "Boat Inventory")).toBeVisible();
+    await expect(menuButton(page, "Boat Stock")).toHaveCount(0);
+
+    await menuButton(page, "Sales").click();
+    await expect(menuButton(page, "Lead Desk")).toBeVisible();
+    await menuButton(page, "Lead Desk").hover();
+    await expect(menuButton(page, "Follow-Up Queues")).toBeVisible();
+    await menuButton(page, "Follow-Up Queues").hover();
+    await expect(menuButton(page, "Leads, Quotes & Deals")).toBeVisible();
+    await expect(menuButton(page, "Open Pipeline")).toHaveCount(0);
+
+    await menuButton(page, "System").click();
+    await expect(menuButton(page, "Access & Security")).toHaveCount(0);
+    await expect(menuButton(page, "Automation & Configuration")).toHaveCount(0);
+    await expect(menuButton(page, "Audit & Integrations")).toHaveCount(0);
+    await expect(menuButton(page, "Website Publishing")).toBeVisible();
+    await expect(menuButton(page, "Lead & Sync")).toHaveCount(0);
+    await menuButton(page, "Website Publishing").hover();
+    await expect(menuButton(page, "Website Feed")).toBeVisible();
+    await expect(menuButton(page, "Feed Delivery")).toHaveCount(0);
+    await expect(menuButton(page, "Publishing Exceptions")).toHaveCount(0);
+    await expect(menuButton(page, "Feed Health")).toHaveCount(0);
+    await expect(menuButton(page, "Dealers")).toBeVisible();
+    await menuButton(page, "Dealers").hover();
+    await expect(menuButton(page, "Dealer Setup")).toBeVisible();
+    await expect(menuButton(page, "Operation")).toBeVisible();
+    await menuButton(page, "Operation").hover();
+    await expect(menuButton(page, "My Stores")).toBeVisible();
+    await expect(menuButton(page, "Development")).toBeVisible();
+    await menuButton(page, "Development").hover();
+    await expect(menuButton(page, "Sandbox")).toBeVisible();
+    await menuButton(page, "Sandbox").click();
+    await expect(page.getByRole("heading", { name: "Sandboxes", exact: true })).toBeVisible();
+    await expect(page.locator(".legacy-open-windows .legacy-window-link-copy")).toHaveText("Sandbox");
+
+    await expect(menuButton(page, "Help")).toHaveCount(0);
   });
 
-  test("opens receivables inquiry from the Receivables menu", async ({ page, request }) => {
-    await openWorkspace(page, request);
+  test("opens AR Aging Doc from Receivables and lets it pin to the top strip", async ({ page, request }) => {
+    await openWorkspace(page, request, "desktop");
+
+    await expect(menuButton(page, "Receivables")).toBeVisible();
+    await menuButton(page, "Receivables").click();
+    await expect(menuButton(page, "AR Aging Doc")).toBeVisible();
+    await menuButton(page, "AR Aging Doc").click();
+
+    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/analytics\?view=ar-aging-doc$/);
+    await expect(page.getByRole("heading", { name: "AR Aging Report", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Generate AR Aging report", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Generate AR Aging report", exact: true }).click();
+    await expect(page.getByText("A/R Aging Report", { exact: true })).toBeVisible();
+    await expect(page.locator(".legacy-open-windows .legacy-window-link-copy")).toHaveText("AR Aging Doc");
 
     await menuButton(page, "Receivables").click();
-    await expect(menuButton(page, "Customer Accounts")).toBeVisible();
-    await menuButton(page, "Customer Accounts").hover();
-    await expect(menuButton(page, "Inquiry & Statements")).toBeVisible();
-    await menuButton(page, "Inquiry & Statements").hover();
-    await expect(menuButton(page, "Account Review")).toBeVisible();
-    await menuButton(page, "Account Review").hover();
-    await expect(menuButton(page, "Customer Inquiry")).toBeVisible();
-    await menuButton(page, "Customer Inquiry").click();
+    await expect(menuButton(page, "AR Aging Doc")).toBeVisible();
+    await menuButton(page, "AR Aging Doc").click({ button: "right" });
+    await expect(page.locator(".legacy-launch-strip .legacy-launch-button").first().locator("strong")).toHaveText("AR Aging Doc");
+    await menuButton(page, "Receivables").click();
+    await expect(page.locator(".tab-menu")).toHaveCount(0);
+  });
 
-    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/analytics$/);
-    await assertWorkflowPanel(page, {
-      title: "Customer Inquiry",
-      fields: ["Inquiry Type", "Contact Channel", "Follow-Up"],
-      primaryAction: "Open Inquiry"
-    });
-    await submitWorkflow(page, "Customer inquiry queued.");
+  test("opens Dealer Setup from the System menu", async ({ page, request }) => {
+    await openWorkspace(page, request, "desktop");
+
+    await menuButton(page, "System").click();
+    await expect(menuButton(page, "Dealers")).toBeVisible();
+    await menuButton(page, "Dealers").hover();
+    await expect(menuButton(page, "Dealer Setup")).toBeVisible();
+    await menuButton(page, "Dealer Setup").click();
+
+    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/analytics\?view=dealer-setup$/);
+    await expect(page.getByRole("heading", { name: "Dealer Setup", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Add Dealer", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Northside Auto Group", exact: true })).toBeVisible();
+    await expect(page.locator(".legacy-open-windows .legacy-window-link-copy")).toHaveText("Dealer Setup");
+  });
+
+  test("dealer setup onboarding wizard supports OEM multi-select, collapsible cards, guided setup steps, and structured billing", async ({ page, request }) => {
+    await openWorkspace(page, request, "desktop");
+
+    await menuButton(page, "System").click();
+    await menuButton(page, "Dealers").hover();
+    await menuButton(page, "Dealer Setup").click();
+
+    await page.getByRole("button", { name: "Add Dealer", exact: true }).click();
+
+    await expect(page.getByRole("heading", { name: "Dealer onboarding wizard", exact: true })).toBeVisible();
+    await expect(page.getByText("Select All Brands", { exact: true })).toBeVisible();
+
+    const oemCards = page.locator(".dealer-setup-checkbox-card");
+    await expect(oemCards).toHaveCount(7);
+    await page.getByRole("button", { name: "Select All Brands", exact: true }).click();
+    await expect(oemCards.locator('input[type="checkbox"]')).toHaveCount(7);
+    for (const checkbox of await oemCards.locator('input[type="checkbox"]').all()) {
+      await expect(checkbox).toBeChecked();
+    }
+
+    await page.getByRole("button", { name: "Continue to Stores", exact: true }).click();
+
+    const firstStoreCard = page.locator(".dealer-setup-store-draft-card").first();
+    await expect(firstStoreCard.getByText("Dealer ID pending", { exact: false })).toHaveCount(0);
+    await firstStoreCard.getByRole("button", { name: "Collapse", exact: true }).click();
+    await expect(firstStoreCard.getByLabel("Store Name", { exact: true })).toHaveCount(0);
+    await expect(firstStoreCard.getByText("DLR-PBC-1001", { exact: true })).toBeVisible();
+    await firstStoreCard.getByRole("button", { name: "Expand", exact: true }).click();
+    await expect(firstStoreCard.getByLabel("Store Name", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "Continue to Modules", exact: true }).click();
+    await expect(page.getByText("How to read this step", { exact: true })).toBeVisible();
+    await expect(page.getByText("Recommended day-one stack", { exact: true })).toBeVisible();
+    await expect(page.getByText("Sales, Service, Parts", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "Continue to Integrations", exact: true }).click();
+    await expect(page.getByText("Connection strategy", { exact: true })).toBeVisible();
+    await expect(page.getByText("Minimum launch requirement", { exact: true })).toBeVisible();
+    await expect(page.getByText("DMS + Accounting", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "Continue to Users", exact: true }).click();
+
+    const firstSeatCard = page.locator(".dealer-setup-seat-card").first();
+    await firstSeatCard.getByRole("button", { name: "Collapse", exact: true }).click();
+    await expect(firstSeatCard.getByLabel("Full Name", { exact: true })).toHaveCount(0);
+    await expect(firstSeatCard.getByText("Store Director", { exact: true })).toBeVisible();
+
+    const secondSeatCard = page.locator(".dealer-setup-seat-card").nth(1);
+    await secondSeatCard.locator("select").first().selectOption("CEO");
+    await expect(secondSeatCard.locator("select").first()).toHaveValue("CEO");
+
+    await page.getByRole("button", { name: "Continue to Billing", exact: true }).click();
+    await expect(page.getByText("Contract Structure", { exact: true })).toBeVisible();
+    await expect(page.getByText("Billing Contact & Delivery", { exact: true })).toBeVisible();
+    await expect(page.getByText("Settlement & Finance Notes", { exact: true })).toBeVisible();
+    await expect(page.getByText("Commercial Upgrades", { exact: true })).toBeVisible();
+
+    await page.locator(".dealer-setup-billing-section").first().locator("select").nth(1).selectOption("24");
+    await expect(page.getByText(/24 month term/, { exact: false })).toBeVisible();
+  });
+
+  test("dealer setup onboarding persists a created dealer after reload", async ({ page, request }) => {
+    await openWorkspace(page, request, "desktop");
+
+    const uniqueSuffix = `${Date.now()}`;
+    const dealerName = `Smoke Marine Group ${uniqueSuffix}`;
+    const companyId = `COMP-SMOKE-${uniqueSuffix}`;
+    const dealerCode = `SMOKE-${uniqueSuffix}`;
+
+    await menuButton(page, "System").click();
+    await menuButton(page, "Dealers").hover();
+    await menuButton(page, "Dealer Setup").click();
+
+    await page.getByRole("button", { name: "Add Dealer", exact: true }).click();
+    await page.getByLabel("DBA Name", { exact: true }).fill(dealerName);
+    await page.getByLabel("Company ID", { exact: true }).fill(companyId);
+    await page.getByLabel("Company Code", { exact: true }).fill(dealerCode);
+
+    await page.getByRole("button", { name: "Continue to Stores", exact: true }).click();
+    await page.getByRole("button", { name: "Continue to Modules", exact: true }).click();
+    await page.getByRole("button", { name: "Continue to Integrations", exact: true }).click();
+    await page.getByRole("button", { name: "Continue to Users", exact: true }).click();
+    await page.getByRole("button", { name: "Continue to Billing", exact: true }).click();
+    await page.getByRole("button", { name: "Continue to Review", exact: true }).click();
+    await page.getByRole("button", { name: "Create Dealer", exact: true }).click();
+
+    await expect(page.getByRole("heading", { name: "Dealer onboarding wizard", exact: true })).toHaveCount(0);
+    await expect(page.locator(".dealer-setup-config-header h3")).toHaveText(dealerName);
+
+    await page.reload({ waitUntil: "networkidle" });
+
+    const persistedDealerButton = page.locator(".dealer-setup-tree-button", { hasText: dealerName });
+    await expect(persistedDealerButton).toBeVisible();
+    await persistedDealerButton.click();
+    await expect(page.locator(".dealer-setup-config-header h3")).toHaveText(dealerName);
+    await page.getByRole("tab", { name: "Profile", exact: true }).click();
+    await expect(page.locator(".dealer-setup-profile-card", { hasText: "Company ID" }).getByText(companyId, { exact: true })).toBeVisible();
+  });
+
+  test("opens My Stores from the System menu", async ({ page, request }) => {
+    await openWorkspace(page, request, "desktop");
+
+    await menuButton(page, "System").click();
+    await expect(menuButton(page, "Operation")).toBeVisible();
+    await menuButton(page, "Operation").hover();
+    await expect(menuButton(page, "My Stores")).toBeVisible();
+    await menuButton(page, "My Stores").click();
+
+    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/analytics\?view=my-stores$/);
+    await expect(page.getByRole("heading", { name: "My Stores", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Request Change", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Downtown Motors", exact: true })).toBeVisible();
+    await expect(page.locator(".legacy-open-windows .legacy-window-link-copy")).toHaveText("My Stores");
   });
 
   test("opens deal posting from the General Ledger menu", async ({ page, request }) => {
-    await openWorkspace(page, request);
-
-    await menuButton(page, "General Ledger").click();
-    await expect(menuButton(page, "Posting Control")).toBeVisible();
-    await menuButton(page, "Posting Control").hover();
-    await expect(menuButton(page, "Deal & Funding")).toBeVisible();
-    await menuButton(page, "Deal & Funding").hover();
-    await expect(menuButton(page, "Posting Queue")).toBeVisible();
-    await menuButton(page, "Posting Queue").hover();
-    await expect(menuButton(page, "Deal Posting")).toBeVisible();
-    await menuButton(page, "Deal Posting").click();
-
-    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/analytics$/);
-    await assertWorkflowPanel(page, {
-      title: "Deal Posting",
-      fields: ["Posting Batch", "Posting Date", "Approver"],
-      primaryAction: "Queue Posting"
-    });
-    await submitWorkflow(page, "Deal posting queued.");
-  });
-
-  test("opens website feed and audit trail from the System menu", async ({ page, request }) => {
-    await openWorkspace(page, request);
-
-    await menuButton(page, "System").click();
-    await expect(menuButton(page, "Digital Operations")).toBeVisible();
-    await menuButton(page, "Digital Operations").hover();
-    await expect(menuButton(page, "Website Publishing")).toBeVisible();
-    await menuButton(page, "Website Publishing").hover();
-    await expect(menuButton(page, "Feed Delivery")).toBeVisible();
-    await menuButton(page, "Feed Delivery").hover();
-    await expect(menuButton(page, "Website Feed")).toBeVisible();
-    await menuButton(page, "Website Feed").click();
-
-    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/website$/);
-    await expect(page.getByText("Website Feed Integration Console", { exact: true })).toBeVisible();
-    await expect(page.getByText("Connection Setup", { exact: true })).toBeVisible();
-    await assertWorkflowPanel(page, {
-      title: "Website Feed",
-      fields: ["Brand / Site", "Feed Window", "Feed Intent", "System Note"],
-      primaryAction: "Queue Feed Push"
-    });
-    await submitWorkflow(page, "Website feed publish queued.");
-
-    await page.goto(/dashboard/.test(page.url()) ? page.url().replace(/\/website$/, "/sales") : "/", { waitUntil: "networkidle" });
-    await menuButton(page, "System").click();
-    await expect(menuButton(page, "Audit & Integrations")).toBeVisible();
-    await menuButton(page, "Audit & Integrations").hover();
-    await expect(menuButton(page, "Audit Logs")).toBeVisible();
-    await menuButton(page, "Audit Logs").hover();
-    await expect(menuButton(page, "System Audit")).toBeVisible();
-    await menuButton(page, "System Audit").hover();
-    await expect(menuButton(page, "Audit Trail")).toBeVisible();
-    await menuButton(page, "Audit Trail").click();
-
-    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/audit$/);
-    await assertWorkflowPanel(page, {
-      title: "Audit Trail",
-      fields: ["Audit Scope", "Audit Owner", "Audit Notes"],
-      primaryAction: "Open Audit Review"
-    });
-    await submitWorkflow(page, "System audit review queued.");
-  });
-
-  test("opens Application and Help behavior flows instead of only navigating", async ({ page, request }) => {
-    await openWorkspace(page, request);
-
-    await menuButton(page, "Application").click();
     await expect(menuButton(page, "View")).toBeVisible();
     await menuButton(page, "View").hover();
     await expect(menuButton(page, "Operator Rails")).toBeVisible();
