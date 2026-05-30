@@ -701,10 +701,51 @@ const boatInventorySeeds = [
 ];
 
 const vendorSeeds = [
+  { name: "Atlantic Marine Supply", contact: "Olivia Reed", phone: "800-555-1101", email: "ap@atlanticmarine.com", terms: "Net 15", leadDays: 4, notes: "Engine rigging, dockside replenishment, and consumable AP vendor." },
+  { name: "Yamaha Motors", contact: "Evan Brooks", phone: "800-555-1102", email: "marine.ap@yamaha.com", terms: "Net 15", leadDays: 5, notes: "Outboard inventory and warranty support invoices." },
+  { name: "SeaTech Distributors", contact: "Carmen Diaz", phone: "800-555-1103", email: "finance@seatechdist.com", terms: "Net 30", leadDays: 6, notes: "Marine electronics and accessories distributor." },
+  { name: "Johnsons Controls", contact: "Marcus Hale", phone: "800-555-1104", email: "billing@johnsonscontrols.com", terms: "Net 30", leadDays: 8, notes: "Facility systems, HVAC, and infrastructure invoices." },
+  { name: "West Marine", contact: "Avery Stone", phone: "800-555-1105", email: "wholesale@westmarine.com", terms: "COD", leadDays: 2, notes: "Retail replenishment, safety gear, and storefront accessories." },
+  { name: "Garmin International", contact: "Taylor Quinn", phone: "800-555-1106", email: "payables@garmin.com", terms: "2/10 Net 30", leadDays: 4, notes: "Navigation electronics and helm display vendor." },
   { name: "Mercury Marine Parts", contact: "John Wells", phone: "800-555-0191", email: "jwells@mercurymarine.com", terms: "Net 30", leadDays: 5, notes: "Primary engine parts supplier" },
   { name: "Sea Ray Distribution", contact: "Lisa Park", phone: "800-555-0284", email: "lpark@searay.com", terms: "Net 15", leadDays: 7, notes: "Hull and deck components" },
   { name: "West Marine Wholesale", contact: "Tom Rivera", phone: "800-555-0372", email: "trivera@westmarine.com", terms: "COD", leadDays: 2, notes: "Accessories and hardware" },
   { name: "BRP Marine Parts", contact: "Sarah Chen", phone: "800-555-0445", email: "schen@brp.com", terms: "Net 30", leadDays: 10, notes: "Evinrude/Can-Am parts" }
+];
+
+const approvalRequestSeeds = [
+  {
+    type: "Bill Approval",
+    reference: "INV-14587",
+    requestedBy: "Atlantic Marine Supply",
+    impact: "$8,750.00",
+    reason: "Dockside replenishment package requires AP controller approval.",
+    status: "Pending"
+  },
+  {
+    type: "Bill Approval",
+    reference: "INV-09231",
+    requestedBy: "Yamaha Motors",
+    impact: "$12,540.00",
+    reason: "Outboard settlement invoice staged for the next payment run.",
+    status: "Pending"
+  },
+  {
+    type: "Bill Approval",
+    reference: "INV-35221",
+    requestedBy: "SeaTech Distributors",
+    impact: "$6,230.00",
+    reason: "Helm electronics order needs approval before ACH release.",
+    status: "Pending"
+  },
+  {
+    type: "Bill Approval",
+    reference: "INV-77011",
+    requestedBy: "Johnsons Controls",
+    impact: "$4,980.00",
+    reason: "Facilities maintenance invoice is waiting on manager review.",
+    status: "Approved"
+  }
 ];
 
 const pricingRuleSeeds = [
@@ -1147,21 +1188,42 @@ async function seed() {
     });
   }
 
-  for (const record of vendorSeeds) {
-    const existing = await prisma.vendor.findFirst({ where: { storeId: firstStoreId, name: record.name } });
-    if (!existing) {
-      await prisma.vendor.create({
-        data: {
-          storeId: firstStoreId,
-          name: record.name,
-          contact: record.contact,
-          phone: record.phone,
-          email: record.email,
-          terms: record.terms,
-          leadDays: record.leadDays,
-          notes: record.notes
-        }
-      });
+  for (const storeId of storeIds.values()) {
+    for (const record of vendorSeeds) {
+      const existing = await prisma.vendor.findFirst({ where: { storeId, name: record.name } });
+
+      if (!existing) {
+        await prisma.vendor.create({
+          data: {
+            storeId,
+            name: record.name,
+            contact: record.contact,
+            phone: record.phone,
+            email: record.email,
+            terms: record.terms,
+            leadDays: record.leadDays,
+            notes: record.notes
+          }
+        });
+      }
+    }
+
+    for (const record of approvalRequestSeeds) {
+      const existing = await prisma.approvalRequest.findFirst({ where: { storeId, reference: record.reference } });
+
+      if (!existing) {
+        await prisma.approvalRequest.create({
+          data: {
+            storeId,
+            type: record.type,
+            reference: record.reference,
+            requestedBy: record.requestedBy,
+            impact: record.impact,
+            reason: record.reason,
+            status: record.status
+          }
+        });
+      }
     }
   }
 

@@ -162,6 +162,7 @@ Sources: apps/web/src/lightspeedReference.ts, apps/web/src/workspaceMenuIntents.
 - Website Feed -> Website Feed [Completed]
 - Dealer Setup -> Dealer Setup [Completed]
 - My Stores -> My Stores [Completed]
+- ForgeForm -> ForgeForm [Completed]
 - Feed Health -> Website Feed [Completed]
 - Feed Retry Queue -> Website Feed [Completed]
 - Lead Form Routing -> Website Feed [Completed]

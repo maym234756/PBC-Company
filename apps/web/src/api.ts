@@ -235,6 +235,184 @@ export interface CashierAccountabilityReportResponse {
   entries: CashierAccountabilityReportEntry[];
 }
 
+export type FinovoPayablesBillStatus = "Pending Approval" | "Due Soon" | "Overdue" | "Paid";
+export type FinovoPayablesSummaryCardTone = "default" | "critical" | "positive";
+export type FinovoPayablesRecentActivityTone = "positive" | "neutral" | "warning";
+export type FinovoPayablesAgingTone = "positive" | "warning" | "danger" | "neutral";
+
+export interface FinovoPayablesNavItem {
+  id: string;
+  label: string;
+  badge: string | null;
+}
+
+export interface FinovoPayablesSummaryCard {
+  id: string;
+  title: string;
+  value: string;
+  caption: string;
+  tone: FinovoPayablesSummaryCardTone;
+}
+
+export interface FinovoPayablesCashFlowPoint {
+  label: string;
+  cashIn: number;
+  cashOut: number;
+}
+
+export interface FinovoPayablesCashFlowForecast {
+  windowLabel: string;
+  highlightLabel: string;
+  highlightCashIn: number;
+  highlightCashOut: number;
+  points: FinovoPayablesCashFlowPoint[];
+}
+
+export interface FinovoPayablesStatusBreakdown {
+  id: string;
+  label: FinovoPayablesBillStatus;
+  amount: number;
+  count: number;
+  color: string;
+}
+
+export interface FinovoPayablesApprovalItem {
+  id: string;
+  vendor: string;
+  invoiceNumber: string;
+  dueLabel: string;
+  amount: number;
+  requestedBy: string;
+}
+
+export interface FinovoPayablesRecentActivityItem {
+  id: string;
+  label: string;
+  amount: number;
+  timeLabel: string;
+  tone: FinovoPayablesRecentActivityTone;
+}
+
+export interface FinovoPayablesUpcomingPaymentBucket {
+  id: string;
+  label: string;
+  billCount: number;
+  amount: number;
+}
+
+export interface FinovoPayablesBillRow {
+  id: string;
+  vendor: string;
+  invoiceNumber: string;
+  billDate: string;
+  dueDate: string;
+  amount: number;
+  status: FinovoPayablesBillStatus;
+  paymentMethod: string;
+}
+
+export interface FinovoPayablesOverdueBill {
+  id: string;
+  vendor: string;
+  invoiceNumber: string;
+  amount: number;
+  ageLabel: string;
+}
+
+export interface FinovoPayablesDiscountOpportunity {
+  id: string;
+  vendor: string;
+  amount: number;
+  discountLabel: string;
+  dueLabel: string;
+}
+
+export interface FinovoPayablesVendorSpendItem {
+  id: string;
+  vendor: string;
+  spend: number;
+}
+
+export interface FinovoPayablesPerformanceMetric {
+  id: string;
+  title: string;
+  value: string;
+  changeLabel: string;
+  points: number[];
+}
+
+export interface FinovoPayablesAgingBucket {
+  id: string;
+  label: string;
+  amount: number;
+  shareLabel: string;
+  tone: FinovoPayablesAgingTone;
+}
+
+export interface FinovoPayablesFilterCounts {
+  all: number;
+  pendingApproval: number;
+  dueSoon: number;
+  overdue: number;
+  paid: number;
+}
+
+export interface FinovoPayablesDashboardResponse {
+  storeId: string;
+  storeName: string;
+  generatedAt: string;
+  statusNotice: string;
+  navItems: FinovoPayablesNavItem[];
+  summaryCards: FinovoPayablesSummaryCard[];
+  cashFlowForecast: FinovoPayablesCashFlowForecast;
+  statusBreakdown: FinovoPayablesStatusBreakdown[];
+  approvals: FinovoPayablesApprovalItem[];
+  recentActivity: FinovoPayablesRecentActivityItem[];
+  upcomingPayments: FinovoPayablesUpcomingPaymentBucket[];
+  bills: FinovoPayablesBillRow[];
+  overdueBills: FinovoPayablesOverdueBill[];
+  discountOpportunities: FinovoPayablesDiscountOpportunity[];
+  vendorSpend: FinovoPayablesVendorSpendItem[];
+  performanceMetrics: FinovoPayablesPerformanceMetric[];
+  agingBuckets: FinovoPayablesAgingBucket[];
+  filterCounts: FinovoPayablesFilterCounts;
+}
+
+export interface VendorRecord {
+  id: string;
+  name: string;
+  contact: string;
+  phone: string;
+  email: string;
+  terms: string;
+  leadDays: number;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApprovalRequestRecord {
+  id: string;
+  type: string;
+  reference: string;
+  requestedBy: string;
+  impact: string;
+  status: string;
+  reason: string;
+  reviewedBy: string | null;
+  reviewNote: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateApprovalRequest {
+  type: string;
+  reference: string;
+  requestedBy: string;
+  impact: string;
+  reason: string;
+}
+
 export interface TechnicianWorkloadReportTechnician {
   repairOrderCount: number;
   id: string;
@@ -890,6 +1068,10 @@ export async function getTechnicianWorkloadReport(storeId: string, startDate: st
   return request<TechnicianWorkloadReportResponse>(`/stores/${storeId}/reports/technician-workload?${params.toString()}`);
 }
 
+export async function getFinovoPayablesDashboard(storeId: string) {
+  return request<FinovoPayablesDashboardResponse>(`/stores/${storeId}/payables/finovo`);
+}
+
 export async function getActivityLog(storeId: string, workspaceId: WorkspaceId, actorUserId?: string, limit?: number) {
   const params = new URLSearchParams({ workspaceId });
 
@@ -1045,22 +1227,22 @@ export async function runTaskSlaPolicyAction(storeId: string, payload: TaskSlaPo
   });
 }
 
-export async function getVendors(storeId: string): Promise<unknown[]> {
-  const response = await fetch(`/api/stores/${storeId}/vendors`);
-  if (!response.ok) throw new Error("Failed to fetch vendors");
-  return response.json() as Promise<unknown[]>;
+export async function getVendors(storeId: string) {
+  return request<VendorRecord[]>(`/stores/${storeId}/vendors`);
 }
 
-export async function createVendor(storeId: string, data: { name: string; contact: string; phone: string; email: string; terms: string; leadDays: number; notes: string }): Promise<unknown> {
-  const response = await fetch(`/api/stores/${storeId}/vendors`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
-  if (!response.ok) throw new Error("Failed to create vendor");
-  return response.json();
+export async function createVendor(storeId: string, data: { name: string; contact: string; phone: string; email: string; terms: string; leadDays: number; notes: string }) {
+  return request<VendorRecord>(`/stores/${storeId}/vendors`, {
+    method: "POST",
+    body: JSON.stringify(data)
+  });
 }
 
-export async function updateVendor(storeId: string, vendorId: string, data: Partial<{ name: string; contact: string; phone: string; email: string; terms: string; leadDays: number; notes: string }>): Promise<unknown> {
-  const response = await fetch(`/api/stores/${storeId}/vendors/${vendorId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
-  if (!response.ok) throw new Error("Failed to update vendor");
-  return response.json();
+export async function updateVendor(storeId: string, vendorId: string, data: Partial<{ name: string; contact: string; phone: string; email: string; terms: string; leadDays: number; notes: string }>) {
+  return request<VendorRecord>(`/stores/${storeId}/vendors/${vendorId}`, {
+    method: "PUT",
+    body: JSON.stringify(data)
+  });
 }
 
 export async function getPricingRules(storeId: string): Promise<unknown[]> {
@@ -1069,16 +1251,22 @@ export async function getPricingRules(storeId: string): Promise<unknown[]> {
   return response.json() as Promise<unknown[]>;
 }
 
-export async function getApprovals(storeId: string): Promise<unknown[]> {
-  const response = await fetch(`/api/stores/${storeId}/approvals`);
-  if (!response.ok) throw new Error("Failed to fetch approvals");
-  return response.json() as Promise<unknown[]>;
+export async function getApprovals(storeId: string) {
+  return request<ApprovalRequestRecord[]>(`/stores/${storeId}/approvals`);
 }
 
-export async function updateApproval(storeId: string, approvalId: string, data: { status: string; reviewedBy?: string; reviewNote?: string }): Promise<unknown> {
-  const response = await fetch(`/api/stores/${storeId}/approvals/${approvalId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
-  if (!response.ok) throw new Error("Failed to update approval");
-  return response.json();
+export async function createApproval(storeId: string, data: CreateApprovalRequest) {
+  return request<ApprovalRequestRecord>(`/stores/${storeId}/approvals`, {
+    method: "POST",
+    body: JSON.stringify(data)
+  });
+}
+
+export async function updateApproval(storeId: string, approvalId: string, data: { status: string; reviewedBy?: string; reviewNote?: string }) {
+  return request<ApprovalRequestRecord>(`/stores/${storeId}/approvals/${approvalId}`, {
+    method: "PUT",
+    body: JSON.stringify(data)
+  });
 }
 
 export async function getBoatInventoryUnits(storeId: string) {

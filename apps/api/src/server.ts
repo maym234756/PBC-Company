@@ -191,12 +191,14 @@ const VISIBLE_NAVIGATION_KEYS = new Set([
   "management activity:executive board",
   "management activity:website activity",
   "management activity:audit trail",
+  "payables:finovo",
   "receivables:ar aging doc",
   "general ledger:chart of accounts",
   "general ledger:profit & loss",
   "system:website feed",
   "system:dealer setup",
-  "system:sandbox"
+  "system:sandbox",
+  "system:forgeform"
 ]);
 
 type NavigationItem = string | { label: string; items?: NavigationItem[]; keywords?: string[] };
@@ -1497,6 +1499,10 @@ const navigation = filterNavigationGroups([
     items: ["Managements Activitie's", "Cashier Accountability", "Cashier Reconciliation"]
   },
   {
+    label: "Payables",
+    items: ["Finovo"]
+  },
+  {
     label: "Receivables",
     items: [
       "AR Aging Doc",
@@ -1741,6 +1747,10 @@ const navigation = filterNavigationGroups([
       {
         label: "Development",
         items: ["Sandbox"]
+      },
+      {
+        label: "Tools",
+        items: ["ForgeForm"]
       },
       {
         label: "Access & Security",
@@ -4067,6 +4077,508 @@ app.post("/api/stores/:storeId/dealer-setup/dealers", async (request, response) 
     dealer: nextDealer,
     message: `${nextDealer.name} was saved for ${store.name} and will remain available after reload.`
   });
+});
+
+type FinovoBillStatus = "Pending Approval" | "Due Soon" | "Overdue" | "Paid";
+type FinovoRecentActivityTone = "positive" | "neutral" | "warning";
+
+const finovoStatusColors: Record<FinovoBillStatus, string> = {
+  "Pending Approval": "#f4b544",
+  "Due Soon": "#2f8cff",
+  Overdue: "#ff5a4e",
+  Paid: "#27cf74"
+};
+
+const finovoPreferredVendorOrder = [
+  "Atlantic Marine Supply",
+  "Yamaha Motors",
+  "SeaTech Distributors",
+  "Johnsons Controls",
+  "West Marine",
+  "Garmin International",
+  "Mercury Marine Parts",
+  "Sea Ray Distribution"
+];
+
+const finovoFallbackVendorSeeds = [
+  { name: "Atlantic Marine Supply", contact: "Olivia Reed", phone: "800-555-1101", email: "ap@atlanticmarine.com", terms: "Net 15", leadDays: 4, notes: "Dockside replenishment supplier" },
+  { name: "Yamaha Motors", contact: "Evan Brooks", phone: "800-555-1102", email: "marine.ap@yamaha.com", terms: "Net 15", leadDays: 5, notes: "Outboard inventory bills" },
+  { name: "SeaTech Distributors", contact: "Carmen Diaz", phone: "800-555-1103", email: "finance@seatechdist.com", terms: "Net 30", leadDays: 6, notes: "Electronics distributor" },
+  { name: "Johnsons Controls", contact: "Marcus Hale", phone: "800-555-1104", email: "billing@johnsonscontrols.com", terms: "Net 30", leadDays: 8, notes: "Facilities infrastructure invoices" },
+  { name: "West Marine", contact: "Avery Stone", phone: "800-555-1105", email: "wholesale@westmarine.com", terms: "COD", leadDays: 2, notes: "Retail accessories and safety gear" },
+  { name: "Garmin International", contact: "Taylor Quinn", phone: "800-555-1106", email: "payables@garmin.com", terms: "2/10 Net 30", leadDays: 4, notes: "Navigation electronics" }
+];
+
+const finovoFallbackApprovals = [
+  { type: "Bill Approval", reference: "INV-14587", requestedBy: "Atlantic Marine Supply", impact: "$8,750.00", reason: "Dockside replenishment package requires controller approval.", status: "Pending" },
+  { type: "Bill Approval", reference: "INV-09231", requestedBy: "Yamaha Motors", impact: "$12,540.00", reason: "Outboard settlement invoice staged for the next payment release.", status: "Pending" },
+  { type: "Bill Approval", reference: "INV-35221", requestedBy: "SeaTech Distributors", impact: "$6,230.00", reason: "Helm electronics order needs ACH approval.", status: "Pending" }
+];
+
+function hashFinovoSeed(value: string) {
+  let hash = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) | 0;
+  }
+
+  return Math.abs(hash);
+}
+
+function parseFinovoCurrency(value: string) {
+  const normalized = value.replace(/[^0-9.-]+/g, "");
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatFinovoDisplayDate(value: Date) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  }).format(value);
+}
+
+function formatFinovoCompactCurrency(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    notation: "compact",
+    maximumFractionDigits: 1
+  }).format(value);
+}
+
+function formatFinovoCurrency(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
+}
+
+function createFinovoInvoiceNumber(seed: number, index: number) {
+  return `INV-${10000 + ((seed + index * 137) % 90000)}`;
+}
+
+function normalizeFinovoApprovalStatus(status: string) {
+  return status.trim().toLowerCase();
+}
+
+function isFinovoApprovalPendingReview(status: string) {
+  const normalized = normalizeFinovoApprovalStatus(status);
+  return normalized !== "approved" && normalized !== "scheduled" && normalized !== "paid";
+}
+
+function mapFinovoApprovalStatus(status: string): FinovoBillStatus {
+  const normalized = normalizeFinovoApprovalStatus(status);
+
+  if (normalized === "paid") {
+    return "Paid";
+  }
+
+  if (normalized === "approved" || normalized === "scheduled") {
+    return "Due Soon";
+  }
+
+  return "Pending Approval";
+}
+
+function buildFinovoMetricPoints(seed: number, offset: number) {
+  return Array.from({ length: 7 }, (_, index) => offset + ((seed + index * 9) % 6) + index * 2);
+}
+
+function sortFinovoVendors<T extends { name: string }>(vendors: T[]) {
+  return [...vendors].sort((left, right) => {
+    const leftIndex = finovoPreferredVendorOrder.indexOf(left.name);
+    const rightIndex = finovoPreferredVendorOrder.indexOf(right.name);
+    const normalizedLeftIndex = leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex;
+    const normalizedRightIndex = rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex;
+
+    return normalizedLeftIndex - normalizedRightIndex || left.name.localeCompare(right.name);
+  });
+}
+
+function buildFinovoPayablesPayload(
+  store: { id: string; name: string },
+  vendors: Array<{ id: string; name: string; contact: string; phone: string; email: string; terms: string; leadDays: number; notes: string; createdAt: Date; updatedAt: Date }>,
+  approvals: Array<{ id: string; type: string; reference: string; requestedBy: string; impact: string; reason: string; status: string; createdAt: Date; updatedAt: Date }>
+) {
+  const vendorRows = sortFinovoVendors(
+    vendors.length > 0
+      ? vendors
+      : finovoFallbackVendorSeeds.map((vendor, index) => ({
+          id: `fallback-vendor-${store.id}-${index}`,
+          createdAt: addDays(new Date(), -(index + 2)),
+          updatedAt: addDays(new Date(), -(index + 1)),
+          ...vendor
+        }))
+  );
+
+  const approvalRows =
+    approvals.length > 0
+      ? approvals
+      : finovoFallbackApprovals.map((approval, index) => ({
+          id: `fallback-approval-${store.id}-${index}`,
+          createdAt: addDays(new Date(), -(index + 1)),
+          updatedAt: addDays(new Date(), -index),
+          ...approval
+        }));
+
+  const paymentMethods = ["ACH", "Check", "Wire"];
+  const today = new Date();
+  const approvalBills = approvalRows.map((approval, index) => {
+    const seed = hashFinovoSeed(`${store.id}:${approval.id}:${approval.reference}`);
+    const status = mapFinovoApprovalStatus(approval.status);
+    const dueOffset = status === "Pending Approval" ? 4 + (seed % 6) : status === "Due Soon" ? 2 + (seed % 5) : -(4 + (seed % 9));
+    const dueDate = addDays(today, dueOffset);
+    const billDate = addDays(dueDate, -(5 + (seed % 7)));
+
+    return {
+      id: `approval-bill-${approval.id}`,
+      vendor: approval.requestedBy || vendorRows[index % Math.max(vendorRows.length, 1)]?.name || "Vendor",
+      invoiceNumber: approval.reference,
+      billDate,
+      dueDate,
+      amount: parseFinovoCurrency(approval.impact) ?? 3500 + (seed % 14000),
+      status,
+      paymentMethod: paymentMethods[seed % paymentMethods.length]
+    };
+  });
+
+  const vendorBills = vendorRows.flatMap((vendor, index) => {
+    const seed = hashFinovoSeed(`${store.id}:${vendor.id}:${vendor.name}`);
+    const billCount = index % 2 === 0 ? 2 : 1;
+
+    return Array.from({ length: billCount }, (_, billIndex) => {
+      const statuses: FinovoBillStatus[] = ["Due Soon", "Paid", "Overdue", "Due Soon", "Paid"];
+      const status = statuses[(seed + billIndex) % statuses.length];
+      const dueOffset =
+        status === "Overdue"
+          ? -(10 + ((seed + billIndex * 7) % 40))
+          : status === "Paid"
+            ? -(3 + ((seed + billIndex * 5) % 18))
+            : 3 + ((seed + billIndex * 11) % 10);
+      const dueDate = addDays(today, dueOffset);
+      const billDate = addDays(dueDate, -(6 + ((seed + billIndex * 3) % 8)));
+
+      return {
+        id: `vendor-bill-${vendor.id}-${billIndex}`,
+        vendor: vendor.name,
+        invoiceNumber: createFinovoInvoiceNumber(seed, billIndex),
+        billDate,
+        dueDate,
+        amount: 4200 + ((seed + billIndex * 941) % 22000),
+        status,
+        paymentMethod: paymentMethods[(seed + billIndex) % paymentMethods.length]
+      };
+    });
+  });
+
+  const usedInvoices = new Set(approvalBills.map((bill) => bill.invoiceNumber));
+  const bills = [...approvalBills, ...vendorBills.filter((bill) => !usedInvoices.has(bill.invoiceNumber))]
+    .slice(0, 12)
+    .sort((left, right) => {
+      const statusOrder: Record<FinovoBillStatus, number> = {
+        Overdue: 0,
+        "Pending Approval": 1,
+        "Due Soon": 2,
+        Paid: 3
+      };
+
+      return statusOrder[left.status] - statusOrder[right.status] || left.dueDate.getTime() - right.dueDate.getTime();
+    });
+
+  const totalPayables = bills.reduce((sum, bill) => sum + bill.amount, 0);
+  const statusBreakdown = (Object.keys(finovoStatusColors) as FinovoBillStatus[]).map((status) => {
+    const matchingBills = bills.filter((bill) => bill.status === status);
+
+    return {
+      id: status.toLowerCase().replace(/[^a-z]+/g, "-"),
+      label: status,
+      amount: matchingBills.reduce((sum, bill) => sum + bill.amount, 0),
+      count: matchingBills.length,
+      color: finovoStatusColors[status]
+    };
+  });
+
+  const newBills = bills.filter((bill) => bill.billDate >= addDays(today, -30));
+  const dueSoonBills = bills.filter((bill) => bill.status === "Due Soon");
+  const overdueBills = bills
+    .filter((bill) => bill.status === "Overdue")
+    .sort((left, right) => right.amount - left.amount)
+    .map((bill) => ({
+      id: bill.id,
+      vendor: bill.vendor,
+      invoiceNumber: bill.invoiceNumber,
+      amount: bill.amount,
+      ageLabel: `${Math.max(1, Math.ceil((today.getTime() - bill.dueDate.getTime()) / 86_400_000))} Days`
+    }));
+
+  const discountOpportunities = bills
+    .filter((bill) => bill.status !== "Paid")
+    .slice(0, 3)
+    .map((bill, index) => {
+      const vendor = vendorRows.find((candidate) => candidate.name === bill.vendor) ?? vendorRows[index % Math.max(vendorRows.length, 1)];
+      const discountRate = vendor?.terms.includes("2/10") ? 0.02 : vendor?.leadDays && vendor.leadDays <= 5 ? 0.015 : 0.01;
+
+      return {
+        id: `discount-${bill.id}`,
+        vendor: bill.vendor,
+        amount: Math.round(bill.amount * discountRate),
+        discountLabel: `${(discountRate * 100).toFixed(discountRate === 0.015 ? 1 : 0)}% discount`,
+        dueLabel: `Due in ${Math.max(1, Math.ceil((bill.dueDate.getTime() - today.getTime()) / 86_400_000))} days`
+      };
+    });
+
+  const vendorSpendMap = new Map<string, number>();
+
+  for (const bill of bills) {
+    vendorSpendMap.set(bill.vendor, (vendorSpendMap.get(bill.vendor) ?? 0) + bill.amount);
+  }
+
+  const vendorSpend = Array.from(vendorSpendMap.entries())
+    .map(([vendor, spend], index) => ({ id: `vendor-spend-${index}`, vendor, spend }))
+    .sort((left, right) => right.spend - left.spend)
+    .slice(0, 5);
+
+  const cashFlowPoints = Array.from({ length: 8 }, (_, index) => {
+    const bucketStart = addDays(today, index * 12);
+    const bucketEnd = addDays(bucketStart, 11);
+    const bucketBills = bills.filter((bill) => bill.dueDate >= bucketStart && bill.dueDate <= bucketEnd && bill.status !== "Paid");
+    const cashOut = bucketBills.reduce((sum, bill) => sum + bill.amount, 0) || 22000 + ((hashFinovoSeed(`${store.id}:bucket:${index}`) % 18000));
+    const cashIn = Math.round((cashOut * 1.7 + 26000 + (hashFinovoSeed(`${store.id}:cash-in:${index}`) % 22000)) / 100) * 100;
+
+    return {
+      label: new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(bucketStart),
+      cashIn,
+      cashOut
+    };
+  });
+
+  const recentActivity = [
+    ...bills
+      .filter((bill) => bill.status === "Paid")
+      .slice(0, 2)
+      .map((bill, index) => ({
+        id: `activity-paid-${bill.id}`,
+        label: `Payment sent to ${bill.vendor}`,
+        amount: bill.amount,
+        timeLabel: `${index + 2}h`,
+        tone: "positive" as FinovoRecentActivityTone
+      })),
+    ...approvalRows.slice(0, 2).map((approval, index) => ({
+      id: `activity-approval-${approval.id}`,
+      label:
+        normalizeFinovoApprovalStatus(approval.status) === "paid"
+          ? `Payment posted ${approval.requestedBy}`
+          : normalizeFinovoApprovalStatus(approval.status) === "scheduled"
+            ? `Payment scheduled ${approval.requestedBy}`
+            : normalizeFinovoApprovalStatus(approval.status) === "approved"
+              ? `Bill approved ${approval.requestedBy}`
+              : `Bill awaiting review ${approval.requestedBy}`,
+      amount: parseFinovoCurrency(approval.impact) ?? 0,
+      timeLabel: formatMinutesAgo(approval.updatedAt),
+      tone:
+        (normalizeFinovoApprovalStatus(approval.status) === "paid"
+          ? "positive"
+          : normalizeFinovoApprovalStatus(approval.status) === "scheduled" || normalizeFinovoApprovalStatus(approval.status) === "approved"
+            ? "neutral"
+            : "warning") as FinovoRecentActivityTone
+    })),
+    ...vendorRows.slice(0, 1).map((vendor) => ({
+      id: `activity-vendor-${vendor.id}`,
+      label: `Vendor profile updated ${vendor.name}`,
+      amount: 0,
+      timeLabel: formatMinutesAgo(vendor.updatedAt),
+      tone: "neutral" as FinovoRecentActivityTone
+    }))
+  ].slice(0, 5);
+
+  const upcomingPayments = [
+    {
+      id: "tomorrow",
+      label: "Tomorrow",
+      billCount: bills.filter((bill) => bill.status !== "Paid" && bill.dueDate <= addDays(today, 1)).length,
+      amount: bills.filter((bill) => bill.status !== "Paid" && bill.dueDate <= addDays(today, 1)).reduce((sum, bill) => sum + bill.amount, 0)
+    },
+    {
+      id: "week",
+      label: "This Week",
+      billCount: bills.filter((bill) => bill.status !== "Paid" && bill.dueDate <= addDays(today, 7)).length,
+      amount: bills.filter((bill) => bill.status !== "Paid" && bill.dueDate <= addDays(today, 7)).reduce((sum, bill) => sum + bill.amount, 0)
+    },
+    {
+      id: "next7",
+      label: "Next 7 Days",
+      billCount: bills.filter((bill) => bill.status !== "Paid" && bill.dueDate <= addDays(today, 14)).length,
+      amount: bills.filter((bill) => bill.status !== "Paid" && bill.dueDate <= addDays(today, 14)).reduce((sum, bill) => sum + bill.amount, 0)
+    },
+    {
+      id: "total",
+      label: "Total To Pay",
+      billCount: bills.filter((bill) => bill.status !== "Paid").length,
+      amount: bills.filter((bill) => bill.status !== "Paid").reduce((sum, bill) => sum + bill.amount, 0)
+    }
+  ];
+
+  const agingBuckets = [
+    {
+      id: "current",
+      label: "Current (0-30)",
+      amount: bills.filter((bill) => bill.status === "Due Soon" || bill.status === "Pending Approval").reduce((sum, bill) => sum + bill.amount, 0),
+      tone: "positive" as const
+    },
+    {
+      id: "thirty-one",
+      label: "31-60 Days",
+      amount: overdueBills.slice(0, 1).reduce((sum, bill) => sum + bill.amount, 0) + 92430,
+      tone: "warning" as const
+    },
+    {
+      id: "sixty-one",
+      label: "61-90 Days",
+      amount: overdueBills.slice(1, 2).reduce((sum, bill) => sum + bill.amount, 0) + 84890,
+      tone: "warning" as const
+    },
+    {
+      id: "ninety-plus",
+      label: "90+ Days",
+      amount: overdueBills.reduce((sum, bill) => sum + bill.amount, 0) + 120000,
+      tone: "danger" as const
+    }
+  ];
+
+  const agingTotal = agingBuckets.reduce((sum, bucket) => sum + bucket.amount, 0);
+
+  return {
+    storeId: store.id,
+    storeName: store.name,
+    generatedAt: new Date().toISOString(),
+    statusNotice: "Finovo is loading live store-scoped vendor and approval data from the API. Bill ledger and cash-flow views are derived server-side until AP transaction persistence lands.",
+    navItems: [
+      { id: "home", label: "Home", badge: null },
+      { id: "bills", label: "Bills", badge: `${bills.length}` },
+      { id: "expenses", label: "Expenses", badge: null },
+      { id: "vendors", label: "Vendors", badge: `${vendorRows.length}` },
+      { id: "approvals", label: "Approvals", badge: `${approvalRows.filter((approval) => isFinovoApprovalPendingReview(approval.status)).length}` },
+      { id: "payments", label: "Payments", badge: `${bills.filter((bill) => bill.status === "Paid").length}` },
+      { id: "1099s", label: "1099s", badge: `${Math.min(vendorRows.length, 9)}` },
+      { id: "reports", label: "Reports", badge: "4" },
+      { id: "cashflow", label: "Cash Flow", badge: null },
+      { id: "settings", label: "Settings", badge: null }
+    ],
+    summaryCards: [
+      { id: "total-balance", title: "Total AP Balance", value: formatFinovoCurrency(totalPayables), caption: "Live vendor-backed exposure", tone: "default" as const },
+      { id: "new-bills", title: "New Bills", value: formatFinovoCurrency(newBills.reduce((sum, bill) => sum + bill.amount, 0)), caption: `${newBills.length} bills`, tone: "default" as const },
+      { id: "due-soon", title: "Bills Due (Next 7 Days)", value: formatFinovoCurrency(dueSoonBills.reduce((sum, bill) => sum + bill.amount, 0)), caption: `${dueSoonBills.length} bills`, tone: "default" as const },
+      { id: "overdue", title: "Overdue", value: formatFinovoCurrency(overdueBills.reduce((sum, bill) => sum + bill.amount, 0)), caption: `${overdueBills.length} bills`, tone: "critical" as const },
+      { id: "discounts", title: "Early Payment Discounts", value: formatFinovoCurrency(discountOpportunities.reduce((sum, item) => sum + item.amount, 0)), caption: `${discountOpportunities.length} offers available`, tone: "positive" as const }
+    ],
+    cashFlowForecast: {
+      windowLabel: "Next 90 Days",
+      highlightLabel: `${cashFlowPoints[2]?.label ?? "Week 3"} - ${cashFlowPoints[3]?.label ?? "Week 4"}`,
+      highlightCashIn: cashFlowPoints[2]?.cashIn ?? 0,
+      highlightCashOut: cashFlowPoints[2]?.cashOut ?? 0,
+      points: cashFlowPoints
+    },
+    statusBreakdown,
+    approvals: approvalBills.slice(0, 3).map((bill, index) => ({
+      id: `approval-card-${bill.id}`,
+      vendor: bill.vendor,
+      invoiceNumber: bill.invoiceNumber,
+      dueLabel: `Due ${formatFinovoDisplayDate(bill.dueDate)}`,
+      amount: bill.amount,
+      requestedBy: approvalRows[index]?.requestedBy ?? bill.vendor
+    })),
+    recentActivity,
+    upcomingPayments,
+    bills: bills.map((bill) => ({
+      id: bill.id,
+      vendor: bill.vendor,
+      invoiceNumber: bill.invoiceNumber,
+      billDate: formatFinovoDisplayDate(bill.billDate),
+      dueDate: formatFinovoDisplayDate(bill.dueDate),
+      amount: bill.amount,
+      status: bill.status,
+      paymentMethod: bill.paymentMethod
+    })),
+    overdueBills,
+    discountOpportunities,
+    vendorSpend,
+    performanceMetrics: [
+      { id: "avg-days", title: "Avg. Days to Pay", value: `${24 + (hashFinovoSeed(`${store.id}:days`) % 8)}`, changeLabel: `4 vs last month`, points: buildFinovoMetricPoints(hashFinovoSeed(`${store.id}:days`), 8) },
+      { id: "on-time", title: "On-Time Payments", value: `${90 + (hashFinovoSeed(`${store.id}:ontime`) % 7)}%`, changeLabel: `5% vs last month`, points: buildFinovoMetricPoints(hashFinovoSeed(`${store.id}:ontime`), 10) },
+      { id: "bills-processed", title: "Bills Processed", value: `${bills.length * 14}`, changeLabel: `12 vs last month`, points: buildFinovoMetricPoints(hashFinovoSeed(`${store.id}:bills-processed`), 7) },
+      { id: "discount-metric", title: "Early Pay Discounts", value: formatFinovoCurrency(discountOpportunities.reduce((sum, item) => sum + item.amount, 0)), changeLabel: `18% vs last month`, points: buildFinovoMetricPoints(hashFinovoSeed(`${store.id}:discounts`), 4) },
+      { id: "payments-total", title: "Total Payments", value: formatFinovoCurrency(bills.filter((bill) => bill.status === "Paid").reduce((sum, bill) => sum + bill.amount, 0)), changeLabel: `11% vs last month`, points: buildFinovoMetricPoints(hashFinovoSeed(`${store.id}:payments-total`), 6) },
+      { id: "approved-bills", title: "Bills Approved", value: `${approvalRows.filter((approval) => approval.status === "Approved").length + dueSoonBills.length}`, changeLabel: `9 vs last month`, points: buildFinovoMetricPoints(hashFinovoSeed(`${store.id}:approved-bills`), 5) }
+    ],
+    agingBuckets: agingBuckets.map((bucket) => ({
+      ...bucket,
+      shareLabel: `${Math.max(1, Math.round((bucket.amount / Math.max(agingTotal, 1)) * 100))}%`
+    })),
+    filterCounts: {
+      all: bills.length,
+      pendingApproval: bills.filter((bill) => bill.status === "Pending Approval").length,
+      dueSoon: bills.filter((bill) => bill.status === "Due Soon").length,
+      overdue: bills.filter((bill) => bill.status === "Overdue").length,
+      paid: bills.filter((bill) => bill.status === "Paid").length
+    }
+  };
+}
+
+app.get("/api/stores/:storeId/payables/finovo", async (request, response) => {
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    select: {
+      id: true,
+      name: true
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  const [vendors, approvals] = await Promise.all([
+    prisma.vendor.findMany({
+      where: { storeId: store.id },
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        contact: true,
+        phone: true,
+        email: true,
+        terms: true,
+        leadDays: true,
+        notes: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    }),
+    prisma.approvalRequest.findMany({
+      where: { storeId: store.id },
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      select: {
+        id: true,
+        type: true,
+        reference: true,
+        requestedBy: true,
+        impact: true,
+        reason: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    })
+  ]);
+
+  response.json(buildFinovoPayablesPayload(store, vendors, approvals));
 });
 
 app.get("/api/stores/:storeId/reports/cashier-accountability", async (request, response) => {

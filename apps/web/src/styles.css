@@ -1,5 +1,1072 @@
 @import url("https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap");
 
+.forge-form-page {
+  --forge-form-ink: #173244;
+  --forge-form-ink-soft: #587488;
+  --forge-form-line: rgba(20, 58, 84, 0.14);
+  --forge-form-surface: linear-gradient(180deg, rgba(249, 252, 255, 0.98) 0%, rgba(238, 245, 252, 0.98) 100%);
+  --forge-form-accent: #1c6d8f;
+  --forge-form-accent-soft: #e0f3fb;
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.forge-form-page.is-document-mode {
+  background: #eef3f7;
+  gap: 10px;
+  min-height: 100%;
+  padding: 8px;
+}
+
+.forge-form-studio-page {
+  background: linear-gradient(180deg, rgba(249, 251, 253, 0.98) 0%, rgba(238, 243, 247, 0.98) 100%);
+  border: 1px solid rgba(20, 58, 84, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 14px 30px rgba(15, 42, 61, 0.08);
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+}
+
+.forge-form-studio-topbar {
+  align-items: center;
+  background: linear-gradient(180deg, rgba(252, 253, 255, 0.98) 0%, rgba(243, 248, 251, 0.98) 100%);
+  border-bottom: 1px solid rgba(20, 58, 84, 0.08);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 12px 16px;
+}
+
+.forge-form-studio-topbar h2 {
+  color: var(--forge-form-ink);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.3rem;
+  margin: 4px 0 0;
+}
+
+.forge-form-studio-topbar p {
+  color: var(--forge-form-ink-soft);
+  margin: 6px 0 0;
+  max-width: 720px;
+}
+
+.forge-form-hero,
+.forge-form-sidebar-card,
+.forge-form-library,
+.forge-form-document-shell {
+  background: var(--forge-form-surface);
+  border: 1px solid var(--forge-form-line);
+  border-radius: 18px;
+  box-shadow: 0 14px 28px rgba(15, 42, 61, 0.06);
+}
+
+.forge-form-hero {
+  align-items: center;
+  background-image:
+    radial-gradient(circle at top right, rgba(28, 109, 143, 0.14), transparent 34%),
+    linear-gradient(180deg, rgba(249, 252, 255, 0.98) 0%, rgba(237, 244, 251, 0.98) 100%);
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  overflow: hidden;
+  padding: 18px 20px;
+  position: relative;
+}
+
+.forge-form-eyebrow,
+.forge-form-card-eyebrow {
+  color: #2b6885;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.forge-form-hero h2,
+.forge-form-toolbar h3,
+.forge-form-document-toolbar h3,
+.forge-form-sidebar-heading h3,
+.forge-form-inspector-heading h3 {
+  color: var(--forge-form-ink);
+  font-family: "Space Grotesk", sans-serif;
+  margin: 6px 0 0;
+}
+
+.forge-form-hero h2 {
+  font-size: 1.8rem;
+}
+
+.forge-form-hero p,
+.forge-form-toolbar p,
+.forge-form-document-toolbar p,
+.forge-form-sidebar-note,
+.forge-form-summary-card p,
+.forge-form-empty-state p,
+.forge-form-viewer-placeholder p,
+.forge-form-field-card p,
+.forge-form-library-name small {
+  color: var(--forge-form-ink-soft);
+}
+
+.forge-form-hero p {
+  margin: 8px 0 0;
+  max-width: 720px;
+}
+
+.forge-form-hero-meta {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+}
+
+.forge-form-hero-meta div,
+.forge-form-sidebar-card,
+.forge-form-viewer-panel,
+.forge-form-inspector,
+.forge-form-document-sidebar {
+  min-width: 0;
+}
+
+.forge-form-hero-meta div {
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(27, 87, 121, 0.14);
+  border-radius: 14px;
+  display: grid;
+  gap: 4px;
+  padding: 10px 14px;
+}
+
+.forge-form-hero-meta span,
+.forge-form-stat-grid span,
+.forge-form-stat-block span,
+.forge-form-viewer-topbar span,
+.forge-form-library-list-header span,
+.forge-form-library-row span,
+.forge-form-document-list-row span,
+.forge-form-field-card-meta span {
+  color: var(--forge-form-ink-soft);
+}
+
+.forge-form-hero-meta strong,
+.forge-form-stat-block strong,
+.forge-form-stat-grid strong,
+.forge-form-library-name strong,
+.forge-form-document-list-row strong,
+.forge-form-field-card strong,
+.forge-form-empty-state strong,
+.forge-form-viewer-placeholder strong {
+  color: var(--forge-form-ink);
+}
+
+.forge-form-shell,
+.forge-form-document-layout {
+  display: grid;
+  gap: 14px;
+}
+
+.forge-form-shell {
+  grid-template-columns: minmax(232px, 260px) minmax(0, 1fr);
+}
+
+.forge-form-sidebar,
+.forge-form-document-sidebar,
+.forge-form-inspector {
+  display: grid;
+  gap: 14px;
+}
+
+.forge-form-sidebar-card,
+.forge-form-inspector,
+.forge-form-viewer-panel,
+.forge-form-document-sidebar {
+  padding: 14px;
+}
+
+.forge-form-sidebar-heading,
+.forge-form-inspector-heading,
+.forge-form-library-list-header,
+.forge-form-document-toolbar,
+.forge-form-toolbar,
+.forge-form-viewer-topbar,
+.forge-form-field-card-header,
+.forge-form-document-list-row,
+.forge-form-library-row,
+.forge-form-library-name {
+  align-items: center;
+}
+
+.forge-form-sidebar-heading,
+.forge-form-inspector-heading,
+.forge-form-document-toolbar,
+.forge-form-toolbar,
+.forge-form-viewer-topbar,
+.forge-form-field-card-header {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.forge-form-ghost-button,
+.forge-form-back-button,
+.forge-form-secondary-button,
+.forge-form-primary-button,
+.forge-form-inspector-tabs button,
+.forge-form-breadcrumbs button,
+.forge-form-folder-tree-button,
+.forge-form-document-list-row,
+.forge-form-library-row {
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+.forge-form-primary-button,
+.forge-form-secondary-button,
+.forge-form-ghost-button,
+.forge-form-back-button {
+  border-radius: 14px;
+  min-height: 42px;
+  padding: 0 16px;
+}
+
+.forge-form-primary-button {
+  background: linear-gradient(135deg, #0f4664 0%, #2a7fa5 100%);
+  color: #f6fbff;
+  font-weight: 700;
+}
+
+.forge-form-secondary-button,
+.forge-form-back-button,
+.forge-form-ghost-button {
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--forge-form-ink);
+  box-shadow: inset 0 0 0 1px rgba(23, 50, 68, 0.12);
+}
+
+.forge-form-back-button {
+  margin-bottom: 10px;
+}
+
+.forge-form-toolbar-actions,
+.forge-form-chip-row,
+.forge-form-breadcrumbs,
+.forge-form-inspector-tabs,
+.forge-form-field-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.forge-form-toolbar,
+.forge-form-document-toolbar {
+  border-bottom: 1px solid rgba(20, 58, 84, 0.08);
+  padding: 16px 18px 14px;
+}
+
+.forge-form-toolbar-actions {
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.forge-form-search-field,
+.forge-form-inline-composer label,
+.forge-form-mapping-table td input,
+.forge-form-mapping-table td select {
+  display: grid;
+  gap: 6px;
+}
+
+.forge-form-search-field input,
+.forge-form-inline-composer input,
+.forge-form-inline-composer select,
+.forge-form-mapping-table td input,
+.forge-form-mapping-table td select {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(25, 74, 104, 0.18);
+  border-radius: 12px;
+  color: var(--forge-form-ink);
+  font: inherit;
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.forge-form-breadcrumbs {
+  padding: 0 18px;
+}
+
+.forge-form-breadcrumbs.is-compact {
+  padding: 0;
+}
+
+.forge-form-breadcrumbs button {
+  background: transparent;
+  color: #2b6885;
+  padding: 0;
+}
+
+.forge-form-breadcrumbs button::after {
+  color: rgba(43, 104, 133, 0.55);
+  content: "/";
+  margin-left: 10px;
+}
+
+.forge-form-breadcrumbs button:last-child::after {
+  content: "";
+  margin: 0;
+}
+
+.forge-form-library-meta-bar {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 14px 18px 0;
+}
+
+.forge-form-mini-stat {
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(17, 64, 95, 0.08);
+  border-radius: 14px;
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+}
+
+.forge-form-mini-stat span {
+  color: var(--forge-form-ink-soft);
+  font-size: 0.76rem;
+}
+
+.forge-form-mini-stat strong {
+  color: var(--forge-form-ink);
+  font-size: 1rem;
+}
+
+.forge-form-library-panel {
+  padding: 14px 18px 18px;
+}
+
+.forge-form-library-list {
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(20, 58, 84, 0.1);
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.forge-form-library-list-header,
+.forge-form-library-row {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1.55fr) 72px 110px 84px;
+  padding: 12px 14px;
+}
+
+.forge-form-library-list-header {
+  background: rgba(229, 240, 248, 0.86);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.forge-form-library-row {
+  align-items: center;
+  background: transparent;
+  border-top: 1px solid rgba(20, 58, 84, 0.08);
+  text-align: left;
+}
+
+.forge-form-library-row:hover,
+.forge-form-document-list-row:hover,
+.forge-form-folder-tree-button:hover,
+.forge-form-inspector-tabs button:hover {
+  background: rgba(224, 243, 251, 0.8);
+}
+
+.forge-form-library-row.is-folder {
+  background: rgba(245, 249, 252, 0.8);
+}
+
+.forge-form-library-name {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+
+.forge-form-library-name small {
+  line-height: 1.35;
+}
+
+.forge-form-empty-state {
+  display: grid;
+  gap: 8px;
+  padding: 32px 22px;
+  place-items: center;
+  text-align: center;
+}
+
+.forge-form-folder-tree-group,
+.forge-form-document-list,
+.forge-form-field-cards {
+  display: grid;
+  gap: 8px;
+}
+
+.forge-form-folder-tree-button,
+.forge-form-document-list-row {
+  background: rgba(255, 255, 255, 0.74);
+  border-radius: 12px;
+  color: var(--forge-form-ink);
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.forge-form-folder-tree-button.is-active,
+.forge-form-document-list-row.is-active,
+.forge-form-inspector-tabs button.is-active {
+  background: var(--forge-form-accent-soft);
+  color: #0f3954;
+  box-shadow: inset 0 0 0 1px rgba(28, 109, 143, 0.18);
+}
+
+.forge-form-folder-tree-icon {
+  color: #2a7fa5;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.forge-form-chip {
+  align-items: center;
+  background: rgba(17, 71, 101, 0.08);
+  border-radius: 999px;
+  color: #19516e;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 700;
+  min-height: 26px;
+  padding: 0 10px;
+}
+
+.forge-form-chip.is-stable {
+  background: rgba(45, 145, 114, 0.12);
+  color: #1d6b56;
+}
+
+.forge-form-chip.is-accent {
+  background: rgba(28, 109, 143, 0.14);
+  color: #165674;
+}
+
+.forge-form-chip.is-attention {
+  background: rgba(181, 101, 26, 0.16);
+  color: #8b4b11;
+}
+
+.forge-form-document-layout {
+  grid-template-columns: 1fr;
+  padding: 0 18px 18px;
+}
+
+.forge-form-workbench-nav {
+  align-items: center;
+  border-bottom: 1px solid rgba(20, 58, 84, 0.08);
+  display: flex;
+  gap: 6px;
+  padding: 0 18px;
+}
+
+.forge-form-workbench-nav button {
+  background: transparent;
+  border: 0;
+  color: var(--forge-form-ink-soft);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  min-height: 42px;
+  padding: 0 8px;
+}
+
+.forge-form-workbench-nav button.is-active {
+  border-bottom: 2px solid #0f4664;
+  color: var(--forge-form-ink);
+}
+
+.forge-form-workbench-nav-meta {
+  color: var(--forge-form-ink-soft);
+  display: flex;
+  gap: 14px;
+  margin-left: auto;
+}
+
+.forge-form-workbench-nav-meta span {
+  font-size: 0.78rem;
+}
+
+.forge-form-document-overview {
+  display: grid;
+  gap: 12px;
+  padding: 14px 18px;
+}
+
+.forge-form-document-meta-row {
+  align-items: end;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.forge-form-document-meta-row h4 {
+  color: var(--forge-form-ink);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1rem;
+  margin: 4px 0 6px;
+}
+
+.forge-form-document-switcher {
+  display: flex;
+  gap: 10px;
+  overflow: auto;
+  padding-bottom: 2px;
+}
+
+.forge-form-document-switcher.is-vertical {
+  display: grid;
+  overflow: visible;
+}
+
+.forge-form-document-switcher-button {
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(20, 58, 84, 0.08);
+  border-radius: 14px;
+  color: var(--forge-form-ink);
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.forge-form-document-switcher-button span {
+  color: var(--forge-form-ink-soft);
+}
+
+.forge-form-document-switcher-button.is-active {
+  background: var(--forge-form-accent-soft);
+  border-color: rgba(28, 109, 143, 0.2);
+}
+
+.forge-form-compact-notice {
+  border-top: 1px solid rgba(20, 58, 84, 0.08);
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.forge-form-document-layout.is-workbench {
+  align-items: start;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(230px, 260px) minmax(0, 1fr);
+  padding: 10px;
+}
+
+.forge-form-tool-drawer,
+.forge-form-stage {
+  min-width: 0;
+}
+
+.forge-form-tool-drawer {
+  background: #f7fafc;
+  border: 1px solid rgba(20, 58, 84, 0.1);
+  border-radius: 10px;
+  display: grid;
+  gap: 0;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  min-height: 920px;
+  overflow: hidden;
+}
+
+.forge-form-tool-rail {
+  background: #ffffff;
+  border-left: 1px solid rgba(20, 58, 84, 0.08);
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  padding: 12px 4px;
+  align-content: start;
+}
+
+.forge-form-tool-rail span {
+  align-items: center;
+  background: #f3f7fa;
+  border: 1px solid rgba(20, 58, 84, 0.1);
+  border-radius: 8px;
+  color: #19516e;
+  display: inline-flex;
+  font-size: 0.62rem;
+  font-weight: 700;
+  height: 30px;
+  justify-content: center;
+  width: 30px;
+}
+
+.forge-form-tool-panel {
+  display: grid;
+  gap: 14px;
+  padding: 12px;
+  align-content: start;
+}
+
+.forge-form-tool-panel.is-reference-tools {
+  background: #ffffff;
+}
+
+.forge-form-tool-panel-header {
+  align-items: start;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.forge-form-tool-panel-header h4,
+.forge-form-stage-header h4 {
+  color: var(--forge-form-ink);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1rem;
+  margin: 4px 0 0;
+}
+
+.forge-form-tool-list,
+.forge-form-tool-section {
+  display: grid;
+  gap: 8px;
+}
+
+.forge-form-tool-button {
+  background: #ffffff;
+  border: 1px solid rgba(20, 58, 84, 0.08);
+  border-radius: 10px;
+  color: var(--forge-form-ink);
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  text-align: left;
+}
+
+.forge-form-tool-button strong {
+  color: var(--forge-form-ink);
+}
+
+.forge-form-tool-button span,
+.forge-form-tool-stat-grid span {
+  color: var(--forge-form-ink-soft);
+  font-size: 0.76rem;
+}
+
+.forge-form-tool-stat-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.forge-form-tool-stat-grid div {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(20, 58, 84, 0.08);
+  border-radius: 10px;
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+}
+
+.forge-form-tool-stat-grid strong {
+  color: var(--forge-form-ink);
+}
+
+.forge-form-stage {
+  display: grid;
+  gap: 12px;
+  min-height: 920px;
+}
+
+.forge-form-stage-header {
+  align-items: end;
+  background: #ffffff;
+  border: 1px solid rgba(20, 58, 84, 0.08);
+  border-radius: 10px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.forge-form-viewer-panel {
+  background: #eceff2;
+  border: 1px solid rgba(22, 62, 90, 0.1);
+  border-radius: 10px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 1080px;
+  overflow: hidden;
+}
+
+.forge-form-viewer-topbar {
+  background: #f8fafc;
+  border-bottom: 1px solid rgba(20, 58, 84, 0.08);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.forge-form-viewer-surface {
+  align-items: start;
+  background: #e5e7ea;
+  display: flex;
+  justify-content: center;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 28px 28px;
+}
+
+.forge-form-viewer-frame,
+.forge-form-viewer-placeholder {
+  background: #fff;
+  border: 1px solid rgba(22, 62, 90, 0.08);
+  border-radius: 4px;
+  box-shadow: 0 18px 32px rgba(15, 29, 42, 0.18);
+  height: 100%;
+  max-width: 960px;
+  min-height: 100%;
+  width: min(100%, 960px);
+}
+
+.forge-form-viewer-frame {
+  min-height: 1240px;
+}
+
+.forge-form-viewer-placeholder {
+  align-content: center;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  min-height: 1240px;
+  padding: 36px;
+  text-align: center;
+}
+
+.forge-form-editor-panel {
+  background: linear-gradient(180deg, rgba(251, 252, 254, 0.98) 0%, rgba(243, 247, 250, 0.98) 100%);
+  border: 1px solid rgba(20, 58, 84, 0.1);
+  border-radius: 10px;
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.forge-form-inspector {
+  background: linear-gradient(180deg, rgba(251, 252, 254, 0.98) 0%, rgba(243, 247, 250, 0.98) 100%);
+  border: 1px solid rgba(20, 58, 84, 0.1);
+  border-radius: 10px;
+  align-self: start;
+  min-height: 920px;
+  padding-bottom: 18px;
+}
+
+.forge-form-inspector-tabs {
+  border-bottom: 1px solid rgba(20, 58, 84, 0.08);
+  margin: 0 0 2px;
+  padding: 0 0 12px;
+}
+
+.forge-form-inspector-tabs button {
+  background: transparent;
+  border-radius: 999px;
+  color: var(--forge-form-ink-soft);
+  min-height: 38px;
+  padding: 0 14px;
+}
+
+.forge-form-inspector-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.forge-form-mapping-summary-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.forge-form-field-editor-list {
+  display: grid;
+  gap: 12px;
+  max-height: 560px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.forge-form-field-editor-card {
+  background: rgba(245, 250, 253, 0.9);
+  border: 1px solid rgba(20, 58, 84, 0.08);
+  border-radius: 16px;
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.forge-form-field-editor-header {
+  align-items: start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.forge-form-field-editor-header strong {
+  color: var(--forge-form-ink);
+  display: block;
+  font-size: 0.95rem;
+}
+
+.forge-form-field-editor-meta {
+  color: var(--forge-form-ink-soft);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.forge-form-field-editor-meta span {
+  font-size: 0.76rem;
+}
+
+.forge-form-field-editor-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.forge-form-field-editor-grid label,
+.forge-form-checkbox-field {
+  display: grid;
+  gap: 6px;
+}
+
+.forge-form-checkbox-field {
+  align-content: start;
+}
+
+.forge-form-mapping-table-wrap {
+  background: rgba(245, 250, 253, 0.88);
+  border: 1px solid rgba(20, 58, 84, 0.08);
+  border-radius: 18px;
+  max-height: 440px;
+  overflow: auto;
+}
+
+.forge-form-mapping-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.forge-form-mapping-table th,
+.forge-form-mapping-table td {
+  border-bottom: 1px solid rgba(20, 58, 84, 0.08);
+  padding: 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.forge-form-mapping-table th {
+  background: rgba(229, 240, 248, 0.86);
+  color: #1f5775;
+  font-size: 0.76rem;
+  letter-spacing: 0.05em;
+  position: sticky;
+  text-transform: uppercase;
+  top: 0;
+}
+
+.forge-form-checkbox-cell {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.forge-form-checkbox-cell input {
+  accent-color: var(--forge-form-accent);
+}
+
+.forge-form-inline-composer {
+  background: rgba(245, 250, 253, 0.88);
+  border: 1px dashed rgba(29, 91, 124, 0.24);
+  border-radius: 14px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.forge-form-inline-composer.is-vertical {
+  align-items: start;
+}
+
+.forge-form-inline-composer-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.forge-form-json-panel {
+  background: #102532;
+  border-radius: 18px;
+  color: #d8edf5;
+  margin: 0;
+  max-height: 540px;
+  overflow: auto;
+  padding: 18px;
+}
+
+.forge-form-field-card {
+  background: rgba(245, 250, 253, 0.9);
+  border: 1px solid rgba(20, 58, 84, 0.08);
+  border-radius: 18px;
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+
+.forge-form-stat-block {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(20, 58, 84, 0.08);
+  border-radius: 18px;
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  padding: 18px;
+}
+
+.forge-form-stat-block strong {
+  font-size: 2rem;
+}
+
+.forge-form-stat-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.forge-form-stat-grid div {
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(20, 58, 84, 0.08);
+  border-radius: 16px;
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+}
+
+@media (max-width: 1320px) {
+  .forge-form-shell,
+  .forge-form-document-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .forge-form-document-layout.is-workbench {
+    grid-template-columns: 1fr;
+  }
+
+  .forge-form-studio-topbar {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .forge-form-document-meta-row {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .forge-form-stage-header {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .forge-form-viewer-panel {
+    min-height: 640px;
+  }
+}
+
+@media (max-width: 900px) {
+  .forge-form-hero,
+  .forge-form-toolbar,
+  .forge-form-document-toolbar {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .forge-form-hero-meta,
+  .forge-form-library-meta-bar,
+  .forge-form-mapping-summary-grid,
+  .forge-form-inline-composer-grid,
+  .forge-form-field-editor-grid,
+  .forge-form-tool-stat-grid,
+  .forge-form-stat-grid,
+  .forge-form-library-list-header,
+  .forge-form-library-row {
+    grid-template-columns: 1fr;
+  }
+
+  .forge-form-workbench-nav {
+    flex-wrap: wrap;
+    padding: 0 14px 8px;
+  }
+
+  .forge-form-workbench-nav-meta {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .forge-form-tool-drawer {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .forge-form-tool-rail {
+    border-left: 0;
+    border-top: 1px solid rgba(20, 58, 84, 0.08);
+    grid-auto-flow: column;
+    justify-content: start;
+    overflow: auto;
+  }
+
+  .forge-form-field-editor-header {
+    flex-direction: column;
+  }
+
+  .forge-form-library-list-header {
+    display: none;
+  }
+
+  .forge-form-library-row {
+    gap: 6px;
+  }
+
+  .forge-form-document-switcher {
+    display: grid;
+  }
+
+  .forge-form-document-layout {
+    padding: 14px;
+  }
+}
+
 .cashier-accountability-page {
   display: grid;
   gap: 18px;
@@ -3297,6 +4364,14 @@ button {
   height: calc(100vh - 116px);
   min-height: calc(100vh - 116px);
 }
+.legacy-workspace-shell.is-forgeform-shell {
+  grid-template-columns: minmax(0, 1fr);
+  height: calc(100vh - 78px);
+  min-height: calc(100vh - 78px);
+}
+.legacy-workspace-shell.is-forgeform-shell .legacy-open-windows {
+  display: none !important;
+}
 
 .legacy-open-windows {
   background: linear-gradient(180deg, #0d3958 0%, #0b3049 38%, #08253a 100%);
@@ -3670,6 +4745,12 @@ button {
   overflow: hidden;
 }
 
+.legacy-workspace.is-forgeform-workspace .legacy-window-bar,
+.legacy-workspace.is-forgeform-workspace .legacy-toolbar-strip,
+.legacy-workspace.is-forgeform-workspace .legacy-toolbar-status {
+  display: none !important;
+}
+
 .legacy-window-bar {
   align-items: center;
   background: #ff6f3c;
@@ -3816,9 +4897,25 @@ button {
   padding: 10px;
 }
 
+.legacy-workspace-canvas.is-forgeform-canvas {
+  background: #eef3f7;
+  padding: 0;
+}
+
 .legacy-workspace-stack {
   display: grid;
   gap: 12px;
+}
+
+.legacy-workspace-stack.is-forgeform-layout {
+  gap: 0;
+  height: 100%;
+  min-height: 0;
+}
+
+.legacy-workspace-stack.is-forgeform-layout > * {
+  min-height: 0;
+  min-width: 0;
 }
 
 .legacy-workspace-stack.is-sales-communicate-layout {
@@ -16269,6 +17366,954 @@ body.is-desktop-dragging {
 
 .my-stores-health-metrics {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.finovo-payables-page {
+  background:
+    radial-gradient(circle at top right, rgba(18, 76, 56, 0.32), transparent 28%),
+    radial-gradient(circle at bottom left, rgba(32, 92, 133, 0.2), transparent 32%),
+    linear-gradient(180deg, #061019 0%, #091722 100%);
+  border: 1px solid rgba(82, 110, 132, 0.2);
+  border-radius: 24px;
+  color: #edf7f4;
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+}
+
+.finovo-payables-shell {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 220px minmax(0, 1fr);
+}
+
+.finovo-payables-sidebar,
+.finovo-payables-header,
+.finovo-payables-loading,
+.finovo-payables-error {
+  background: rgba(10, 22, 32, 0.88);
+  border: 1px solid rgba(88, 116, 137, 0.18);
+  border-radius: 20px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.24);
+}
+
+.finovo-payables-sidebar,
+.finovo-payables-content,
+.finovo-payables-sidebar-nav,
+.finovo-payables-sidebar-brand,
+.finovo-payables-sidebar-promo,
+.finovo-payables-sidebar-user,
+.finovo-payables-header,
+.finovo-payables-header-actions,
+.finovo-payables-loading,
+.finovo-payables-error {
+  display: grid;
+  gap: 14px;
+}
+
+.finovo-payables-content {
+  gap: 18px;
+}
+
+.finovo-payables-sidebar {
+  align-content: start;
+  padding: 18px 14px;
+}
+
+.finovo-payables-sidebar-brand {
+  align-items: center;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.finovo-payables-sidebar-logo,
+.finovo-payables-nav-glyph {
+  align-items: center;
+  background: rgba(36, 185, 95, 0.14);
+  border: 1px solid rgba(59, 223, 128, 0.24);
+  border-radius: 12px;
+  color: #5cf0a0;
+  display: inline-flex;
+  font-size: 0.74rem;
+  font-weight: 800;
+  height: 34px;
+  justify-content: center;
+  letter-spacing: 0.08em;
+  width: 34px;
+}
+
+.finovo-payables-sidebar-brand strong,
+.finovo-payables-sidebar-promo strong,
+.finovo-payables-sidebar-user strong {
+  color: #f4fffb;
+}
+
+.finovo-payables-sidebar-brand span,
+.finovo-payables-sidebar-promo p,
+.finovo-payables-sidebar-user span,
+.finovo-payables-loading,
+.finovo-payables-error {
+  color: #8ba6b3;
+}
+
+.finovo-payables-nav-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 14px;
+  color: #d5e7ef;
+  cursor: pointer;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.finovo-payables-nav-button.is-active {
+  background: rgba(36, 185, 95, 0.16);
+}
+
+.finovo-payables-nav-button.is-active .finovo-payables-nav-glyph {
+  background: rgba(36, 185, 95, 0.24);
+}
+
+.finovo-payables-nav-label {
+  font-weight: 700;
+}
+
+.finovo-payables-nav-badge,
+.finovo-payables-panel-tag {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  color: #9ab0bd;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 800;
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0 8px;
+  place-items: center;
+}
+
+.finovo-payables-sidebar-promo,
+.finovo-payables-sidebar-user {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(96, 121, 141, 0.16);
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.finovo-payables-sidebar-promo button {
+  background: linear-gradient(135deg, #178a4d 0%, #24b95f 100%);
+  border: 0;
+  border-radius: 12px;
+  color: #f2fff7;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  min-height: 38px;
+  padding: 0 12px;
+}
+
+.finovo-payables-header {
+  align-items: end;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 22px 24px;
+}
+
+.finovo-payables-header-actions {
+  align-items: end;
+  display: flex;
+  gap: 12px;
+}
+
+.finovo-payables-loading,
+.finovo-payables-error {
+  padding: 28px;
+}
+
+.finovo-payables-error {
+  color: #ff8d7a;
+}
+
+.finovo-payables-hero,
+.finovo-payables-panel,
+.finovo-payables-stat-card,
+.finovo-payables-notice,
+.finovo-payables-performance-grid,
+.finovo-payables-footer-note {
+  background: rgba(10, 22, 32, 0.88);
+  border: 1px solid rgba(88, 116, 137, 0.18);
+  border-radius: 20px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.24);
+}
+
+.finovo-payables-hero,
+.finovo-payables-panel-header,
+.finovo-payables-mini-card,
+.finovo-payables-upcoming-list div,
+.finovo-payables-activity-row,
+.finovo-payables-vendor-meta,
+.finovo-payables-ranked-row,
+.finovo-payables-performance-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.finovo-payables-hero {
+  gap: 20px;
+  padding: 22px 24px;
+}
+
+.finovo-payables-hero-copy,
+.finovo-payables-panel-header > div,
+.finovo-payables-stat-card,
+.finovo-payables-status-row,
+.finovo-payables-card-list,
+.finovo-payables-activity-row > div,
+.finovo-payables-vendor-row,
+.finovo-payables-performance-card {
+  display: grid;
+  gap: 6px;
+}
+
+.finovo-payables-eyebrow,
+.finovo-payables-stat-card span,
+.finovo-payables-panel-header span,
+.finovo-payables-performance-card span,
+.finovo-payables-footer-note,
+.finovo-payables-notice,
+.finovo-payables-upcoming-list span,
+.finovo-payables-chart-axis span,
+.finovo-payables-mini-card small,
+.finovo-payables-mini-card span,
+.finovo-payables-mini-card strong + span {
+  color: #8ba6b3;
+}
+
+.finovo-payables-eyebrow {
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.finovo-payables-hero h2 {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 2rem;
+  margin: 0;
+}
+
+.finovo-payables-hero p {
+  margin: 0;
+  max-width: 720px;
+}
+
+.finovo-payables-hero-actions {
+  align-items: end;
+  display: flex;
+  gap: 12px;
+}
+
+.finovo-payables-search {
+  display: grid;
+  gap: 6px;
+  min-width: 340px;
+}
+
+.finovo-payables-search span {
+  color: #84a0ae;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.finovo-payables-search input,
+.finovo-payables-panel select,
+.finovo-payables-toolbar-actions select,
+.finovo-payables-toolbar-actions button,
+.finovo-payables-primary-button,
+.finovo-payables-panel-header button,
+.finovo-payables-mini-card button,
+.finovo-payables-table button,
+.finovo-payables-bill-tabs button,
+.finovo-payables-quick-actions button,
+.finovo-payables-performance-header button {
+  border-radius: 12px;
+  font: inherit;
+}
+
+.finovo-payables-search input,
+.finovo-payables-panel select,
+.finovo-payables-toolbar-actions select {
+  background: rgba(4, 13, 20, 0.92);
+  border: 1px solid rgba(103, 134, 157, 0.22);
+  color: #f0fbf7;
+  min-height: 42px;
+  padding: 0 14px;
+}
+
+.finovo-payables-primary-button,
+.finovo-payables-toolbar-actions .is-primary,
+.finovo-payables-panel-header button,
+.finovo-payables-mini-card button,
+.finovo-payables-table button,
+.finovo-payables-performance-header button,
+.finovo-payables-toolbar-actions button,
+.finovo-payables-quick-actions button {
+  background: linear-gradient(135deg, #178a4d 0%, #24b95f 100%);
+  border: 0;
+  color: #f2fff7;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.finovo-payables-primary-button,
+.finovo-payables-toolbar-actions .is-primary {
+  min-height: 42px;
+  padding: 0 18px;
+}
+
+.finovo-payables-panel-header button,
+.finovo-payables-mini-card button,
+.finovo-payables-performance-header button,
+.finovo-payables-toolbar-actions button,
+.finovo-payables-table button {
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.finovo-payables-notice,
+.finovo-payables-footer-note {
+  padding: 14px 16px;
+}
+
+.finovo-payables-summary-grid,
+.finovo-payables-chart-row,
+.finovo-payables-insight-row,
+.finovo-payables-main-grid,
+.finovo-payables-performance-cards,
+.finovo-payables-aging-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.finovo-payables-summary-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.finovo-payables-stat-card {
+  padding: 18px;
+}
+
+.finovo-payables-stat-card strong,
+.finovo-payables-mini-card strong,
+.finovo-payables-ranked-row strong,
+.finovo-payables-upcoming-list strong,
+.finovo-payables-performance-card strong,
+.finovo-payables-vendor-meta strong,
+.finovo-payables-status-row strong {
+  color: #f4fffb;
+}
+
+.finovo-payables-stat-card strong {
+  font-size: 1.65rem;
+}
+
+.finovo-payables-stat-card p,
+.finovo-payables-performance-card p {
+  color: #28d475;
+  margin: 0;
+}
+
+.finovo-payables-stat-card.is-critical strong,
+.finovo-payables-stat-card.is-critical p,
+.finovo-payables-ranked-row div:last-child span,
+.finovo-payables-status-pill.tone-danger {
+  color: #ff715d;
+}
+
+.finovo-payables-stat-card.is-positive strong,
+.finovo-payables-status-pill.tone-success {
+  color: #43df83;
+}
+
+.finovo-payables-main-grid {
+  grid-template-columns: minmax(0, 2.15fr) minmax(300px, 0.95fr);
+}
+
+.finovo-payables-primary-column,
+.finovo-payables-secondary-column {
+  display: grid;
+  gap: 16px;
+}
+
+.finovo-payables-chart-row {
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.8fr) minmax(250px, 0.72fr);
+}
+
+.finovo-payables-insight-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.finovo-payables-panel {
+  min-height: 0;
+  padding: 18px;
+}
+
+.finovo-payables-panel-header {
+  margin-bottom: 14px;
+}
+
+.finovo-payables-panel-header strong,
+.finovo-payables-performance-header strong {
+  font-size: 1rem;
+}
+
+.finovo-payables-chart-shell {
+  position: relative;
+}
+
+.finovo-payables-chart-legend {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.finovo-payables-chart-legend span,
+.finovo-payables-status-row span,
+.finovo-payables-activity-row span,
+.finovo-payables-vendor-meta span,
+.finovo-payables-ranked-row span,
+.finovo-payables-upcoming-list em {
+  color: #9ab0bd;
+  font-style: normal;
+}
+
+.finovo-payables-chart-legend i,
+.finovo-payables-status-row i,
+.finovo-payables-activity-row i {
+  border-radius: 999px;
+  display: inline-flex;
+  height: 10px;
+  margin-right: 6px;
+  width: 10px;
+}
+
+.finovo-payables-chart-legend .tone-cash-out,
+.finovo-payables-activity-row .tone-warning {
+  background: #ff5a4e;
+}
+
+.finovo-payables-chart-legend .tone-cash-in,
+.finovo-payables-activity-row .tone-positive {
+  background: #27cf74;
+}
+
+.finovo-payables-activity-row .tone-neutral {
+  background: #2f8cff;
+}
+
+.finovo-payables-line-chart {
+  height: 220px;
+  width: 100%;
+}
+
+.finovo-payables-grid-lines line,
+.finovo-payables-zero-line {
+  stroke: rgba(153, 180, 194, 0.14);
+  stroke-width: 1;
+}
+
+.finovo-payables-area {
+  fill-opacity: 0.18;
+}
+
+.finovo-payables-area.cash-in {
+  fill: #27cf74;
+}
+
+.finovo-payables-area.cash-out {
+  fill: #ff5a4e;
+}
+
+.finovo-payables-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+}
+
+.finovo-payables-line.cash-in,
+.finovo-payables-sparkline {
+  stroke: #27cf74;
+}
+
+.finovo-payables-line.cash-out {
+  stroke: #ff5a4e;
+}
+
+.finovo-payables-chart-axis {
+  display: grid;
+  font-size: 0.72rem;
+  gap: 8px;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+}
+
+.finovo-payables-chart-callout {
+  background: rgba(18, 31, 42, 0.92);
+  border: 1px solid rgba(94, 118, 135, 0.2);
+  border-radius: 14px;
+  display: grid;
+  gap: 4px;
+  left: 108px;
+  padding: 12px;
+  position: absolute;
+  top: 52px;
+}
+
+.finovo-payables-status-chart {
+  align-items: center;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.finovo-payables-donut {
+  align-items: center;
+  border-radius: 999px;
+  display: flex;
+  height: 176px;
+  justify-content: center;
+  width: 176px;
+}
+
+.finovo-payables-donut > div {
+  align-items: center;
+  background: #08141d;
+  border-radius: 999px;
+  display: grid;
+  gap: 4px;
+  height: 108px;
+  justify-items: center;
+  width: 108px;
+}
+
+.finovo-payables-donut strong {
+  font-size: 1.35rem;
+}
+
+.finovo-payables-status-list,
+.finovo-payables-quick-actions,
+.finovo-payables-card-list,
+.finovo-payables-activity-list,
+.finovo-payables-upcoming-list,
+.finovo-payables-ranked-list,
+.finovo-payables-vendor-list {
+  display: grid;
+  gap: 10px;
+}
+
+.finovo-payables-quick-actions button,
+.finovo-payables-mini-card,
+.finovo-payables-activity-row,
+.finovo-payables-upcoming-list div,
+.finovo-payables-ranked-row,
+.finovo-payables-performance-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(96, 121, 141, 0.16);
+  border-radius: 14px;
+}
+
+.finovo-payables-quick-actions button {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-start;
+  min-height: 42px;
+  padding: 0 12px;
+}
+
+.finovo-payables-action-icon {
+  align-items: center;
+  background: rgba(6, 22, 14, 0.28);
+  border: 1px solid rgba(203, 255, 223, 0.18);
+  border-radius: 10px;
+  display: inline-flex;
+  height: 22px;
+  justify-content: center;
+  width: 22px;
+}
+
+.finovo-payables-aging-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.finovo-payables-aging-grid div {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(96, 121, 141, 0.16);
+  border-radius: 14px;
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.finovo-payables-aging-grid em {
+  color: #37d67f;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.finovo-payables-aging-grid .tone-danger {
+  color: #ff715d;
+}
+
+.finovo-payables-bills-panel {
+  overflow: hidden;
+}
+
+.finovo-payables-toolbar-actions,
+.finovo-payables-bill-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.finovo-payables-bill-tabs {
+  margin-bottom: 14px;
+}
+
+.finovo-payables-bill-tabs button {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(97, 121, 141, 0.14);
+  color: #9ab0bd;
+  cursor: pointer;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.finovo-payables-bill-tabs button.is-active {
+  background: rgba(36, 185, 95, 0.16);
+  border-color: rgba(56, 210, 118, 0.36);
+  color: #f2fff7;
+}
+
+.finovo-payables-table-wrap {
+  overflow-x: auto;
+}
+
+.finovo-payables-table {
+  border-collapse: collapse;
+  min-width: 760px;
+  width: 100%;
+}
+
+.finovo-payables-table th,
+.finovo-payables-table td {
+  border-bottom: 1px solid rgba(90, 115, 133, 0.14);
+  padding: 12px 10px;
+  text-align: left;
+}
+
+.finovo-payables-table th {
+  color: #82a1b0;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.finovo-payables-status-pill {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.74rem;
+  font-weight: 800;
+  padding: 6px 10px;
+}
+
+.finovo-payables-status-pill.tone-warning {
+  background: rgba(244, 181, 68, 0.16);
+  color: #f4c45b;
+}
+
+.finovo-payables-status-pill.tone-info {
+  background: rgba(47, 140, 255, 0.14);
+  color: #6bb0ff;
+}
+
+.finovo-payables-status-pill.tone-danger {
+  background: rgba(255, 90, 78, 0.14);
+}
+
+.finovo-payables-status-pill.tone-success {
+  background: rgba(39, 207, 116, 0.14);
+}
+
+.finovo-payables-mini-card,
+.finovo-payables-activity-row,
+.finovo-payables-upcoming-list div,
+.finovo-payables-ranked-row,
+.finovo-payables-performance-card {
+  padding: 12px 14px;
+}
+
+.finovo-payables-mini-card > div,
+.finovo-payables-upcoming-list div,
+.finovo-payables-ranked-row > div,
+.finovo-payables-vendor-row {
+  display: grid;
+  gap: 4px;
+}
+
+.finovo-payables-upcoming-list .is-total {
+  background: rgba(36, 185, 95, 0.08);
+  border-color: rgba(56, 210, 118, 0.18);
+}
+
+.finovo-payables-activity-row {
+  gap: 10px;
+}
+
+.finovo-payables-activity-row small {
+  color: #6e8796;
+}
+
+.finovo-payables-vendor-bar {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 999px;
+  height: 8px;
+  overflow: hidden;
+}
+
+.finovo-payables-vendor-bar span {
+  background: linear-gradient(90deg, #25c96f 0%, #5cf0a0 100%);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+
+.finovo-payables-performance-grid {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.finovo-payables-performance-cards {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.finovo-payables-performance-card svg {
+  height: 42px;
+  width: 100%;
+}
+
+.finovo-payables-sparkline {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+}
+
+.finovo-payables-view-stack,
+.finovo-payables-form-grid,
+.finovo-payables-detail-grid,
+.finovo-payables-data-points,
+.finovo-payables-field,
+.finovo-payables-form-actions {
+  display: grid;
+  gap: 14px;
+}
+
+.finovo-payables-detail-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.finovo-payables-detail-grid.is-wide-first {
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.9fr);
+}
+
+.finovo-payables-data-points {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.finovo-payables-data-points div,
+.finovo-payables-empty-state {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(96, 121, 141, 0.16);
+  border-radius: 14px;
+  color: #9ab0bd;
+  padding: 14px;
+}
+
+.finovo-payables-data-points div {
+  display: grid;
+  gap: 6px;
+}
+
+.finovo-payables-data-points span,
+.finovo-payables-field span,
+.finovo-payables-table-note,
+.finovo-payables-table-subvalue {
+  color: #8ba6b3;
+  font-size: 0.78rem;
+}
+
+.finovo-payables-data-points strong,
+.finovo-payables-empty-state strong {
+  color: #f4fffb;
+}
+
+.finovo-payables-form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.finovo-payables-field.is-full,
+.finovo-payables-form-actions.is-full {
+  grid-column: 1 / -1;
+}
+
+.finovo-payables-form-grid input,
+.finovo-payables-form-grid textarea {
+  background: rgba(4, 13, 20, 0.92);
+  border: 1px solid rgba(103, 134, 157, 0.22);
+  border-radius: 12px;
+  color: #f0fbf7;
+  font: inherit;
+  padding: 12px 14px;
+  width: 100%;
+}
+
+.finovo-payables-form-grid textarea {
+  min-height: 112px;
+  resize: vertical;
+}
+
+.finovo-payables-form-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.finovo-payables-form-actions button,
+.finovo-payables-inline-actions button,
+.finovo-payables-table-actions button {
+  border-radius: 12px;
+  font: inherit;
+}
+
+.finovo-payables-form-actions button,
+.finovo-payables-inline-actions button,
+.finovo-payables-table-actions button {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(103, 134, 157, 0.22);
+  color: #edf7f4;
+  cursor: pointer;
+  min-height: 38px;
+  padding: 0 14px;
+}
+
+.finovo-payables-form-actions .is-primary,
+.finovo-payables-inline-actions .is-primary {
+  background: linear-gradient(135deg, #178a4d 0%, #24b95f 100%);
+  border: 0;
+  color: #f2fff7;
+}
+
+.finovo-payables-inline-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.finovo-payables-table-actions {
+  justify-content: flex-end;
+}
+
+.finovo-payables-empty-table {
+  color: #8ba6b3;
+  text-align: center;
+}
+
+.finovo-payables-table-subvalue {
+  margin-top: 4px;
+}
+
+.finovo-payables-table-note {
+  display: inline-flex;
+  font-weight: 700;
+}
+
+@media (max-width: 1480px) {
+  .finovo-payables-shell,
+  .finovo-payables-summary-grid,
+  .finovo-payables-performance-cards,
+  .finovo-payables-insight-row,
+  .finovo-payables-aging-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .finovo-payables-shell,
+  .finovo-payables-main-grid,
+  .finovo-payables-chart-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1080px) {
+  .finovo-payables-header,
+  .finovo-payables-hero,
+  .finovo-payables-hero-actions,
+  .finovo-payables-panel-header,
+  .finovo-payables-performance-header {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .finovo-payables-search {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .finovo-payables-header-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .finovo-payables-status-chart,
+  .finovo-payables-summary-grid,
+  .finovo-payables-performance-cards,
+  .finovo-payables-insight-row,
+  .finovo-payables-aging-grid,
+  .finovo-payables-detail-grid,
+  .finovo-payables-detail-grid.is-wide-first,
+  .finovo-payables-data-points,
+  .finovo-payables-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .finovo-payables-page {
+    border-radius: 18px;
+    padding: 14px;
+  }
+
+  .finovo-payables-panel,
+  .finovo-payables-hero,
+  .finovo-payables-performance-grid {
+    padding: 14px;
+  }
+
+  .finovo-payables-chart-axis {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .finovo-payables-chart-callout {
+    left: 16px;
+    position: static;
+    top: auto;
+  }
 }
 
 @media (max-width: 1280px) {

@@ -27,13 +27,15 @@ const VISIBLE_NAVIGATION_KEYS = new Set([
   "management activity:executive board",
   "management activity:website activity",
   "management activity:audit trail",
+  "payables:finovo",
   "receivables:ar aging doc",
   "general ledger:chart of accounts",
   "general ledger:profit & loss",
   "system:website feed",
   "system:dealer setup",
   "system:my stores",
-  "system:sandbox"
+  "system:sandbox",
+  "system:forgeform"
 ]);
 
 function filterNavigationItems(groupLabel: string, items: NavigationMenuItem[]): NavigationMenuItem[] {
@@ -1331,6 +1333,10 @@ export const legacyFallbackNavigation: NavigationGroup[] = filterNavigationGroup
         items: ["Managements Activitie's", "Cashier Accountability", "Cashier Reconciliation"]
   },
   {
+    label: "Payables",
+    items: ["Finovo"]
+  },
+  {
     label: "Receivables",
     items: [
       "AR Aging Doc",
@@ -1575,6 +1581,10 @@ export const legacyFallbackNavigation: NavigationGroup[] = filterNavigationGroup
       {
         label: "Development",
         items: ["Sandbox"]
+      },
+      {
+        label: "Tools",
+        items: ["ForgeForm"]
       },
       {
         label: "Access & Security",
@@ -1945,6 +1955,7 @@ const navigationMenuWorkspaceLookup: Record<string, WorkspaceId> = {
     "management activity:month-end readiness": "audit",
     "management activity:favorite website pulse": "website",
     "management activity:favorite approval log": "audit",
+    "payables:finovo": "analytics",
     "receivables:ar aging doc": "analytics",
     "receivables:customer inquiry": "analytics",
     "receivables:credit hold review": "analytics",
@@ -1995,6 +2006,7 @@ const navigationMenuWorkspaceLookup: Record<string, WorkspaceId> = {
     "system:dealer setup": "analytics",
     "system:my stores": "analytics",
     "system:sandbox": "website",
+    "system:forgeform": "analytics",
     "system:feed health": "website",
     "system:feed retry queue": "website",
     "system:lead form routing": "website",
@@ -2040,6 +2052,7 @@ export function resolveWorkspaceFromMenuItem(groupLabel: string, item: string): 
     sales: "sales",
     crm: "sales",
     "management activity": "analytics",
+    payables: "analytics",
     receivables: "analytics",
     "general ledger": "analytics",
     system: "analytics",

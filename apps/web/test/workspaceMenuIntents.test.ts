@@ -115,6 +115,7 @@ test("management website intents keep the dedicated UI builder but submit the le
 test("remaining top-nav groups resolve to dedicated workspace intents", () => {
   const receivablesIntent = resolveReceivablesMenuIntent("Customer Inquiry");
   const generalLedgerIntent = resolveGeneralLedgerMenuIntent("Deal Posting");
+  const forgeFormIntent = resolveSystemMenuIntent("ForgeForm");
   const systemIntent = resolveSystemMenuIntent("Audit Trail");
   const routedIntent = resolveWorkspaceMenuIntent("System", "Website Feed");
   const myStoresIntent = resolveWorkspaceMenuIntent("System", "My Stores");
@@ -128,6 +129,7 @@ test("remaining top-nav groups resolve to dedicated workspace intents", () => {
   assert.equal(generalLedgerIntent.tool, "GL Deal Posting");
   assert.equal(generalLedgerIntent.workflowOverrides?.submitAction, "GL Deal Posting");
 
+  assert.equal(forgeFormIntent, null);
   assert.equal(systemIntent, null);
   assert.equal(resolveWorkspaceFromMenuItem("System", "Audit Trail"), "audit");
 
@@ -135,6 +137,7 @@ test("remaining top-nav groups resolve to dedicated workspace intents", () => {
   assert.equal(resolveWorkspaceFromMenuItem("System", "Website Feed"), "website");
   assert.equal(myStoresIntent, null);
   assert.equal(resolveWorkspaceFromMenuItem("System", "My Stores"), "analytics");
+  assert.equal(resolveWorkspaceFromMenuItem("System", "ForgeForm"), "analytics");
 });
 
 test("new submenu aliases stay routed to the existing workspace flows", () => {

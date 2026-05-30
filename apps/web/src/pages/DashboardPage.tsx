@@ -51,6 +51,8 @@ import { ARAgingDocWorkspace } from "./ARAgingDocWorkspace";
 import { ChartOfAccountsWorkspace } from "./ChartOfAccountsWorkspace";
 import { CrmCommunicateWorkspace } from "./CrmCommunicateWorkspace";
 import { DealerSetupWorkspace } from "./DealerSetupWorkspace";
+import { FinovoPayablesWorkspace } from "./FinovoPayablesWorkspace";
+import { ForgeFormWorkspace } from "./ForgeFormWorkspace";
 import { ManagementActivitiesWorkspace } from "./ManagementActivitiesWorkspace";
 import { MyStoresWorkspace } from "./MyStoresWorkspace";
 import { ProfitLossWorkspace } from "./ProfitLossWorkspace";
@@ -369,38 +371,55 @@ function ensureSystemPinnedLeafs(groups: NavigationGroup[]): NavigationGroup[] {
     }
 
     foundSystemGroup = true;
-    const operationBranch = group.items.find(
-      (item): item is Exclude<NavigationMenuItem, string> & { items: NavigationMenuItem[] } =>
-        isNavigationBranchItem(item) && item.label === "Operation"
-    );
+    const dealersIndex = group.items.findIndex((item) => getNavigationItemLabel(item) === "Dealers");
+    const developmentIndex = group.items.findIndex((item) => getNavigationItemLabel(item) === "Development");
+    const requiredBranches = [
+      {
+        label: "Operation",
+        leaf: "My Stores",
+        insertIndex: dealersIndex >= 0 ? dealersIndex + 1 : group.items.length
+      },
+      {
+        label: "Tools",
+        leaf: "ForgeForm",
+        insertIndex: developmentIndex >= 0 ? developmentIndex + 1 : group.items.length
+      }
+    ];
+    let nextItems = [...group.items];
+    let changed = false;
 
-    if (operationBranch && navigationItemsContainLeaf(operationBranch.items, "My Stores")) {
+    for (const requiredBranch of requiredBranches) {
+      const existingBranchIndex = nextItems.findIndex((item) => getNavigationItemLabel(item) === requiredBranch.label);
+
+      if (existingBranchIndex >= 0) {
+        const existingBranch = nextItems[existingBranchIndex];
+
+        if (isNavigationBranchItem(existingBranch) && navigationItemsContainLeaf(existingBranch.items, requiredBranch.leaf)) {
+          continue;
+        }
+
+        if (isNavigationBranchItem(existingBranch)) {
+          nextItems[existingBranchIndex] = {
+            ...existingBranch,
+            items: [...existingBranch.items, requiredBranch.leaf]
+          };
+          changed = true;
+        }
+
+        continue;
+      }
+
+      const nextInsertIndex = Math.min(requiredBranch.insertIndex, nextItems.length);
+      nextItems.splice(nextInsertIndex, 0, {
+        label: requiredBranch.label,
+        items: [requiredBranch.leaf]
+      });
+      changed = true;
+    }
+
+    if (!changed) {
       return group;
     }
-
-    if (operationBranch) {
-      return {
-        ...group,
-        items: group.items.map((item) => {
-          if (!isNavigationBranchItem(item) || item.label !== "Operation") {
-            return item;
-          }
-
-          return {
-            ...item,
-            items: [...item.items, "My Stores"]
-          };
-        })
-      };
-    }
-
-    const dealersIndex = group.items.findIndex((item) => getNavigationItemLabel(item) === "Dealers");
-    const nextItems = [...group.items];
-
-    nextItems.splice(dealersIndex >= 0 ? dealersIndex + 1 : nextItems.length, 0, {
-      label: "Operation",
-      items: ["My Stores"]
-    });
 
     return {
       ...group,
@@ -420,6 +439,10 @@ function ensureSystemPinnedLeafs(groups: NavigationGroup[]): NavigationGroup[] {
         {
           label: "Operation",
           items: ["My Stores"]
+        },
+        {
+          label: "Tools",
+          items: ["ForgeForm"]
         }
       ]
     }
@@ -1209,15 +1232,19 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         ? "profitLoss"
         : null;
   const activeARAgingDocPage = workspaceId === "analytics" && searchParams.get("view") === "ar-aging-doc";
+  const activeFinovoPayablesPage = workspaceId === "analytics" && searchParams.get("view") === "payables-finovo";
   const activeManagementActivitiesPage = workspaceId === "analytics" && searchParams.get("view") === "management-activities";
   const activeCashierAccountabilityPage = workspaceId === "analytics" && searchParams.get("view") === "cashier-accountability";
   const activeDealerSetupPage = workspaceId === "analytics" && searchParams.get("view") === "dealer-setup";
   const activeMyStoresPage = workspaceId === "analytics" && searchParams.get("view") === "my-stores";
+  const activeForgeFormPage = workspaceId === "analytics" && searchParams.get("view") === "forgeform";
   const activeAnalyticsQuery =
     activeGeneralLedgerPage === "chartOfAccounts"
       ? "view=chart-of-accounts"
       : activeGeneralLedgerPage === "profitLoss"
         ? "view=profit-loss"
+        : activeFinovoPayablesPage
+          ? "view=payables-finovo"
         : activeARAgingDocPage
           ? "view=ar-aging-doc"
         : activeManagementActivitiesPage
@@ -1228,6 +1255,8 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
             ? "view=dealer-setup"
             : activeMyStoresPage
               ? "view=my-stores"
+            : activeForgeFormPage
+              ? "view=forgeform"
           : "";
   const activeWorkspaceQuery = activeSalesCommunicatePage
     ? "view=communicate"
@@ -1358,7 +1387,14 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const headerSearchResults = searchHeaderCommands(buildHeaderSearchCommands(menuGroups), headerSearchTerm);
   const serviceRows = workspace?.workspaceId === "service" ? workspace.rows : [];
   const activeWorkspace =
-    activeARAgingDocPage
+    activeFinovoPayablesPage
+      ? {
+          ...workspaceDefinitions.analytics,
+          title: "Finovo",
+          subtitle: "Bills, vendors, approvals, and payment timing in one payables command center",
+          tools: [] as string[]
+        }
+      : activeARAgingDocPage
       ? {
           ...workspaceDefinitions.analytics,
           title: "AR Aging Doc",
@@ -1377,6 +1413,13 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
           ...workspaceDefinitions.analytics,
           title: "My Stores",
           subtitle: "Store directory, department access, integrations, and setup health",
+          tools: [] as string[]
+        }
+      : activeForgeFormPage
+      ? {
+          ...workspaceDefinitions.analytics,
+          title: "ForgeForm",
+          subtitle: "PDF library, field extraction, JSON mapping, and reusable form templates",
           tools: [] as string[]
         }
       : activeManagementActivitiesPage
@@ -1588,10 +1631,11 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
           : workspaceId === "website" && isSandboxSession && websiteWorkspaceView === "feed"
             ? []
           : activeWorkspace.tools;
+          const useForgeFormStudioShell = activeForgeFormPage;
   const isLoading = isDashboardLoading || isWorkspaceLoading;
   const shouldShowWorkspaceLoadingPanel =
     isLoading &&
-    !(workspaceId === "analytics" && (activeGeneralLedgerPage !== null || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage || activeDealerSetupPage || activeMyStoresPage));
+    !(workspaceId === "analytics" && (activeGeneralLedgerPage !== null || activeFinovoPayablesPage || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage || activeDealerSetupPage || activeMyStoresPage || activeForgeFormPage));
   const serviceReturnStore = serviceReturnStoreId ? session.stores.find((store) => store.id === serviceReturnStoreId) ?? null : null;
   const serviceReturnCleanupStore = requestedAuditCleanupStoreId
     ? session.stores.find((store) => store.id === requestedAuditCleanupStoreId) ?? null
@@ -2240,7 +2284,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       !(nextWorkspaceId === "service" && (activeServiceDetailRoNumber || activeTechnicianWorkloadPage)) &&
       !(nextWorkspaceId === "parts" && partsWorkspaceView !== "ordering") &&
       !(nextWorkspaceId === "sales" && activeSalesCommunicatePage) &&
-      !(nextWorkspaceId === "analytics" && (activeGeneralLedgerPage !== null || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage || activeDealerSetupPage || activeMyStoresPage))
+      !(nextWorkspaceId === "analytics" && (activeGeneralLedgerPage !== null || activeFinovoPayablesPage || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage || activeDealerSetupPage || activeMyStoresPage || activeForgeFormPage))
     ) {
       return;
     }
@@ -2329,12 +2373,16 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         return { workspaceId: "sales" };
       case "application:favorite executive board":
         return { workspaceId: "analytics" };
+      case "payables:finovo":
+        return { workspaceId: "analytics", view: "payables-finovo" };
       case "receivables:ar aging doc":
         return { workspaceId: "analytics", view: "ar-aging-doc" };
       case "system:dealer setup":
         return { workspaceId: "analytics", view: "dealer-setup" };
       case "system:my stores":
         return { workspaceId: "analytics", view: "my-stores" };
+      case "system:forgeform":
+        return { workspaceId: "analytics", view: "forgeform" };
       case "management activity:website activity":
       case "system:website feed":
         return { workspaceId: "website", resetWebsiteFeed: true };
@@ -3246,7 +3294,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         workspaceId !== workspaceMenuIntent.workspaceId ||
         (workspaceMenuIntent.workspaceId === "service" && activeTechnicianWorkloadPage) ||
         (workspaceMenuIntent.workspaceId === "sales" && activeSalesCommunicatePage) ||
-        (workspaceMenuIntent.workspaceId === "analytics" && (activeGeneralLedgerPage !== null || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage))
+        (workspaceMenuIntent.workspaceId === "analytics" && (activeGeneralLedgerPage !== null || activeFinovoPayablesPage || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage || activeForgeFormPage))
       ) {
         navigateToWorkspace(workspaceMenuIntent.workspaceId, `${groupLabel} / ${item}`);
       }
@@ -4655,7 +4703,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
 
       {errorMessage ? <p className="form-error banner-error">{errorMessage}</p> : null}
 
-      <div className={`legacy-workspace-shell${workspaceId === "service" ? " is-service-shell" : ""}${workspaceId === "parts" ? " is-parts-shell" : ""}`}>
+      <div className={`legacy-workspace-shell${workspaceId === "service" ? " is-service-shell" : ""}${workspaceId === "parts" ? " is-parts-shell" : ""}${useForgeFormStudioShell ? " is-forgeform-shell" : ""}`}>
         <aside
           className={`legacy-open-windows${isSandboxSession ? " is-sandbox-open-windows" : ""}`}
           onContextMenu={isSandboxSession ? undefined : handleOpenWindowsRailContextMenu}
@@ -4727,7 +4775,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                   workspaceTitle = "Sandbox";
                 } else if (workspaceIdForItem === "website" && isSandboxSession) {
                   workspaceTitle = "Sandbox";
-                } else if (workspaceIdForItem === workspaceId && (activeGeneralLedgerPage !== null || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage)) {
+                } else if (workspaceIdForItem === workspaceId && (activeGeneralLedgerPage !== null || activeFinovoPayablesPage || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage || activeForgeFormPage)) {
                   workspaceTitle = activeWorkspace.title;
                 } else if (workspaceRouteMetadata?.label) {
                   workspaceTitle = workspaceRouteMetadata.label;
@@ -4891,7 +4939,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         </aside>
 
         <section
-          className={`legacy-workspace${workspaceId === "service" ? " is-service-workspace" : ""}${workspaceId === "parts" ? " is-parts-workspace" : ""}`}
+          className={`legacy-workspace${workspaceId === "service" ? " is-service-workspace" : ""}${workspaceId === "parts" ? " is-parts-workspace" : ""}${useForgeFormStudioShell ? " is-forgeform-workspace" : ""}`}
           data-workspace-id={workspaceId}
         >
           {shouldRenderActiveWorkspace ? (
@@ -5032,13 +5080,13 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
 
               {toolbarNotice ? <div className="legacy-toolbar-status">{toolbarNotice}</div> : null}
 
-              <div className={`legacy-workspace-canvas${workspaceId === "service" ? " is-service-canvas" : ""}${workspaceId === "parts" ? " is-parts-canvas" : ""}${workspaceId === "sales" && activeSalesCommunicatePage ? " is-sales-communicate-canvas" : ""}`}>
+              <div className={`legacy-workspace-canvas${workspaceId === "service" ? " is-service-canvas" : ""}${workspaceId === "parts" ? " is-parts-canvas" : ""}${workspaceId === "sales" && activeSalesCommunicatePage ? " is-sales-communicate-canvas" : ""}${useForgeFormStudioShell ? " is-forgeform-canvas" : ""}`}>
                 <div
                   className={`legacy-workspace-stack${
                     workspaceId === "service"
                       ? ` is-service-layout${isServiceNotificationRailCollapsed ? " is-service-notification-rail-collapsed" : ""}`
                       : ""
-                  }${workspaceId === "parts" ? " is-parts-layout" : ""}${workspaceId === "sales" && activeSalesCommunicatePage ? " is-sales-communicate-layout" : ""}${workspaceId === "sales" && activeSalesDealDetailWindow ? " is-sales-deal-layout" : ""}`}
+                  }${workspaceId === "parts" ? " is-parts-layout" : ""}${workspaceId === "sales" && activeSalesCommunicatePage ? " is-sales-communicate-layout" : ""}${workspaceId === "sales" && activeSalesDealDetailWindow ? " is-sales-deal-layout" : ""}${useForgeFormStudioShell ? " is-forgeform-layout" : ""}`}
                 >
                   <ErrorBoundary>
                     {shouldShowWorkspaceLoadingPanel ? (
@@ -5345,12 +5393,14 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                         purchasePadRows,
                         workspaceView: partsWorkspaceView
                       },
+                      activeFinovoPayablesPage,
                       activeARAgingDocPage,
                       activeGeneralLedgerPage,
                       activeManagementActivitiesPage,
                       activeCashierAccountabilityPage,
                       activeDealerSetupPage,
                       activeMyStoresPage,
+                      activeForgeFormPage,
                       activeTechnicianWorkloadPage,
                       activeSalesCommunicatePage,
                       (roNumber: string, customerName: string) => { setPortalPreviewMode({ roNumber, customerName }); }
@@ -6284,12 +6334,14 @@ function renderWorkspace(
     purchasePadRows: PartsWorkspaceRow[];
     workspaceView: PartsWorkspaceView;
   },
+  activeFinovoPayablesPage: boolean,
   activeARAgingDocPage: boolean,
   activeGeneralLedgerPage: "chartOfAccounts" | "profitLoss" | null,
   activeManagementActivitiesPage: boolean,
   activeCashierAccountabilityPage: boolean,
   activeDealerSetupPage: boolean,
   activeMyStoresPage: boolean,
+  activeForgeFormPage: boolean,
   activeTechnicianWorkloadPage: boolean,
   activeSalesCommunicatePage: boolean,
   onOpenPortalPreview: (roNumber: string, customerName: string) => void
@@ -6487,6 +6539,10 @@ function renderWorkspace(
     case "analytics": {
       const rows = workspace?.workspaceId === "analytics" ? workspace.rows : [];
 
+      if (activeFinovoPayablesPage) {
+        return <FinovoPayablesWorkspace storeId={dashboard?.store.id ?? auditControls.activeStoreId} storeName={dashboard?.store.name ?? "Premier Marine"} />;
+      }
+
       if (activeARAgingDocPage) {
         return <ARAgingDocWorkspace storeName={dashboard?.store.name ?? "Premier Marine"} />;
       }
@@ -6497,6 +6553,10 @@ function renderWorkspace(
 
       if (activeMyStoresPage) {
         return <MyStoresWorkspace storeName={dashboard?.store.name ?? "Premier Marine"} />;
+      }
+
+      if (activeForgeFormPage) {
+        return <ForgeFormWorkspace storeName={dashboard?.store.name ?? "Premier Marine"} />;
       }
 
       if (activeCashierAccountabilityPage) {

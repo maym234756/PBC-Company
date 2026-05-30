@@ -368,6 +368,10 @@ test.describe("top navigation smoke", () => {
     await expect(menuButton(page, "Development")).toBeVisible();
     await menuButton(page, "Development").hover();
     await expect(menuButton(page, "Sandbox")).toBeVisible();
+    await expect(menuButton(page, "Tools")).toBeVisible();
+    await menuButton(page, "Tools").hover();
+    await expect(menuButton(page, "ForgeForm")).toBeVisible();
+    await menuButton(page, "Development").hover();
     await menuButton(page, "Sandbox").click();
     await expect(page.getByRole("heading", { name: "Sandboxes", exact: true })).toBeVisible();
     await expect(page.locator(".legacy-open-windows .legacy-window-link-copy")).toHaveText("Sandbox");
@@ -412,6 +416,21 @@ test.describe("top navigation smoke", () => {
     await expect(page.getByRole("button", { name: "Add Dealer", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Northside Auto Group", exact: true })).toBeVisible();
     await expect(page.locator(".legacy-open-windows .legacy-window-link-copy")).toHaveText("Dealer Setup");
+  });
+
+  test("opens ForgeForm from the System menu", async ({ page, request }) => {
+    await openWorkspace(page, request, "desktop");
+
+    await menuButton(page, "System").click();
+    await expect(menuButton(page, "Tools")).toBeVisible();
+    await menuButton(page, "Tools").hover();
+    await expect(menuButton(page, "ForgeForm")).toBeVisible();
+    await menuButton(page, "ForgeForm").click();
+
+    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/analytics\?view=forgeform$/);
+    await expect(page.getByRole("heading", { name: "ForgeForm", exact: true })).toBeVisible();
+    await expect(page.getByText("PDF Library", { exact: true })).toBeVisible();
+    await expect(page.getByText("Purchase Packet and Consignment Packets and Trade Packets", { exact: true }).first()).toBeVisible();
   });
 
   test("dealer setup onboarding wizard supports OEM multi-select, collapsible cards, guided setup steps, and structured billing", async ({ page, request }) => {
