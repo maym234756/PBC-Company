@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { isWorkspaceId } from "./lightspeedReference";
 import type { SessionState, WorkspaceId } from "./types";
+import { DEFAULT_PHONE_WORKSPACE_ID, resolvePhoneWorkspaceId, useIsPhoneViewport } from "./usePhoneViewport";
 
 const SESSION_STORAGE_KEY = "marine-cloud-session";
 const DEFAULT_PRODUCTION_WORKSPACE_ID: WorkspaceId = "desktop";
@@ -32,6 +33,8 @@ const LandingPage = lazy(async () => {
 
 export default function App() {
   const [session, setSession] = useState<SessionState | null>(() => readSession());
+  const isPhoneViewport = useIsPhoneViewport();
+  const defaultWorkspaceId = isPhoneViewport ? DEFAULT_PHONE_WORKSPACE_ID : DEFAULT_PRODUCTION_WORKSPACE_ID;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -56,23 +59,23 @@ export default function App() {
               path="/"
             />
             <Route
-              element={<LoginRoute onSessionChange={setSession} session={session} />}
+              element={<LoginRoute defaultWorkspaceId={defaultWorkspaceId} onSessionChange={setSession} session={session} />}
               path="/login"
             />
             <Route
-              element={<LoginRoute onSessionChange={setSession} session={session} />}
+              element={<LoginRoute defaultWorkspaceId={defaultWorkspaceId} onSessionChange={setSession} session={session} />}
               path="/login/sandbox/:sandboxId"
             />
             <Route
-              element={<DashboardIndexRoute session={session} />}
+              element={<DashboardIndexRoute defaultWorkspaceId={defaultWorkspaceId} session={session} />}
               path="/dashboard/:storeId"
             />
             <Route
-              element={<DashboardRoute onSessionChange={setSession} session={session} />}
+              element={<DashboardRoute defaultWorkspaceId={defaultWorkspaceId} isPhoneViewport={isPhoneViewport} onSessionChange={setSession} session={session} />}
               path="/dashboard/:storeId/:workspaceId"
             />
             <Route
-              element={<Navigate replace to={session?.selectedStoreId ? `/dashboard/${session.selectedStoreId}/${DEFAULT_PRODUCTION_WORKSPACE_ID}` : "/"} />}
+              element={<Navigate replace to={session?.selectedStoreId ? `/dashboard/${session.selectedStoreId}/${defaultWorkspaceId}` : "/"} />}
               path="*"
             />
           </Routes>
@@ -87,21 +90,23 @@ function RouteFallback() {
 }
 
 interface DashboardRouteProps {
+  defaultWorkspaceId: WorkspaceId;
+  isPhoneViewport?: boolean;
   session: SessionState | null;
   onSessionChange: (session: SessionState | null) => void;
 }
 
-function LoginRoute({ session, onSessionChange }: DashboardRouteProps) {
+function LoginRoute({ defaultWorkspaceId, session, onSessionChange }: DashboardRouteProps) {
   const { sandboxId } = useParams<{ sandboxId?: string }>();
 
   if (session?.selectedStoreId && !sandboxId) {
-    return <Navigate replace to={`/dashboard/${session.selectedStoreId}/${DEFAULT_PRODUCTION_WORKSPACE_ID}`} />;
+    return <Navigate replace to={`/dashboard/${session.selectedStoreId}/${defaultWorkspaceId}`} />;
   }
 
   return <LoginPage onSessionReady={onSessionChange} sandboxId={sandboxId ?? null} />;
 }
 
-function DashboardIndexRoute({ session }: Pick<DashboardRouteProps, "session">) {
+function DashboardIndexRoute({ defaultWorkspaceId, session }: Pick<DashboardRouteProps, "defaultWorkspaceId" | "session">) {
   const { storeId } = useParams<{ storeId: string }>();
 
   if (!session) {
@@ -114,13 +119,14 @@ function DashboardIndexRoute({ session }: Pick<DashboardRouteProps, "session">) 
     return <Navigate replace to="/" />;
   }
 
-  return <Navigate replace to={`/dashboard/${nextStoreId}/${DEFAULT_PRODUCTION_WORKSPACE_ID}`} />;
+  return <Navigate replace to={`/dashboard/${nextStoreId}/${defaultWorkspaceId}`} />;
 }
 
-function DashboardRoute({ session, onSessionChange }: DashboardRouteProps) {
+function DashboardRoute({ defaultWorkspaceId, isPhoneViewport = false, session, onSessionChange }: DashboardRouteProps) {
   const navigate = useNavigate();
   const { storeId, workspaceId } = useParams<{ storeId: string; workspaceId: string }>();
-  const resolvedWorkspaceId: WorkspaceId = workspaceId && isWorkspaceId(workspaceId) ? workspaceId : DEFAULT_PRODUCTION_WORKSPACE_ID;
+  const routeWorkspaceId: WorkspaceId = workspaceId && isWorkspaceId(workspaceId) ? workspaceId : defaultWorkspaceId;
+  const resolvedWorkspaceId = isPhoneViewport ? resolvePhoneWorkspaceId(routeWorkspaceId) : routeWorkspaceId;
 
   useEffect(() => {
     if (!session) {
@@ -130,12 +136,12 @@ function DashboardRoute({ session, onSessionChange }: DashboardRouteProps) {
     const matchedStore = session.stores.find((store) => store.id === storeId);
 
     if (!matchedStore && session.selectedStoreId) {
-      navigate(`/dashboard/${session.selectedStoreId}/${DEFAULT_PRODUCTION_WORKSPACE_ID}`, { replace: true });
+      navigate(`/dashboard/${session.selectedStoreId}/${defaultWorkspaceId}`, { replace: true });
       return;
     }
 
-    if (matchedStore && !isWorkspaceId(workspaceId ?? "")) {
-      navigate(`/dashboard/${matchedStore.id}/${DEFAULT_PRODUCTION_WORKSPACE_ID}`, { replace: true });
+    if (matchedStore && (!isWorkspaceId(workspaceId ?? "") || resolvedWorkspaceId !== routeWorkspaceId)) {
+      navigate(`/dashboard/${matchedStore.id}/${resolvedWorkspaceId}`, { replace: true });
       return;
     }
 
@@ -145,7 +151,7 @@ function DashboardRoute({ session, onSessionChange }: DashboardRouteProps) {
         selectedStoreId: matchedStore.id
       });
     }
-  }, [navigate, onSessionChange, session, storeId, workspaceId]);
+  }, [defaultWorkspaceId, navigate, onSessionChange, resolvedWorkspaceId, routeWorkspaceId, session, storeId, workspaceId]);
 
   if (!session) {
     return <Navigate replace to="/" />;

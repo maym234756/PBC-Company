@@ -57,6 +57,8 @@ model Store {
   serviceOrders ServiceOrder[]
   partsLines    PartsOrderLine[]
   websiteFeeds  WebsiteFeed[]
+  posConnectors PosConnector[]
+  posConnectionRequests PosConnectionRequest[]
   vendors         Vendor[]
   pricingRules    PricingRule[]
   approvalRequests ApprovalRequest[]
@@ -222,6 +224,52 @@ model WebsiteFeed {
   updatedAt      DateTime @updatedAt
 
   @@unique([storeId, brand])
+}
+
+model PosConnector {
+  id                String   @id
+  externalKey       String
+  sourceKind        String
+  sourceLabel       String
+  provider          String
+  label             String
+  location          String
+  deviceType        String
+  networkHost       String
+  merchantId        String
+  connectionMode    String
+  discoverySource   String
+  lastSeenLabel     String
+  connectionStatus  String
+  isConnected       Boolean  @default(false)
+  requiresCredential Boolean @default(false)
+  isInventoryActive Boolean  @default(true)
+  lastSyncedAt      DateTime @default(now())
+  storeId           String
+  store             Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  request           PosConnectionRequest?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([storeId, externalKey])
+  @@index([storeId, provider])
+  @@index([storeId, isConnected])
+  @@index([storeId, isInventoryActive])
+}
+
+model PosConnectionRequest {
+  id          String      @id @default(cuid())
+  mode        String
+  state       String
+  requestedAt DateTime    @default(now())
+  connectorId String      @unique
+  connector   PosConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  storeId     String
+  store       Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([storeId, createdAt])
 }
 
 model SalesDeal {

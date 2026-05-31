@@ -14,6 +14,11 @@ const VISIBLE_NAVIGATION_KEYS = new Set([
   "application:logout",
   "application:exit",
   "parts:parts inventory",
+  "parts:update part prices using escalators",
+  "parts:part number utility",
+  "parts:scanned inventory",
+  "parts:inventory count sheets",
+  "parts:change part categories",
   "service:estimate worksheets",
   "service:estimates & repair orders",
   "service:technician workload",
@@ -28,12 +33,15 @@ const VISIBLE_NAVIGATION_KEYS = new Set([
   "management activity:website activity",
   "management activity:audit trail",
   "payables:finovo",
+  "payables:vendor invoice",
   "receivables:ar aging doc",
   "general ledger:chart of accounts",
   "general ledger:profit & loss",
   "system:website feed",
   "system:dealer setup",
   "system:my stores",
+  "system:connection points",
+  "system:my pos",
   "system:sandbox",
   "system:forgeform"
 ]);
@@ -368,6 +376,16 @@ export const legacyFallbackNavigation: NavigationGroup[] = filterNavigationGroup
                 label: "Availability Watch",
                 items: ["Availability Watch", "Substitute Parts"]
               }
+            ]
+          },
+          {
+            label: "Inventory Updating",
+            items: [
+              "Update Part Prices Using Escalators",
+              "Part Number Utility",
+              "Scanned Inventory",
+              "Inventory Count Sheets",
+              "Change Part Categories"
             ]
           }
         ]
@@ -1334,7 +1352,7 @@ export const legacyFallbackNavigation: NavigationGroup[] = filterNavigationGroup
   },
   {
     label: "Payables",
-    items: ["Finovo"]
+    items: ["Finovo", "Vendor Invoice"]
   },
   {
     label: "Receivables",
@@ -1577,6 +1595,10 @@ export const legacyFallbackNavigation: NavigationGroup[] = filterNavigationGroup
       {
         label: "Operation",
         items: ["My Stores"]
+      },
+      {
+        label: "Connect",
+        items: ["Connection Points"]
       },
       {
         label: "Development",
@@ -1920,6 +1942,11 @@ const navigationMenuWorkspaceLookup: Record<string, WorkspaceId> = {
     "application:favorite website feed": "website",
     "application:favorite audit trail": "audit",
     "parts:parts inventory": "parts",
+    "parts:update part prices using escalators": "parts",
+    "parts:part number utility": "parts",
+    "parts:scanned inventory": "parts",
+    "parts:inventory count sheets": "parts",
+    "parts:change part categories": "parts",
     "inventory:boat inventory": "boatInventory",
     "inventory:unit inventory": "boatInventory",
     "inventory:boats in stock": "boatInventory",
@@ -1956,6 +1983,7 @@ const navigationMenuWorkspaceLookup: Record<string, WorkspaceId> = {
     "management activity:favorite website pulse": "website",
     "management activity:favorite approval log": "audit",
     "payables:finovo": "analytics",
+    "payables:vendor invoice": "analytics",
     "receivables:ar aging doc": "analytics",
     "receivables:customer inquiry": "analytics",
     "receivables:credit hold review": "analytics",
@@ -2005,6 +2033,8 @@ const navigationMenuWorkspaceLookup: Record<string, WorkspaceId> = {
     "system:website feed": "website",
     "system:dealer setup": "analytics",
     "system:my stores": "analytics",
+    "system:connection points": "analytics",
+    "system:my pos": "analytics",
     "system:sandbox": "website",
     "system:forgeform": "analytics",
     "system:feed health": "website",

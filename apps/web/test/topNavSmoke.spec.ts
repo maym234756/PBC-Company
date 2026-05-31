@@ -320,6 +320,10 @@ test.describe("top navigation smoke", () => {
     await expect(menuButton(page, "Inventory Control")).toBeVisible();
     await menuButton(page, "Inventory Control").hover();
     await expect(menuButton(page, "Stock Visibility")).toBeVisible();
+    await expect(menuButton(page, "Inventory Updating")).toBeVisible();
+    await menuButton(page, "Inventory Updating").hover();
+    await expect(menuButton(page, "Update Part Prices Using Escalators")).toBeVisible();
+    await expect(menuButton(page, "Part Number Utility")).toBeVisible();
     await menuButton(page, "Stock Visibility").hover();
     await expect(menuButton(page, "Parts Inventory")).toBeVisible();
     await expect(menuButton(page, "Lookup Tools")).toHaveCount(0);
@@ -365,6 +369,9 @@ test.describe("top navigation smoke", () => {
     await expect(menuButton(page, "Operation")).toBeVisible();
     await menuButton(page, "Operation").hover();
     await expect(menuButton(page, "My Stores")).toBeVisible();
+    await expect(menuButton(page, "Connect")).toBeVisible();
+    await menuButton(page, "Connect").hover();
+    await expect(menuButton(page, "Connection Points")).toBeVisible();
     await expect(menuButton(page, "Development")).toBeVisible();
     await menuButton(page, "Development").hover();
     await expect(menuButton(page, "Sandbox")).toBeVisible();
@@ -546,6 +553,63 @@ test.describe("top navigation smoke", () => {
     await expect(page.getByRole("button", { name: "Request Change", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Downtown Motors", exact: true })).toBeVisible();
     await expect(page.locator(".legacy-open-windows .legacy-window-link-copy")).toHaveText("My Stores");
+  });
+
+  test("opens Connection Points from the System menu", async ({ page, request }) => {
+    await openWorkspace(page, request, "desktop");
+
+    await menuButton(page, "System").click();
+    await expect(menuButton(page, "Connect")).toBeVisible();
+    await menuButton(page, "Connect").hover();
+    await expect(menuButton(page, "Connection Points")).toBeVisible();
+    await menuButton(page, "Connection Points").click();
+
+    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/analytics\?view=connection-points$/);
+    await expect(page.getByRole("heading", { name: "Connection Points", exact: true })).toBeVisible();
+    const searchButton = page.getByRole("button", { name: "Search Connections", exact: true });
+    await expect(searchButton).toBeVisible();
+    await expect(searchButton).toBeEnabled();
+    await expect(page.getByRole("heading", { name: "Popular Connections", exact: true })).toBeVisible();
+
+    await page.getByPlaceholder("Search connections...").fill("toast");
+    await searchButton.click();
+
+    await expect(page.locator(".my-pos-search-note p")).toContainText("1 verified connection point ready for \"toast\"");
+    const cafeKioskRow = page.locator(".my-pos-connection-card", {
+      has: page.getByRole("heading", { name: "Cafe Kiosk 01", exact: true })
+    });
+    await expect(cafeKioskRow).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Front Counter 02", exact: true })).toHaveCount(0);
+
+    const cafeKioskButton = cafeKioskRow.locator(".my-pos-card-action");
+
+    if (await cafeKioskButton.isEnabled()) {
+      await cafeKioskButton.click();
+    }
+
+    await expect(cafeKioskRow.locator(".my-pos-card-header .legacy-chip")).toContainText("Review Queued");
+
+    await page.reload({ waitUntil: "networkidle" });
+
+    const reloadedCafeKioskRow = page.locator(".my-pos-connection-card", {
+      has: page.getByRole("heading", { name: "Cafe Kiosk 01", exact: true })
+    });
+    await expect(reloadedCafeKioskRow.locator(".my-pos-card-header .legacy-chip")).toContainText("Review Queued");
+    await expect(page.locator(".legacy-open-windows .legacy-window-link-copy")).toHaveText("Connection Points");
+  });
+
+  test("opens Vendor Invoice from the Payables menu", async ({ page, request }) => {
+    await openWorkspace(page, request, "desktop");
+
+    await menuButton(page, "Payables").click();
+    await expect(menuButton(page, "Vendor Invoice")).toBeVisible();
+    await menuButton(page, "Vendor Invoice").click();
+
+    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/analytics\?view=vendor-invoice$/);
+    await expect(page.getByRole("heading", { name: "Vendor Invoice", exact: true })).toBeVisible();
+    await expect(page.getByText("Distribution Info", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save", exact: true })).toBeVisible();
+    await expect(page.locator(".legacy-open-windows .legacy-window-link-copy")).toHaveText("Vendor Invoice");
   });
 
   test("opens deal posting from the General Ledger menu", async ({ page, request }) => {

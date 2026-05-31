@@ -1704,11 +1704,13 @@ export function resolvePartsMenuIntent(item: string): WorkspaceMenuIntent | null
   switch (item) {
     case "Parts Inventory":
     case "Part Number Lookup":
+    case "Part Number Utility":
     case "Secondary Number Lookup":
     case "Description Search":
     case "Cycle Counts":
     case "Bin Location Review":
     case "On-Hand Adjustments":
+    case "Scanned Inventory":
     case "Stock Status Review":
     case "Price Matrix Review":
     case "Availability Watch":
@@ -1796,6 +1798,7 @@ export function resolvePartsMenuIntent(item: string): WorkspaceMenuIntent | null
     case "Lists":
     case "Bin Labels":
     case "Cycle Count Sheets":
+    case "Inventory Count Sheets":
     case "Price Update Queue":
     case "Reports":
     case "Fill Rate Summary":
@@ -1844,6 +1847,7 @@ export function resolvePartsMenuIntent(item: string): WorkspaceMenuIntent | null
     case "Vendor Catalog Sync":
     case "Supersession Review":
     case "Kit Assemblies":
+    case "Change Part Categories":
     case "Accessory Bundles":
       return createAliasedWorkspaceMenuIntent("parts", item, "Parts Catalog Setup", "Parts Catalog Setup", {
         description: "Review parts catalog maintenance and accessory bundle setup with rollout timing attached.",
@@ -1872,6 +1876,7 @@ export function resolvePartsMenuIntent(item: string): WorkspaceMenuIntent | null
     case "Tax & Fee Setup":
     case "Core Charge Table":
     case "Discount Rules":
+    case "Update Part Prices Using Escalators":
     case "Print Form Layouts":
       return createAliasedWorkspaceMenuIntent("parts", item, "Parts Department Setup", "Parts Department Setup", {
         description: "Review parts department setup and pricing controls with rollout timing attached.",

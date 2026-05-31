@@ -70,6 +70,7 @@ import {
   workspaceOrder,
   type QuickLaunchButton
 } from "../lightspeedReference";
+import { resolvePhoneWorkspaceId, useIsPhoneViewport } from "../usePhoneViewport";
 import {
   applicationWorkspaceToolsSections,
   resolveApplicationWorkspaceToolsTarget,
@@ -1199,6 +1200,7 @@ const partsLookupColumns: LegacyGridColumn<PartsWorkspaceRow>[] = [
 export function DashboardPage({ session, activeStoreId, workspaceId, onSelectStore, onSignOut }: DashboardPageProps) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const isPhoneViewport = useIsPhoneViewport();
   const isSandboxSession = session.mode === "sandbox";
   const activeStore = session.stores.find((store) => store.id === activeStoreId) ?? session.stores[0];
   const openWindowsStorageKey = `${OPEN_WINDOWS_STORAGE_PREFIX}:${session.user.id}`;
@@ -1275,6 +1277,8 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [portalPreviewMode, setPortalPreviewMode] = useState<{ roNumber: string; customerName: string } | null>(null);
   const [isStorePickerOpen, setIsStorePickerOpen] = useState(false);
+  const [isPhoneMenuOpen, setIsPhoneMenuOpen] = useState(false);
+  const [isPhoneRailExpanded, setIsPhoneRailExpanded] = useState(false);
   const [openWindowsContextMenu, setOpenWindowsContextMenu] = useState<OpenWindowsContextMenuState | null>(null);
   const [dismissedOpenWindowKey, setDismissedOpenWindowKey] = useState<string | null>(() =>
     readInitialDismissedOpenWindowKeyPreference(session.user.id, workspaceId)
@@ -1382,6 +1386,8 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   );
   const orderedQuickLaunchButtons = sortQuickLaunchButtonsByOrder(quickLaunchButtons, quickLaunchOrderSlots);
   const visibleQuickLaunchButtons = orderedQuickLaunchButtons.filter((button) => !hiddenQuickLaunchSlots.includes(button.slot));
+  const visiblePhoneQuickLaunchButtons = visibleQuickLaunchButtons.filter((button) => assignedQuickLaunchSlots.includes(button.slot));
+  const renderedQuickLaunchButtons = isPhoneViewport ? visiblePhoneQuickLaunchButtons : visibleQuickLaunchButtons;
   const hiddenQuickLaunchButtons = orderedQuickLaunchButtons.filter((button) => hiddenQuickLaunchSlots.includes(button.slot));
   const quickLaunchContextTarget = quickLaunchButtons.find((button) => button.slot === quickLaunchContextMenu?.targetSlot) ?? null;
   const headerSearchResults = searchHeaderCommands(buildHeaderSearchCommands(menuGroups), headerSearchTerm);
@@ -1820,6 +1826,11 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     setDraggingOpenWindowKey(null);
     setOpenWindowDropState(null);
   }, [activeStore.id, workspaceId]);
+
+  useEffect(() => {
+    setIsPhoneMenuOpen(false);
+    setIsPhoneRailExpanded(false);
+  }, [activeStore.id, isPhoneViewport, workspaceId]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -2277,19 +2288,21 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   }, [workspace, workspaceId]);
 
   function navigateToWorkspace(nextWorkspaceId: WorkspaceId, sourceLabel?: string) {
+    const nextNavigableWorkspaceId = isPhoneViewport ? resolvePhoneWorkspaceId(nextWorkspaceId) : nextWorkspaceId;
+
     setDismissedOpenWindowKey(null);
 
     if (
-      nextWorkspaceId === workspaceId &&
-      !(nextWorkspaceId === "service" && (activeServiceDetailRoNumber || activeTechnicianWorkloadPage)) &&
-      !(nextWorkspaceId === "parts" && partsWorkspaceView !== "ordering") &&
-      !(nextWorkspaceId === "sales" && activeSalesCommunicatePage) &&
-      !(nextWorkspaceId === "analytics" && (activeGeneralLedgerPage !== null || activeFinovoPayablesPage || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage || activeDealerSetupPage || activeMyStoresPage || activeForgeFormPage))
+      nextNavigableWorkspaceId === workspaceId &&
+      !(nextNavigableWorkspaceId === "service" && (activeServiceDetailRoNumber || activeTechnicianWorkloadPage)) &&
+      !(nextNavigableWorkspaceId === "parts" && partsWorkspaceView !== "ordering") &&
+      !(nextNavigableWorkspaceId === "sales" && activeSalesCommunicatePage) &&
+      !(nextNavigableWorkspaceId === "analytics" && (activeGeneralLedgerPage !== null || activeFinovoPayablesPage || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage || activeDealerSetupPage || activeMyStoresPage || activeForgeFormPage))
     ) {
       return;
     }
 
-    if (nextWorkspaceId === "sales") {
+    if (nextNavigableWorkspaceId === "sales") {
       setOpenWorkspaceRoutesById((current) => {
         if (!("sales" in current)) {
           return current;
@@ -2305,17 +2318,17 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       appendCommandLog(
         {
           label: "Workspace opened",
-          detail: `${workspaceDefinitions[nextWorkspaceId].title} via ${sourceLabel}.`,
+          detail: `${workspaceDefinitions[nextNavigableWorkspaceId].title} via ${sourceLabel}.`,
           tone: "neutral"
         },
         {
           optimistic: false,
-          workspaceId: nextWorkspaceId
+          workspaceId: nextNavigableWorkspaceId
         }
       );
     }
 
-    navigate(`/dashboard/${activeStore.id}/${nextWorkspaceId}`);
+    navigate(`/dashboard/${activeStore.id}/${nextNavigableWorkspaceId}`);
   }
 
   function openSandboxDeploymentWorkbench() {
@@ -2362,7 +2375,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     switch (lookupKey) {
       case "application:desktop":
       case "application:favorite desktop":
-        return { workspaceId: "desktop" };
+        return { workspaceId: isPhoneViewport ? resolvePhoneWorkspaceId("desktop") : "desktop" };
       case "application:favorite service board":
       case "application:estimate worksheets":
       case "service:estimate worksheets":
@@ -2769,7 +2782,13 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       return "";
     }
 
-    return quickLaunchRoutesBySlot[button.slot]?.label ?? "";
+    const label = quickLaunchRoutesBySlot[button.slot]?.label ?? "";
+
+    if (isPhoneViewport && label === "Desktop") {
+      return "Home";
+    }
+
+    return label;
   }
 
   function resolveQuickLaunchButtonManagementLabel(button: QuickLaunchButton) {
@@ -3352,6 +3371,11 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     }
   }
 
+  function handlePhoneMenuSelect(groupLabel: string, item: string) {
+    setIsPhoneMenuOpen(false);
+    handleMenuSelect(groupLabel, item);
+  }
+
   function handleMenuItemPin(groupLabel: string, item: string) {
     const nextWorkspaceId = resolveWorkspaceFromMenuItem(groupLabel, item);
 
@@ -3373,6 +3397,10 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
 
   function isMenuItemVisible(groupLabel: string, item: string) {
     if (defaultPageOnlyDropdownGroups.has(groupLabel)) {
+      return false;
+    }
+
+    if (isPhoneViewport && groupLabel === "Application" && (item === "Desktop" || item === "Favorite Desktop")) {
       return false;
     }
 
@@ -4550,25 +4578,52 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       {!portalPreviewMode && (
         <Fragment>
       <header
-        className={`legacy-app-frame${isQuickLaunchStripDropTarget ? " is-drop-target" : ""}`}
+        className={`legacy-app-frame${isQuickLaunchStripDropTarget ? " is-drop-target" : ""}${isPhoneViewport ? " is-phone-app-frame" : ""}`}
         onDragLeave={handleQuickLaunchStripDragLeave}
         onDragOver={handleQuickLaunchStripDragOver}
         onDrop={handleQuickLaunchStripDrop}
       >
-        <div className="legacy-title-strip">
+        <div className={`legacy-title-strip${isPhoneViewport ? " is-phone-title-strip" : ""}`}>
           <span>{isSandboxSession ? "Premier Marine Cloud DMS - Sandbox" : "Premier Marine Cloud DMS"}</span>
           {isSandboxSession ? null : <span>{`${dashboard?.store.name ?? activeStore.name} · ${session.user.name}`}</span>}
         </div>
 
         <div className="legacy-menu-row">
-          <TopTabs
-            isItemVisible={isMenuItemVisible}
-            isItemPinned={isMenuItemPinned}
-            isItemPinnable={isMenuItemPinnable}
-            items={menuGroups}
-            onPinItem={handleMenuItemPin}
-            onSelectItem={handleMenuSelect}
-          />
+          {isPhoneViewport ? (
+            <>
+              <button
+                aria-expanded={isPhoneMenuOpen}
+                aria-label={isPhoneMenuOpen ? "Hide main menu" : "Open main menu"}
+                className={`legacy-header-button legacy-phone-menu-toggle${isPhoneMenuOpen ? " is-open" : ""}`}
+                onClick={() => setIsPhoneMenuOpen((current) => !current)}
+                type="button"
+              >
+                {isPhoneMenuOpen ? "Hide Menu" : "Menu"}
+              </button>
+              {isPhoneMenuOpen ? (
+                <div className="legacy-phone-menu-sheet">
+                  <TopTabs
+                    isItemVisible={isMenuItemVisible}
+                    isItemPinned={isMenuItemPinned}
+                    isItemPinnable={isMenuItemPinnable}
+                    items={menuGroups}
+                    layout="sheet"
+                    onPinItem={handleMenuItemPin}
+                    onSelectItem={handlePhoneMenuSelect}
+                  />
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <TopTabs
+              isItemVisible={isMenuItemVisible}
+              isItemPinned={isMenuItemPinned}
+              isItemPinnable={isMenuItemPinnable}
+              items={menuGroups}
+              onPinItem={handleMenuItemPin}
+              onSelectItem={handleMenuSelect}
+            />
+          )}
 
           <div className="legacy-header-tools">
             <div className="legacy-global-search-shell">
@@ -4625,15 +4680,16 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         </div>
 
         {isSandboxSession ? null : (
+          renderedQuickLaunchButtons.length > 0 ? (
           <>
             <div
-              className={`legacy-launch-strip${isQuickLaunchStripDropTarget ? " is-drop-target" : ""}`}
+              className={`legacy-launch-strip${isQuickLaunchStripDropTarget ? " is-drop-target" : ""}${isPhoneViewport ? " is-phone-launch-strip" : ""}`}
               onContextMenu={handleQuickLaunchStripContextMenu}
               onDragLeave={handleQuickLaunchStripDragLeave}
               onDragOver={handleQuickLaunchStripDragOver}
               onDrop={handleQuickLaunchStripDrop}
             >
-              {visibleQuickLaunchButtons.map((button) => {
+              {renderedQuickLaunchButtons.map((button) => {
                 const isQuickLaunchAssigned = assignedQuickLaunchSlots.includes(button.slot);
                 const isActiveQuickLaunch = isQuickLaunchAssigned && button.workspaceId === workspaceId;
                 const isQuickLaunchContextTarget = quickLaunchContextTarget?.slot === button.slot;
@@ -4681,7 +4737,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                 );
               })}
             </div>
-            {quickLaunchContextMenu && quickLaunchContextMenu.targetSlot === null ? (
+            {!isPhoneViewport && quickLaunchContextMenu && quickLaunchContextMenu.targetSlot === null ? (
               <div className="legacy-open-context-inline is-rail">
                 {hiddenQuickLaunchButtons.length > 0 ? (
                   <>
@@ -4698,20 +4754,27 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
               </div>
             ) : null}
           </>
+          ) : null
         )}
       </header>
 
       {errorMessage ? <p className="form-error banner-error">{errorMessage}</p> : null}
 
-      <div className={`legacy-workspace-shell${workspaceId === "service" ? " is-service-shell" : ""}${workspaceId === "parts" ? " is-parts-shell" : ""}${useForgeFormStudioShell ? " is-forgeform-shell" : ""}`}>
+      <div className={`legacy-workspace-shell${workspaceId === "service" ? " is-service-shell" : ""}${workspaceId === "parts" ? " is-parts-shell" : ""}${useForgeFormStudioShell ? " is-forgeform-shell" : ""}${isPhoneViewport ? " is-phone-shell" : ""}`}>
         <aside
-          className={`legacy-open-windows${isSandboxSession ? " is-sandbox-open-windows" : ""}`}
+          className={`legacy-open-windows${isSandboxSession ? " is-sandbox-open-windows" : ""}${isPhoneViewport ? " is-phone-open-windows" : ""}${isPhoneViewport && !isPhoneRailExpanded ? " is-collapsed" : ""}`}
           onContextMenu={isSandboxSession ? undefined : handleOpenWindowsRailContextMenu}
+          style={isPhoneViewport ? { order: 2 } : undefined}
         >
           <div className="legacy-open-header">
             <div className="legacy-open-title-row">
               <div className="legacy-open-title">Open Windows</div>
               <div className="legacy-open-header-actions">
+                {isPhoneViewport ? (
+                  <button className="legacy-open-clear-button legacy-open-toggle-button" onClick={() => setIsPhoneRailExpanded((current) => !current)} type="button">
+                    {isPhoneRailExpanded ? "Hide" : "Show"}
+                  </button>
+                ) : null}
                 <div className="legacy-open-help-shell">
                   <button aria-label="Open Windows help" className="legacy-open-icon-button" title="Open Windows help" type="button">
                     i
@@ -4734,33 +4797,35 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
           </div>
           {isSandboxSession ? null : (
             <>
-              {openWindowsContextMenu && openWindowsContextMenu.targetWorkspaceId === null ? (
-                <div className="legacy-open-context-inline is-rail">
-                  {hiddenOpenWorkspaceIds.length > 0 ? (
-                    <>
-                      <span className="legacy-open-context-label">Add Window</span>
-                      {hiddenOpenWorkspaceIds.map((candidateWorkspaceId) => (
-                        <button
-                          className="legacy-open-context-action"
-                          key={candidateWorkspaceId}
-                          onClick={() => {
-                            addOpenWorkspace(candidateWorkspaceId);
-                            setOpenWindowsContextMenu(null);
-                          }}
-                          type="button"
-                        >
-                          Add {openWorkspaceRoutesById[candidateWorkspaceId]?.label ?? workspaceDefinitions[candidateWorkspaceId].title}
-                        </button>
-                      ))}
-                    </>
-                  ) : (
-                    <p className="legacy-open-context-empty">All available windows are already pinned in the rail.</p>
-                  )}
-                </div>
-              ) : null}
-              <div className="legacy-open-window-list">
-                {visibleOpenWindowItems.length === 0 ? <div aria-hidden="true" className="legacy-open-window-canvas" /> : null}
-                {visibleOpenWindowItems.map((item) => {
+              {!isPhoneViewport || isPhoneRailExpanded ? (
+                <>
+                  {openWindowsContextMenu && openWindowsContextMenu.targetWorkspaceId === null ? (
+                    <div className="legacy-open-context-inline is-rail">
+                      {hiddenOpenWorkspaceIds.length > 0 ? (
+                        <>
+                          <span className="legacy-open-context-label">Add Window</span>
+                          {hiddenOpenWorkspaceIds.map((candidateWorkspaceId) => (
+                            <button
+                              className="legacy-open-context-action"
+                              key={candidateWorkspaceId}
+                              onClick={() => {
+                                addOpenWorkspace(candidateWorkspaceId);
+                                setOpenWindowsContextMenu(null);
+                              }}
+                              type="button"
+                            >
+                              Add {openWorkspaceRoutesById[candidateWorkspaceId]?.label ?? workspaceDefinitions[candidateWorkspaceId].title}
+                            </button>
+                          ))}
+                        </>
+                      ) : (
+                        <p className="legacy-open-context-empty">All available windows are already pinned in the rail.</p>
+                      )}
+                    </div>
+                  ) : null}
+                  <div className="legacy-open-window-list">
+                    {visibleOpenWindowItems.length === 0 ? <div aria-hidden="true" className="legacy-open-window-canvas" /> : null}
+                    {visibleOpenWindowItems.map((item) => {
               const isWorkspaceItem = item.kind === "workspace";
               const workspaceIdForItem = isWorkspaceItem ? item.workspaceId : null;
               const workspaceRouteMetadata = workspaceIdForItem ? openWorkspaceRoutesById[workspaceIdForItem] ?? null : null;
@@ -4930,10 +4995,12 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                       </button>
                     </Fragment>
                   ) : null}
-                </div>
-              );
-                })}
-              </div>
+                    </div>
+                  );
+                    })}
+                  </div>
+                </>
+              ) : null}
             </>
           )}
         </aside>
@@ -4941,6 +5008,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         <section
           className={`legacy-workspace${workspaceId === "service" ? " is-service-workspace" : ""}${workspaceId === "parts" ? " is-parts-workspace" : ""}${useForgeFormStudioShell ? " is-forgeform-workspace" : ""}`}
           data-workspace-id={workspaceId}
+          style={isPhoneViewport ? { order: 1 } : undefined}
         >
           {shouldRenderActiveWorkspace ? (
             <>

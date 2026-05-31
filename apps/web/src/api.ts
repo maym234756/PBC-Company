@@ -1300,8 +1300,87 @@ export interface GlobalSearchResult {
   units: unknown[];
 }
 
+export type PosConnectedSystemStatus = "Connected" | "Attention";
+export type PosDiscoveryStatus = "Available" | "Already Connected" | "Needs Credential";
+export type PosConnectionRequestMode = "Connect" | "Credential Review";
+export type PosConnectionRequestState = "Requested" | "Review Queued";
+
+export interface PosConnectedSystemRecord {
+  connectionMode: string;
+  id: string;
+  label: string;
+  lastSync: string;
+  location: string;
+  merchantId: string;
+  provider: string;
+  status: PosConnectedSystemStatus;
+}
+
+export interface PosConnectionRequestRecord {
+  mode: PosConnectionRequestMode;
+  requestedAt: string;
+  requestedAtLabel: string;
+  state: PosConnectionRequestState;
+}
+
+export interface PosDiscoveryRecord {
+  deviceType: string;
+  id: string;
+  label: string;
+  matchReason: string;
+  merchantId: string;
+  networkHost: string;
+  provider: string;
+  request: PosConnectionRequestRecord | null;
+  status: PosDiscoveryStatus;
+}
+
+export interface StorePosSystemsResponse {
+  connectedSystems: PosConnectedSystemRecord[];
+  discoveryResults: PosDiscoveryRecord[];
+  provider: string | null;
+  providerOptions: string[];
+  query: string;
+  searchSummary: string;
+}
+
+export interface SubmitPosConnectionRequest {
+  provider?: string;
+  query?: string;
+  requestMode: "connect" | "credentialReview";
+  systemId: string;
+}
+
+export interface SubmitPosConnectionRequestResponse {
+  message: string;
+  payload: StorePosSystemsResponse;
+}
+
 export async function globalSearch(storeId: string, query: string): Promise<GlobalSearchResult> {
   return request<GlobalSearchResult>(`/stores/${storeId}/search?q=${encodeURIComponent(query)}`);
+}
+
+export async function getStorePosSystems(storeId: string, query?: string, provider?: string) {
+  const params = new URLSearchParams();
+
+  if (query?.trim()) {
+    params.set("q", query.trim());
+  }
+
+  if (provider?.trim()) {
+    params.set("provider", provider.trim());
+  }
+
+  const queryString = params.toString();
+
+  return request<StorePosSystemsResponse>(`/stores/${storeId}/pos-systems${queryString ? `?${queryString}` : ""}`);
+}
+
+export async function createPosConnectionRequest(storeId: string, payload: SubmitPosConnectionRequest) {
+  return request<SubmitPosConnectionRequestResponse>(`/stores/${storeId}/pos-systems/connection-requests`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
 }
 
 export async function getSandboxBackendModules() {

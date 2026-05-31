@@ -27,6 +27,7 @@ import {
   sendCrmConversationSms,
   updateCrmContactQuickInfo
 } from "./crmCommunicate.js";
+import { PosConnectionRequestError, getStorePosSystemsPayload, submitStorePosConnectionRequest } from "./posSystems.js";
 import {
   TWILIO_INBOUND_WEBHOOK_PATH,
   TWILIO_STATUS_WEBHOOK_PATH,
@@ -178,6 +179,11 @@ const VISIBLE_NAVIGATION_KEYS = new Set([
   "application:logout",
   "application:exit",
   "parts:parts inventory",
+  "parts:update part prices using escalators",
+  "parts:part number utility",
+  "parts:scanned inventory",
+  "parts:inventory count sheets",
+  "parts:change part categories",
   "service:estimate worksheets",
   "service:estimates & repair orders",
   "service:technician workload",
@@ -192,6 +198,7 @@ const VISIBLE_NAVIGATION_KEYS = new Set([
   "management activity:website activity",
   "management activity:audit trail",
   "payables:finovo",
+  "payables:vendor invoice",
   "receivables:ar aging doc",
   "general ledger:chart of accounts",
   "general ledger:profit & loss",
@@ -534,6 +541,16 @@ const navigation = filterNavigationGroups([
                 label: "Availability Watch",
                 items: ["Availability Watch", "Substitute Parts"]
               }
+            ]
+          },
+          {
+            label: "Inventory Updating",
+            items: [
+              "Update Part Prices Using Escalators",
+              "Part Number Utility",
+              "Scanned Inventory",
+              "Inventory Count Sheets",
+              "Change Part Categories"
             ]
           }
         ]
@@ -1500,7 +1517,7 @@ const navigation = filterNavigationGroups([
   },
   {
     label: "Payables",
-    items: ["Finovo"]
+    items: ["Finovo", "Vendor Invoice"]
   },
   {
     label: "Receivables",
@@ -2001,6 +2018,16 @@ const activityFilterSchema = z.object({
   workspaceId: workspaceSchema,
   actorUserId: z.string().trim().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(50).optional()
+});
+const posSystemsQuerySchema = z.object({
+  provider: z.string().trim().min(1).max(40).optional(),
+  q: z.string().trim().max(80).optional().default("")
+});
+const posConnectionRequestSchema = z.object({
+  provider: z.string().trim().min(1).max(40).optional(),
+  query: z.string().trim().max(80).optional().default(""),
+  requestMode: z.enum(["connect", "credentialReview"]),
+  systemId: z.string().trim().min(1)
 });
 const cashierAccountabilityReportQuerySchema = z.object({
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -6010,6 +6037,87 @@ app.delete("/api/stores/:storeId/boat-inventory/:unitId", async (request, respon
   const { storeId, unitId } = request.params as { storeId: string; unitId: string };
   const deleted = await prisma.boatInventoryUnit.deleteMany({ where: { id: unitId, storeId } });
   response.json({ ok: deleted.count > 0 });
+});
+
+app.get("/api/stores/:storeId/pos-systems", async (request, response) => {
+  const parsedQuery = posSystemsQuerySchema.safeParse(request.query);
+
+  if (!parsedQuery.success) {
+    response.status(400).json({ message: "Enter a valid POS discovery search." });
+    return;
+  }
+
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    select: {
+      code: true,
+      id: true,
+      name: true
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  response.json(
+    await getStorePosSystemsPayload({
+      provider: parsedQuery.data.provider,
+      query: parsedQuery.data.q,
+      storeCode: store.code,
+      storeId: store.id,
+      storeName: store.name
+    })
+  );
+});
+
+app.post("/api/stores/:storeId/pos-systems/connection-requests", async (request, response) => {
+  const parsedBody = posConnectionRequestSchema.safeParse(request.body);
+
+  if (!parsedBody.success) {
+    response.status(400).json({ message: "Enter a valid POS connection request." });
+    return;
+  }
+
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    select: {
+      code: true,
+      id: true,
+      name: true
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  try {
+    const result = await submitStorePosConnectionRequest({
+      provider: parsedBody.data.provider,
+      query: parsedBody.data.query,
+      requestMode: parsedBody.data.requestMode,
+      storeCode: store.code,
+      storeId: store.id,
+      storeName: store.name,
+      systemId: parsedBody.data.systemId
+    });
+
+    response.status(201).json(result);
+  } catch (error) {
+    if (error instanceof PosConnectionRequestError) {
+      response.status(error.statusCode).json({ message: error.message });
+      return;
+    }
+
+    response.status(500).json({ message: error instanceof Error ? error.message : "Unable to queue the POS connection request." });
+  }
 });
 
 app.get("/api/stores/:storeId/search", async (request, response) => {

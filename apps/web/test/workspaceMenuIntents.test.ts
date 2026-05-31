@@ -119,6 +119,7 @@ test("remaining top-nav groups resolve to dedicated workspace intents", () => {
   const systemIntent = resolveSystemMenuIntent("Audit Trail");
   const routedIntent = resolveWorkspaceMenuIntent("System", "Website Feed");
   const myStoresIntent = resolveWorkspaceMenuIntent("System", "My Stores");
+  const connectionPointsIntent = resolveWorkspaceMenuIntent("System", "Connection Points");
 
   assert.ok(receivablesIntent);
   assert.equal(receivablesIntent.workspaceId, "analytics");
@@ -136,7 +137,9 @@ test("remaining top-nav groups resolve to dedicated workspace intents", () => {
   assert.equal(routedIntent, null);
   assert.equal(resolveWorkspaceFromMenuItem("System", "Website Feed"), "website");
   assert.equal(myStoresIntent, null);
+  assert.equal(connectionPointsIntent, null);
   assert.equal(resolveWorkspaceFromMenuItem("System", "My Stores"), "analytics");
+  assert.equal(resolveWorkspaceFromMenuItem("System", "Connection Points"), "analytics");
   assert.equal(resolveWorkspaceFromMenuItem("System", "ForgeForm"), "analytics");
 });
 
@@ -279,4 +282,35 @@ test("sales, service, and parts submenu leaves can now open split favorite and s
 
   assert.ok(routedPartsIntent);
   assert.equal(routedPartsIntent.tool, "Parts Security Setup");
+});
+
+test("inventory updating parts leaves resolve to the expected existing parts workflows", () => {
+  const priceEscalatorIntent = resolvePartsMenuIntent("Update Part Prices Using Escalators");
+  const partNumberUtilityIntent = resolvePartsMenuIntent("Part Number Utility");
+  const scannedInventoryIntent = resolvePartsMenuIntent("Scanned Inventory");
+  const inventoryCountSheetsIntent = resolvePartsMenuIntent("Inventory Count Sheets");
+  const changePartCategoriesIntent = resolvePartsMenuIntent("Change Part Categories");
+
+  assert.ok(priceEscalatorIntent);
+  assert.equal(priceEscalatorIntent.tool, "Parts Department Setup");
+  assert.equal(priceEscalatorIntent.workflowOverrides?.submitAction, "Parts Department Setup Update Part Prices Using Escalators");
+
+  assert.ok(partNumberUtilityIntent);
+  assert.equal(partNumberUtilityIntent.tool, "Parts Inventory Review");
+  assert.equal(partNumberUtilityIntent.workflowOverrides?.submitAction, "Parts Inventory Part Number Utility");
+
+  assert.ok(scannedInventoryIntent);
+  assert.equal(scannedInventoryIntent.tool, "Parts Inventory Review");
+  assert.equal(scannedInventoryIntent.workflowOverrides?.submitAction, "Parts Inventory Scanned Inventory");
+
+  assert.ok(inventoryCountSheetsIntent);
+  assert.equal(inventoryCountSheetsIntent.tool, "Parts Report Review");
+  assert.equal(inventoryCountSheetsIntent.workflowOverrides?.submitAction, "Parts Report Inventory Count Sheets");
+
+  assert.ok(changePartCategoriesIntent);
+  assert.equal(changePartCategoriesIntent.tool, "Parts Catalog Setup");
+  assert.equal(changePartCategoriesIntent.workflowOverrides?.submitAction, "Parts Catalog Setup Change Part Categories");
+
+  assert.equal(resolveWorkspaceFromMenuItem("Parts", "Update Part Prices Using Escalators"), "parts");
+  assert.equal(resolveWorkspaceMenuIntent("Parts", "Change Part Categories")?.tool, "Parts Catalog Setup");
 });
