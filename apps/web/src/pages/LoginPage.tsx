@@ -110,8 +110,8 @@ export function LoginPage({ onSessionReady, sandboxId = null }: LoginPageProps) 
 
       <div className="login-page-card">
         <div className="login-page-header">
-          <span className="brand-badge">{sandboxAccess ? "Sandbox Access" : "PBC + OMG Marine Cloud"}</span>
-          <h1>{sandboxAccess ? "Sign in to Sandbox" : "Sign in"}</h1>
+          <span className="brand-badge">{sandboxAccess ? "Sandbox Access" : "Premier Marine"}</span>
+          <h1>{sandboxAccess ? "Sign in to Sandbox" : "Sign in to Premier Marine"}</h1>
           <p>
             {sandboxAccess
               ? `${sandboxAccess.sandboxName} mirrors ${sandboxAccess.dealerGroupName} and opens with reduced sandbox chrome.`
@@ -146,7 +146,7 @@ export function LoginPage({ onSessionReady, sandboxId = null }: LoginPageProps) 
           {errorMessage ? <p className="form-error">{errorMessage}</p> : null}
 
           <button className="primary-button login-page-submit" disabled={isSubmitting || isLoadingSandboxAccess} type="submit">
-            {isSubmitting ? "Signing in..." : sandboxAccess ? "Enter Sandbox" : "Enter Website"}
+            {isSubmitting ? "Signing in..." : sandboxAccess ? "Enter Sandbox" : "Enter Premier Marine"}
           </button>
         </form>
 
@@ -159,7 +159,7 @@ export function LoginPage({ onSessionReady, sandboxId = null }: LoginPageProps) 
           <span>
             {sandboxAccess
               ? `Sandbox sign-in is scoped to ${sandboxAccess.dealerGroupName} only. ${sandboxAccess.sourceStoreName} is the source lane for this environment.`
-              : "Desktop opens first, with Website, Service, Parts, and Sales available inside."}
+              : "Premier Marine opens straight into the command center with Website, Service, Parts, and Sales available inside."}
           </span>
         </div>
       </div>

@@ -21,6 +21,7 @@ import {
   getActivityLog,
   getDashboard,
   getNormalizedServiceOrder,
+  getPartsInventoryUpdateStatements,
   getServiceOrderDetail,
   getSalesDealDeposits,
   getTaskQueue,
@@ -55,13 +56,25 @@ import { FinovoPayablesWorkspace } from "./FinovoPayablesWorkspace";
 import { ForgeFormWorkspace } from "./ForgeFormWorkspace";
 import { ManagementActivitiesWorkspace } from "./ManagementActivitiesWorkspace";
 import { MyStoresWorkspace } from "./MyStoresWorkspace";
+import { PartsInventoryUpdateDetailWorkspace } from "./PartsInventoryUpdateDetailWorkspace";
+import { PartsInventoryUpdateWorkspace } from "./PartsInventoryUpdateWorkspace";
+import {
+  formatPartsInventoryUpdateDisplayTitle,
+  partsInventoryUpdateStatements as seedPartsInventoryUpdateStatements,
+  type PartsInventoryUpdateStatement
+} from "./partsInventoryUpdateDirectory";
 import { ProfitLossWorkspace } from "./ProfitLossWorkspace";
 import { ReportCenterWorkspace, fiProductLibrary } from "./ReportCenterWorkspace";
 import { TechnicianWorkloadWorkspace } from "./TechnicianWorkloadWorkspace";
+import { VendorDetailWorkspace } from "./VendorDetailWorkspace";
+import { VendorListWorkspace } from "./VendorListWorkspace";
+import { VendorInvoiceWorkspace } from "./VendorInvoiceWorkspace";
+import { formatVendorDisplayTitle, getVendorDirectoryRecord, type VendorDirectoryRecord } from "./vendorDirectory";
 import { WebsiteWorkspace } from "./WebsiteWorkspace";
 import { TopTabs } from "../components/TopTabs";
 import {
   hasExplicitWorkspaceAssignment,
+  isMenuOnlyNavigationItem,
   isWorkspaceId,
   legacyFallbackNavigation,
   quickLaunchButtons,
@@ -142,6 +155,18 @@ interface SalesDealDetailWindow {
   storeId: string;
 }
 
+interface VendorDetailWindow {
+  name: string;
+  storeId: string;
+  vendorId: string;
+}
+
+interface PartsInventoryUpdateDetailWindow {
+  name: string;
+  statementId: string;
+  storeId: string;
+}
+
 interface ServiceAuditReturnContext {
   label: string;
   subtitle: string;
@@ -184,6 +209,18 @@ type OpenWindowRailItem =
       key: string;
       kind: "salesDeal";
       windowEntry: SalesDealDetailWindow;
+    }
+  | {
+      isActive: boolean;
+      key: string;
+      kind: "vendorDetail";
+      windowEntry: VendorDetailWindow;
+    }
+  | {
+      isActive: boolean;
+      key: string;
+      kind: "partsInventoryUpdateDetail";
+      windowEntry: PartsInventoryUpdateDetailWindow;
     };
 
 type DesktopWidgetType =
@@ -316,6 +353,50 @@ const hiddenSystemLeafs = new Set([
   "Webhook Retry Log"
 ]);
 const generalLedgerPinnedLeafs: NavigationMenuItem[] = ["Chart of Accounts", "Profit & Loss"];
+const payablesPinnedLeafs: NavigationMenuItem[] = ["Finovo", "Vendor List", "Vendor Invoice"];
+const systemPinnedItems: NavigationMenuItem[] = [
+  "Customers",
+  "Customer Units",
+  "Marketing",
+  "Time Clock",
+  "Calendar",
+  "Desktop",
+  "Send Email",
+  "Lightspeed Subscriptions",
+  "Workstation Preferences",
+  "User Preferences",
+  "System Alerts",
+  "System Alert History",
+  {
+    label: "Lists",
+    items: ["Paid-Out Types", "Sales Categories", "Scheduled Tasks", "Unit Makes", "Unit Types", "Warranty Companies"]
+  },
+  "Change Login Credentials",
+  "System Messages",
+  {
+    label: "Tools",
+    items: ["Vendor Merge", "Supplier Merge", "Spell Check Dictionary", "ForgeForm"]
+  },
+  {
+    label: "Data Updating",
+    items: ["Parts Inventory Update", "Major Unit Inventory Update"]
+  },
+  {
+    label: "Custom Reports",
+    items: [
+      "Credit Card Logging",
+      "Customer",
+      "Customer Unit",
+      "Email Summaries",
+      "Sales Category",
+      "Tax Category",
+      "Time Card",
+      "Workstation Info"
+    ]
+  },
+  "All Custom Reports",
+  "Spreadsheet Reports"
+];
 
 interface QuickLaunchDropState {
   position: "before" | "after";
@@ -330,6 +411,8 @@ function getNavigationItemLabel(item: NavigationMenuItem) {
   return typeof item === "string" ? item : item.label;
 }
 
+const systemPinnedItemLabels = new Set(systemPinnedItems.map(getNavigationItemLabel));
+
 function navigationItemsContainLeaf(items: NavigationMenuItem[], leafLabel: string): boolean {
   return items.some((item) => {
     if (isNavigationBranchItem(item)) {
@@ -338,6 +421,15 @@ function navigationItemsContainLeaf(items: NavigationMenuItem[], leafLabel: stri
 
     return getNavigationItemLabel(item) === leafLabel;
   });
+}
+
+function mergeNavigationBranchItems(existingItems: NavigationMenuItem[], requiredItems: NavigationMenuItem[]) {
+  const requiredLabels = new Set(requiredItems.map(getNavigationItemLabel));
+
+  return [
+    ...requiredItems,
+    ...existingItems.filter((item) => !requiredLabels.has(getNavigationItemLabel(item)))
+  ];
 }
 
 function ensureGeneralLedgerPinnedLeafs(groups: NavigationGroup[]): NavigationGroup[] {
@@ -363,6 +455,45 @@ function ensureGeneralLedgerPinnedLeafs(groups: NavigationGroup[]): NavigationGr
   });
 }
 
+function ensurePayablesPinnedLeafs(groups: NavigationGroup[]): NavigationGroup[] {
+  let foundPayablesGroup = false;
+
+  const nextGroups = groups.map((group) => {
+    if (group.label !== "Payables") {
+      return group;
+    }
+
+    foundPayablesGroup = true;
+
+    const pinnedLeafLabels = new Set(payablesPinnedLeafs.map(getNavigationItemLabel));
+    const missingLeafs = payablesPinnedLeafs.filter((leaf) => !navigationItemsContainLeaf(group.items, getNavigationItemLabel(leaf)));
+
+    if (missingLeafs.length === 0) {
+      return group;
+    }
+
+    return {
+      ...group,
+      items: [
+        ...payablesPinnedLeafs,
+        ...group.items.filter((item) => !pinnedLeafLabels.has(getNavigationItemLabel(item)))
+      ]
+    };
+  });
+
+  if (foundPayablesGroup) {
+    return nextGroups;
+  }
+
+  return [
+    ...nextGroups,
+    {
+      label: "Payables",
+      items: payablesPinnedLeafs
+    }
+  ];
+}
+
 function ensureSystemPinnedLeafs(groups: NavigationGroup[]): NavigationGroup[] {
   let foundSystemGroup = false;
 
@@ -372,51 +503,41 @@ function ensureSystemPinnedLeafs(groups: NavigationGroup[]): NavigationGroup[] {
     }
 
     foundSystemGroup = true;
-    const dealersIndex = group.items.findIndex((item) => getNavigationItemLabel(item) === "Dealers");
-    const developmentIndex = group.items.findIndex((item) => getNavigationItemLabel(item) === "Development");
-    const requiredBranches = [
-      {
-        label: "Operation",
-        leaf: "My Stores",
-        insertIndex: dealersIndex >= 0 ? dealersIndex + 1 : group.items.length
-      },
-      {
-        label: "Tools",
-        leaf: "ForgeForm",
-        insertIndex: developmentIndex >= 0 ? developmentIndex + 1 : group.items.length
+    const extractedItemsByLabel = new Map<string, NavigationMenuItem>();
+    const remainingItems = group.items.filter((item) => {
+      const label = getNavigationItemLabel(item);
+
+      if (!systemPinnedItemLabels.has(label)) {
+        return true;
       }
-    ];
-    let nextItems = [...group.items];
-    let changed = false;
 
-    for (const requiredBranch of requiredBranches) {
-      const existingBranchIndex = nextItems.findIndex((item) => getNavigationItemLabel(item) === requiredBranch.label);
+      if (!extractedItemsByLabel.has(label)) {
+        extractedItemsByLabel.set(label, item);
+      }
 
-      if (existingBranchIndex >= 0) {
-        const existingBranch = nextItems[existingBranchIndex];
+      return false;
+    });
 
-        if (isNavigationBranchItem(existingBranch) && navigationItemsContainLeaf(existingBranch.items, requiredBranch.leaf)) {
-          continue;
-        }
+    const nextPinnedItems = systemPinnedItems.map((requiredItem) => {
+      const label = getNavigationItemLabel(requiredItem);
+      const existingItem = extractedItemsByLabel.get(label);
 
-        if (isNavigationBranchItem(existingBranch)) {
-          nextItems[existingBranchIndex] = {
-            ...existingBranch,
-            items: [...existingBranch.items, requiredBranch.leaf]
+      if (isNavigationBranchItem(requiredItem)) {
+        if (existingItem && isNavigationBranchItem(existingItem)) {
+          return {
+            ...existingItem,
+            items: mergeNavigationBranchItems(existingItem.items, requiredItem.items)
           };
-          changed = true;
         }
 
-        continue;
+        return requiredItem;
       }
 
-      const nextInsertIndex = Math.min(requiredBranch.insertIndex, nextItems.length);
-      nextItems.splice(nextInsertIndex, 0, {
-        label: requiredBranch.label,
-        items: [requiredBranch.leaf]
-      });
-      changed = true;
-    }
+      return existingItem ?? requiredItem;
+    });
+
+    const nextItems = [...nextPinnedItems, ...remainingItems];
+    const changed = nextItems.length !== group.items.length || nextItems.some((item, index) => item !== group.items[index]);
 
     if (!changed) {
       return group;
@@ -437,13 +558,10 @@ function ensureSystemPinnedLeafs(groups: NavigationGroup[]): NavigationGroup[] {
     {
       label: "System",
       items: [
+        ...systemPinnedItems,
         {
           label: "Operation",
           items: ["My Stores"]
-        },
-        {
-          label: "Tools",
-          items: ["ForgeForm"]
         }
       ]
     }
@@ -455,11 +573,31 @@ interface QuickLaunchRouteMetadata {
   item: string;
   label: string;
 }
+const vendorDetailRouteItemPrefix = "vendor-detail::";
 const OPEN_PARTS_INVENTORY_DETAIL_WINDOWS_STORAGE_PREFIX = "marine-cloud-open-parts-inventory-detail-windows";
 const OPEN_SALES_DEAL_DETAIL_WINDOWS_STORAGE_PREFIX = "marine-cloud-open-sales-deal-detail-windows";
+const OPEN_VENDOR_DETAIL_WINDOWS_STORAGE_PREFIX = "marine-cloud-open-vendor-detail-windows";
+const OPEN_PARTS_INVENTORY_UPDATE_DETAIL_WINDOWS_STORAGE_PREFIX = "marine-cloud-open-parts-inventory-update-detail-windows";
 const SERVICE_NOTIFICATION_RAIL_STORAGE_PREFIX = "marine-cloud-service-notification-rail";
 const RECENT_SERVICE_ROW_HIGHLIGHTS_STORAGE_PREFIX = "marine-cloud-recent-service-row-highlights";
 const DESKTOP_WIDGETS_STORAGE_PREFIX = "marine-cloud-desktop-widgets";
+
+function buildVendorDetailQuery(vendorId: string) {
+  return `view=vendor-detail&vendorId=${encodeURIComponent(vendorId)}`;
+}
+
+function buildPartsInventoryUpdateDetailQuery(statementId: string) {
+  return `view=parts-inventory-update-detail&statementId=${encodeURIComponent(statementId)}`;
+}
+
+function parseVendorDetailRouteItem(groupLabel: string, item: string) {
+  if (groupLabel.toLowerCase() !== "payables" || !item.startsWith(vendorDetailRouteItemPrefix)) {
+    return null;
+  }
+
+  const vendorId = item.slice(vendorDetailRouteItemPrefix.length).trim();
+  return vendorId || null;
+}
 
 const desktopWidgetCatalog: DesktopWidgetDefinition[] = [
   {
@@ -1215,8 +1353,13 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const serviceDetailWindowsStorageKey = `${OPEN_SERVICE_DETAIL_WINDOWS_STORAGE_PREFIX}:${session.user.id}`;
   const partsInventoryDetailWindowsStorageKey = `${OPEN_PARTS_INVENTORY_DETAIL_WINDOWS_STORAGE_PREFIX}:${session.user.id}`;
   const salesDealDetailWindowsStorageKey = `${OPEN_SALES_DEAL_DETAIL_WINDOWS_STORAGE_PREFIX}:${session.user.id}`;
+  const vendorDetailWindowsStorageKey = `${OPEN_VENDOR_DETAIL_WINDOWS_STORAGE_PREFIX}:${session.user.id}`;
+  const partsInventoryUpdateDetailWindowsStorageKey = `${OPEN_PARTS_INVENTORY_UPDATE_DETAIL_WINDOWS_STORAGE_PREFIX}:${session.user.id}`;
   const serviceNotificationRailStorageKey = `${SERVICE_NOTIFICATION_RAIL_STORAGE_PREFIX}:${session.user.id}`;
   const recentServiceRowHighlightsStorageKey = `${RECENT_SERVICE_ROW_HIGHLIGHTS_STORAGE_PREFIX}:${session.user.id}:${activeStore.id}`;
+  const [partsInventoryUpdateStatementRecords, setPartsInventoryUpdateStatementRecords] = useState<PartsInventoryUpdateStatement[]>(
+    seedPartsInventoryUpdateStatements
+  );
   const activeServiceDetailRoNumber = searchParams.get("detailRo");
   const focusedServiceRoNumber = searchParams.get("ro");
   const requestedServiceTaskId = searchParams.get("task");
@@ -1235,6 +1378,20 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         : null;
   const activeARAgingDocPage = workspaceId === "analytics" && searchParams.get("view") === "ar-aging-doc";
   const activeFinovoPayablesPage = workspaceId === "analytics" && searchParams.get("view") === "payables-finovo";
+  const activePartsInventoryUpdatePage = workspaceId === "analytics" && searchParams.get("view") === "parts-inventory-update";
+  const activePartsInventoryUpdateDetailPage = workspaceId === "analytics" && searchParams.get("view") === "parts-inventory-update-detail";
+  const activePartsInventoryUpdateStatementId = searchParams.get("statementId");
+  const activePartsInventoryUpdateDetailRecord = activePartsInventoryUpdateDetailPage
+    ? partsInventoryUpdateStatementRecords.find((statement) => statement.id === activePartsInventoryUpdateStatementId) ??
+      partsInventoryUpdateStatementRecords[0] ??
+      null
+    : null;
+  const activeVendorDetailPage = workspaceId === "analytics" && searchParams.get("view") === "vendor-detail";
+  const activeVendorListPage = workspaceId === "analytics" && searchParams.get("view") === "vendor-list";
+  const activeVendorInvoicePage = workspaceId === "analytics" && searchParams.get("view") === "vendor-invoice";
+  const activeVendorDetailRecord = activeVendorDetailPage
+    ? getVendorDirectoryRecord(searchParams.get("vendorId")) ?? getVendorDirectoryRecord("vendor-0")
+    : null;
   const activeManagementActivitiesPage = workspaceId === "analytics" && searchParams.get("view") === "management-activities";
   const activeCashierAccountabilityPage = workspaceId === "analytics" && searchParams.get("view") === "cashier-accountability";
   const activeDealerSetupPage = workspaceId === "analytics" && searchParams.get("view") === "dealer-setup";
@@ -1247,6 +1404,16 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         ? "view=profit-loss"
         : activeFinovoPayablesPage
           ? "view=payables-finovo"
+          : activePartsInventoryUpdateDetailPage && activePartsInventoryUpdateDetailRecord
+            ? buildPartsInventoryUpdateDetailQuery(activePartsInventoryUpdateDetailRecord.id)
+          : activePartsInventoryUpdatePage
+            ? "view=parts-inventory-update"
+        : activeVendorDetailPage && activeVendorDetailRecord
+          ? buildVendorDetailQuery(activeVendorDetailRecord.id)
+        : activeVendorListPage
+          ? "view=vendor-list"
+        : activeVendorInvoicePage
+          ? "view=vendor-invoice"
         : activeARAgingDocPage
           ? "view=ar-aging-doc"
         : activeManagementActivitiesPage
@@ -1358,8 +1525,14 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const [partsInventoryDetailWindows, setPartsInventoryDetailWindows] = useState<PartsInventoryDetailWindow[]>(() =>
     readOpenPartsInventoryDetailWindowPreference(session.user.id)
   );
+  const [partsInventoryUpdateDetailWindows, setPartsInventoryUpdateDetailWindows] = useState<PartsInventoryUpdateDetailWindow[]>(() =>
+    readOpenPartsInventoryUpdateDetailWindowPreference(session.user.id)
+  );
   const [salesDealDetailWindows, setSalesDealDetailWindows] = useState<SalesDealDetailWindow[]>(() =>
     readOpenSalesDealDetailWindowPreference(session.user.id)
+  );
+  const [vendorDetailWindows, setVendorDetailWindows] = useState<VendorDetailWindow[]>(() =>
+    readOpenVendorDetailWindowPreference(session.user.id)
   );
   const [draggingOpenWindowKey, setDraggingOpenWindowKey] = useState<string | null>(null);
   const [draggingOpenWindowWorkspaceId, setDraggingOpenWindowWorkspaceId] = useState<WorkspaceId | null>(null);
@@ -1381,7 +1554,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const currentActivityKeyRef = useRef(`${activeStore.id}:${workspaceId}`);
   const quickLaunchDropHandledRef = useRef(false);
 
-  const menuGroups = ensureSystemPinnedLeafs(ensureGeneralLedgerPinnedLeafs(dashboard?.navigation ?? legacyFallbackNavigation)).filter(
+  const menuGroups = ensureSystemPinnedLeafs(ensurePayablesPinnedLeafs(ensureGeneralLedgerPinnedLeafs(dashboard?.navigation ?? legacyFallbackNavigation))).filter(
     (group) => !defaultPageOnlyDropdownGroups.has(group.label)
   );
   const orderedQuickLaunchButtons = sortQuickLaunchButtonsByOrder(quickLaunchButtons, quickLaunchOrderSlots);
@@ -1398,6 +1571,41 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
           ...workspaceDefinitions.analytics,
           title: "Finovo",
           subtitle: "Bills, vendors, approvals, and payment timing in one payables command center",
+          tools: [] as string[]
+        }
+      : activePartsInventoryUpdateDetailPage && activePartsInventoryUpdateDetailRecord
+      ? {
+          ...workspaceDefinitions.analytics,
+          title: formatPartsInventoryUpdateDisplayTitle(activePartsInventoryUpdateDetailRecord),
+          subtitle: "Statement designer, filter criteria, change sets, and preview rows for parts inventory batch maintenance",
+          tools: [] as string[]
+        }
+      : activePartsInventoryUpdatePage
+      ? {
+          ...workspaceDefinitions.analytics,
+          title: "Parts Inventory Update",
+          subtitle: "Batch statements for inactive stock cleanup, bin resets, and other controlled parts maintenance passes",
+          tools: [] as string[]
+        }
+      : activeVendorListPage
+      ? {
+          ...workspaceDefinitions.analytics,
+          title: "Vendor List",
+          subtitle: "Search the vendor directory, review active and inactive records, and move into vendor detail work",
+          tools: [] as string[]
+        }
+      : activeVendorDetailPage && activeVendorDetailRecord
+      ? {
+          ...workspaceDefinitions.analytics,
+          title: formatVendorDisplayTitle(activeVendorDetailRecord),
+          subtitle: "Vendor master maintenance, payee address setup, discount terms, and attachments",
+          tools: [] as string[]
+        }
+      : activeVendorInvoicePage
+      ? {
+          ...workspaceDefinitions.analytics,
+          title: "Vendor Invoice",
+          subtitle: "Enter vendor invoices, distribute expense lines, and balance AP posting before save",
           tools: [] as string[]
         }
       : activeARAgingDocPage
@@ -1521,6 +1729,42 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const activeSalesDealDetailWindow = activeSalesDealId
     ? matchedSalesDealDetailWindow ?? { customer: "", worksheet: "", dealId: activeSalesDealId, storeId: activeStore.id }
     : null;
+  const storedVisibleVendorDetailWindows = sortVendorDetailWindowsByOpenWindowOrder(
+    vendorDetailWindows.filter((windowEntry) => windowEntry.storeId === activeStore.id),
+    openWindowOrderKeys
+  );
+  const matchedVendorDetailWindow = activeVendorDetailRecord
+    ? storedVisibleVendorDetailWindows.find((windowEntry) => windowEntry.vendorId === activeVendorDetailRecord.id) ?? null
+    : null;
+  const activeVendorDetailWindow = activeVendorDetailRecord
+    ? matchedVendorDetailWindow ?? {
+        name: activeVendorDetailRecord.name,
+        storeId: activeStore.id,
+        vendorId: activeVendorDetailRecord.id
+      }
+    : null;
+  const visibleVendorDetailWindows =
+    activeVendorDetailWindow && !matchedVendorDetailWindow
+      ? [activeVendorDetailWindow, ...storedVisibleVendorDetailWindows]
+      : storedVisibleVendorDetailWindows;
+  const storedVisiblePartsInventoryUpdateDetailWindows = sortPartsInventoryUpdateDetailWindowsByOpenWindowOrder(
+    partsInventoryUpdateDetailWindows.filter((windowEntry) => windowEntry.storeId === activeStore.id),
+    openWindowOrderKeys
+  );
+  const matchedPartsInventoryUpdateDetailWindow = activePartsInventoryUpdateDetailRecord
+    ? storedVisiblePartsInventoryUpdateDetailWindows.find((windowEntry) => windowEntry.statementId === activePartsInventoryUpdateDetailRecord.id) ?? null
+    : null;
+  const activePartsInventoryUpdateDetailWindow = activePartsInventoryUpdateDetailRecord
+    ? matchedPartsInventoryUpdateDetailWindow ?? {
+        name: activePartsInventoryUpdateDetailRecord.name,
+        statementId: activePartsInventoryUpdateDetailRecord.id,
+        storeId: activeStore.id
+      }
+    : null;
+  const visiblePartsInventoryUpdateDetailWindows =
+    activePartsInventoryUpdateDetailWindow && !matchedPartsInventoryUpdateDetailWindow
+      ? [activePartsInventoryUpdateDetailWindow, ...storedVisiblePartsInventoryUpdateDetailWindows]
+      : storedVisiblePartsInventoryUpdateDetailWindows;
   const visibleOpenWindowItems = sortOpenWindowRailItems<OpenWindowRailItem>(
     [
       ...openWorkspaceIds.map((candidateWorkspaceId) => ({
@@ -1528,7 +1772,8 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
           candidateWorkspaceId === workspaceId &&
           !(candidateWorkspaceId === "service" && activeServiceDetailRoNumber) &&
           !(candidateWorkspaceId === "parts" && activePartsInventoryDetailWindow) &&
-          !(candidateWorkspaceId === "sales" && activeSalesDealDetailWindow),
+          !(candidateWorkspaceId === "sales" && activeSalesDealDetailWindow) &&
+          !(candidateWorkspaceId === "analytics" && (activeVendorDetailWindow || activePartsInventoryUpdateDetailWindow)),
         key: buildOpenWindowWorkspaceKey(candidateWorkspaceId),
         kind: "workspace" as const,
         workspaceId: candidateWorkspaceId
@@ -1550,6 +1795,18 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         key: buildOpenWindowSalesDealKey(windowEntry),
         kind: "salesDeal" as const,
         windowEntry
+      })),
+      ...visibleVendorDetailWindows.map((windowEntry) => ({
+        isActive: workspaceId === "analytics" && activeVendorDetailWindow?.vendorId === windowEntry.vendorId,
+        key: buildOpenWindowVendorDetailKey(windowEntry),
+        kind: "vendorDetail" as const,
+        windowEntry
+      })),
+      ...visiblePartsInventoryUpdateDetailWindows.map((windowEntry) => ({
+        isActive: workspaceId === "analytics" && activePartsInventoryUpdateDetailWindow?.statementId === windowEntry.statementId,
+        key: buildOpenWindowPartsInventoryUpdateDetailKey(windowEntry),
+        kind: "partsInventoryUpdateDetail" as const,
+        windowEntry
       }))
     ],
     openWindowOrderKeys
@@ -1569,13 +1826,23 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         }
       : null;
   const contextMenuTargetWorkspaceId = openWindowsContextMenu?.targetWorkspaceId ?? null;
-  const hasAnyOpenWindows = configuredOpenWorkspaceIds.length > 0 || serviceDetailWindows.length > 0 || partsInventoryDetailWindows.length > 0 || salesDealDetailWindows.length > 0;
+  const hasAnyOpenWindows =
+    configuredOpenWorkspaceIds.length > 0 ||
+    serviceDetailWindows.length > 0 ||
+    partsInventoryDetailWindows.length > 0 ||
+    salesDealDetailWindows.length > 0 ||
+    vendorDetailWindows.length > 0 ||
+    partsInventoryUpdateDetailWindows.length > 0;
   const activeOpenWindowKey = activeServiceDetailWindow
     ? buildOpenWindowDetailKey(activeServiceDetailWindow)
     : activePartsInventoryDetailWindow
       ? buildOpenWindowPartsInventoryDetailKey(activePartsInventoryDetailWindow)
     : activeSalesDealDetailWindow
       ? buildOpenWindowSalesDealKey(activeSalesDealDetailWindow)
+    : activePartsInventoryUpdateDetailWindow
+      ? buildOpenWindowPartsInventoryUpdateDetailKey(activePartsInventoryUpdateDetailWindow)
+    : activeVendorDetailWindow
+      ? buildOpenWindowVendorDetailKey(activeVendorDetailWindow)
     : buildOpenWindowWorkspaceKey(workspaceId);
   const shouldRenderActiveWorkspace =
     dismissedOpenWindowKey !== activeOpenWindowKey &&
@@ -1611,6 +1878,10 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       ? formatPartsInventoryDetailWindowTitle(activePartsInventoryDetailWindow)
     : activeSalesDealDetailWindow
       ? formatSalesDealWindowTitle(activeSalesDealDetailWindow)
+    : activePartsInventoryUpdateDetailWindow
+      ? formatPartsInventoryUpdateDisplayTitle(activePartsInventoryUpdateDetailWindow)
+    : activeVendorDetailWindow
+      ? formatVendorDisplayTitle(activeVendorDetailWindow)
     : workspaceId === "parts" && partsWorkspaceView === "inventory"
       ? "Parts Inventory"
     : workspaceId === "website"
@@ -1624,6 +1895,10 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         ? activePartsInventoryDetailWindow.description || "Parts Inventory detail"
       : activeSalesDealDetailWindow
         ? `Deal worksheet ${activeSalesDealDetailWindow.worksheet || activeSalesDealDetailWindow.dealId}`
+      : activePartsInventoryUpdateDetailWindow
+        ? `Statement designer and preview grid`
+      : activeVendorDetailWindow
+        ? `Vendor master maintenance`
       : workspaceId === "website"
         ? websiteWindowSubtitle
       : activeWorkspace.subtitle;
@@ -1641,7 +1916,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const isLoading = isDashboardLoading || isWorkspaceLoading;
   const shouldShowWorkspaceLoadingPanel =
     isLoading &&
-    !(workspaceId === "analytics" && (activeGeneralLedgerPage !== null || activeFinovoPayablesPage || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage || activeDealerSetupPage || activeMyStoresPage || activeForgeFormPage));
+    !(workspaceId === "analytics" && (activeGeneralLedgerPage !== null || activeFinovoPayablesPage || activePartsInventoryUpdatePage || activePartsInventoryUpdateDetailPage || activeVendorDetailPage || activeVendorListPage || activeVendorInvoicePage || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage || activeDealerSetupPage || activeMyStoresPage || activeForgeFormPage));
   const serviceReturnStore = serviceReturnStoreId ? session.stores.find((store) => store.id === serviceReturnStoreId) ?? null : null;
   const serviceReturnCleanupStore = requestedAuditCleanupStoreId
     ? session.stores.find((store) => store.id === requestedAuditCleanupStoreId) ?? null
@@ -1733,6 +2008,8 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     setServiceDetailWindows(readOpenServiceDetailWindowPreference(session.user.id));
     setPartsInventoryDetailWindows(readOpenPartsInventoryDetailWindowPreference(session.user.id));
     setSalesDealDetailWindows(readOpenSalesDealDetailWindowPreference(session.user.id));
+    setVendorDetailWindows(readOpenVendorDetailWindowPreference(session.user.id));
+    setPartsInventoryUpdateDetailWindows(readOpenPartsInventoryUpdateDetailWindowPreference(session.user.id));
     setIsServiceNotificationRailCollapsed(readServiceNotificationRailCollapsedPreference(session.user.id));
     setOpenWindowsContextMenu(null);
     setQuickLaunchContextMenu(null);
@@ -1771,9 +2048,17 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
 
   useEffect(() => {
     setOpenWindowOrderKeys((current) =>
-      normalizeOpenWindowOrderPreference(current, configuredOpenWorkspaceIds, serviceDetailWindows, partsInventoryDetailWindows, salesDealDetailWindows)
+      normalizeOpenWindowOrderPreference(
+        current,
+        configuredOpenWorkspaceIds,
+        serviceDetailWindows,
+        partsInventoryDetailWindows,
+        salesDealDetailWindows,
+        vendorDetailWindows,
+        partsInventoryUpdateDetailWindows
+      )
     );
-  }, [configuredOpenWorkspaceIds, partsInventoryDetailWindows, salesDealDetailWindows, serviceDetailWindows]);
+  }, [configuredOpenWorkspaceIds, partsInventoryDetailWindows, partsInventoryUpdateDetailWindows, salesDealDetailWindows, serviceDetailWindows, vendorDetailWindows]);
 
   useEffect(() => {
     setRecentServiceRowHighlights(readRecentServiceRowHighlightsPreference(recentServiceRowHighlightsStorageKey));
@@ -1934,6 +2219,22 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       return;
     }
 
+    window.sessionStorage.setItem(vendorDetailWindowsStorageKey, JSON.stringify(vendorDetailWindows));
+  }, [vendorDetailWindows, vendorDetailWindowsStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.sessionStorage.setItem(partsInventoryUpdateDetailWindowsStorageKey, JSON.stringify(partsInventoryUpdateDetailWindows));
+  }, [partsInventoryUpdateDetailWindows, partsInventoryUpdateDetailWindowsStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
     window.sessionStorage.setItem(serviceNotificationRailStorageKey, JSON.stringify(isServiceNotificationRailCollapsed));
   }, [isServiceNotificationRailCollapsed, serviceNotificationRailStorageKey]);
 
@@ -2002,6 +2303,54 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       ignore = true;
     };
   }, [activeStore.id, refreshToken]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    setPartsInventoryUpdateStatementRecords(seedPartsInventoryUpdateStatements);
+
+    getPartsInventoryUpdateStatements(activeStore.id)
+      .then((payload) => {
+        if (!ignore) {
+          setPartsInventoryUpdateStatementRecords(payload.statements);
+        }
+      })
+      .catch(() => {
+        if (!ignore) {
+          setPartsInventoryUpdateStatementRecords(seedPartsInventoryUpdateStatements);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [activeStore.id, refreshToken]);
+
+  useEffect(() => {
+    setPartsInventoryUpdateDetailWindows((current) => {
+      let hasChanges = false;
+
+      const nextWindows = current.map((windowEntry) => {
+        if (windowEntry.storeId !== activeStore.id) {
+          return windowEntry;
+        }
+
+        const statement = partsInventoryUpdateStatementRecords.find((entry) => entry.id === windowEntry.statementId);
+
+        if (!statement || statement.name === windowEntry.name) {
+          return windowEntry;
+        }
+
+        hasChanges = true;
+        return {
+          ...windowEntry,
+          name: statement.name
+        };
+      });
+
+      return hasChanges ? normalizePartsInventoryUpdateDetailWindows(nextWindows) : current;
+    });
+  }, [activeStore.id, partsInventoryUpdateStatementRecords]);
 
   useEffect(() => {
     let ignore = false;
@@ -2297,7 +2646,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       !(nextNavigableWorkspaceId === "service" && (activeServiceDetailRoNumber || activeTechnicianWorkloadPage)) &&
       !(nextNavigableWorkspaceId === "parts" && partsWorkspaceView !== "ordering") &&
       !(nextNavigableWorkspaceId === "sales" && activeSalesCommunicatePage) &&
-      !(nextNavigableWorkspaceId === "analytics" && (activeGeneralLedgerPage !== null || activeFinovoPayablesPage || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage || activeDealerSetupPage || activeMyStoresPage || activeForgeFormPage))
+      !(nextNavigableWorkspaceId === "analytics" && (activeGeneralLedgerPage !== null || activeFinovoPayablesPage || activePartsInventoryUpdatePage || activePartsInventoryUpdateDetailPage || activeVendorDetailPage || activeVendorListPage || activeVendorInvoicePage || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage || activeDealerSetupPage || activeMyStoresPage || activeForgeFormPage))
     ) {
       return;
     }
@@ -2369,7 +2718,13 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     navigate(`/dashboard/${activeStore.id}/parts?view=inventory`);
   }
 
-  function resolveExplicitPageLeafRoute(groupLabel: string, item: string): { workspaceId: WorkspaceId; resetWebsiteFeed?: boolean; view?: string } | null {
+  function resolveExplicitPageLeafRoute(groupLabel: string, item: string): { workspaceId: WorkspaceId; query?: string; resetWebsiteFeed?: boolean; view?: string } | null {
+    const vendorDetailVendorId = parseVendorDetailRouteItem(groupLabel, item);
+
+    if (vendorDetailVendorId) {
+      return { workspaceId: "analytics", query: buildVendorDetailQuery(vendorDetailVendorId) };
+    }
+
     const lookupKey = `${groupLabel}:${item}`.toLowerCase();
 
     switch (lookupKey) {
@@ -2388,8 +2743,14 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         return { workspaceId: "analytics" };
       case "payables:finovo":
         return { workspaceId: "analytics", view: "payables-finovo" };
+      case "payables:vendor list":
+        return { workspaceId: "analytics", view: "vendor-list" };
+      case "payables:vendor invoice":
+        return { workspaceId: "analytics", view: "vendor-invoice" };
       case "receivables:ar aging doc":
         return { workspaceId: "analytics", view: "ar-aging-doc" };
+      case "system:parts inventory update":
+        return { workspaceId: "analytics", view: "parts-inventory-update" };
       case "system:dealer setup":
         return { workspaceId: "analytics", view: "dealer-setup" };
       case "system:my stores":
@@ -2446,8 +2807,10 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
       }
     );
 
+    const routeQuery = pageLeafRoute.query ?? (pageLeafRoute.view ? `view=${pageLeafRoute.view}` : "");
+
     navigate(
-      `/dashboard/${activeStore.id}/${pageLeafRoute.workspaceId}${pageLeafRoute.view ? `?view=${pageLeafRoute.view}` : ""}`
+      `/dashboard/${activeStore.id}/${pageLeafRoute.workspaceId}${routeQuery ? `?${routeQuery}` : ""}`
     );
     return true;
   }
@@ -2488,6 +2851,8 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     setServiceDetailWindows([]);
     setPartsInventoryDetailWindows([]);
     setSalesDealDetailWindows([]);
+    setVendorDetailWindows([]);
+    setPartsInventoryUpdateDetailWindows([]);
     setOpenWindowsContextMenu(null);
     setDraggingOpenWindowKey(null);
     setOpenWindowDropState(null);
@@ -2508,6 +2873,14 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
 
     if (workspaceId === "sales" && activeSalesDealId) {
       navigate(`/dashboard/${activeStore.id}/sales`, { replace: true });
+    }
+
+    if (workspaceId === "analytics" && activeVendorDetailPage) {
+      navigate(`/dashboard/${activeStore.id}/analytics?view=vendor-list`, { replace: true });
+    }
+
+    if (workspaceId === "analytics" && activePartsInventoryUpdateDetailPage) {
+      navigate(`/dashboard/${activeStore.id}/analytics?view=parts-inventory-update`, { replace: true });
     }
   }
 
@@ -2531,6 +2904,16 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
 
     if (workspaceId === "parts" && activeStore.id === targetStoreId && activePartsInventoryPartNumber === partNumber) {
       navigate(`/dashboard/${targetStoreId}/parts?view=inventory`, { replace: true });
+    }
+  }
+
+  function closePartsInventoryUpdateDetailWindow(statementId: string, storeId: string) {
+    setPartsInventoryUpdateDetailWindows((current) =>
+      current.filter((windowEntry) => !(windowEntry.storeId === storeId && windowEntry.statementId === statementId))
+    );
+
+    if (workspaceId === "analytics" && activeStore.id === storeId && activePartsInventoryUpdateDetailRecord?.id === statementId) {
+      navigate(`/dashboard/${storeId}/analytics?view=parts-inventory-update`);
     }
   }
 
@@ -2711,7 +3094,9 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         configuredOpenWorkspaceIds,
         serviceDetailWindows,
         partsInventoryDetailWindows,
-        salesDealDetailWindows
+        salesDealDetailWindows,
+        vendorDetailWindows,
+        partsInventoryUpdateDetailWindows
       )
     );
     setDraggingOpenWindowKey(null);
@@ -2825,6 +3210,88 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
     }
 
     setOpenWorkspaceRouteMetadata(workspace, routeMetadata);
+  }
+
+  function openPartsInventoryUpdateDetailPage(statementId: string, sourceLabel = "Parts Inventory Update") {
+    const statement = partsInventoryUpdateStatementRecords.find((entry) => entry.id === statementId) ?? null;
+
+    if (!statement) {
+      return;
+    }
+
+    setDismissedOpenWindowKey(null);
+    setActiveWorkflow(null);
+    setPendingSalesMenuIntent(null);
+    setPendingServiceMenuIntent(null);
+    setPendingWorkspaceMenuIntent(null);
+    setToolbarNotice(`${formatPartsInventoryUpdateDisplayTitle(statement)} ready.`);
+    setPartsInventoryUpdateDetailWindows((current) =>
+      upsertPartsInventoryUpdateDetailWindow(current, {
+        name: statement.name,
+        statementId,
+        storeId: activeStore.id
+      })
+    );
+
+    appendCommandLog(
+      {
+        label: "Parts inventory update opened",
+        detail: `${statement.name} opened via ${sourceLabel}.`,
+        tone: "neutral"
+      },
+      {
+        optimistic: false,
+        workspaceId: "analytics"
+      }
+    );
+
+    navigate(`/dashboard/${activeStore.id}/analytics?${buildPartsInventoryUpdateDetailQuery(statementId)}`);
+  }
+
+  function openVendorDetailPage(vendorId: string, sourceLabel = "Vendor List") {
+    const vendorRecord = getVendorDirectoryRecord(vendorId);
+
+    if (!vendorRecord) {
+      return;
+    }
+
+    setDismissedOpenWindowKey(null);
+    setActiveWorkflow(null);
+    setPendingSalesMenuIntent(null);
+    setPendingServiceMenuIntent(null);
+    setPendingWorkspaceMenuIntent(null);
+    setToolbarNotice(`${formatVendorDisplayTitle(vendorRecord)} ready.`);
+    setVendorDetailWindows((current) =>
+      upsertVendorDetailWindow(current, {
+        name: vendorRecord.name,
+        storeId: activeStore.id,
+        vendorId
+      })
+    );
+
+    appendCommandLog(
+      {
+        label: "Vendor opened",
+        detail: `${vendorRecord.name} opened via ${sourceLabel}.`,
+        tone: "neutral"
+      },
+      {
+        optimistic: false,
+        workspaceId: "analytics"
+      }
+    );
+
+    navigate(`/dashboard/${activeStore.id}/analytics?${buildVendorDetailQuery(vendorId)}`);
+  }
+
+  function closeVendorDetailWindow(vendorId: string, storeId: string) {
+    setVendorDetailWindows((current) =>
+      current.filter((windowEntry) => !(windowEntry.storeId === storeId && windowEntry.vendorId === vendorId))
+    );
+
+    if (workspaceId === "analytics" && activeStore.id === storeId && activeVendorDetailRecord?.id === vendorId) {
+      navigate(`/dashboard/${storeId}/analytics?view=vendor-list`);
+    }
   }
 
   function setWebsiteWorkspaceRouteMetadata(routeMetadata: QuickLaunchRouteMetadata | null) {
@@ -3313,7 +3780,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         workspaceId !== workspaceMenuIntent.workspaceId ||
         (workspaceMenuIntent.workspaceId === "service" && activeTechnicianWorkloadPage) ||
         (workspaceMenuIntent.workspaceId === "sales" && activeSalesCommunicatePage) ||
-        (workspaceMenuIntent.workspaceId === "analytics" && (activeGeneralLedgerPage !== null || activeFinovoPayablesPage || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage || activeForgeFormPage))
+        (workspaceMenuIntent.workspaceId === "analytics" && (activeGeneralLedgerPage !== null || activeFinovoPayablesPage || activePartsInventoryUpdatePage || activePartsInventoryUpdateDetailPage || activeVendorDetailPage || activeVendorListPage || activeVendorInvoicePage || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage || activeForgeFormPage))
       ) {
         navigateToWorkspace(workspaceMenuIntent.workspaceId, `${groupLabel} / ${item}`);
       }
@@ -3368,6 +3835,11 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         label: item
       });
       navigateToWorkspace(nextWorkspaceId, `${groupLabel} / ${item}`);
+      return;
+    }
+
+    if (isMenuOnlyNavigationItem(groupLabel, item)) {
+      setToolbarNotice(`${item} is listed in the menu but is not linked to a page yet.`);
     }
   }
 
@@ -3410,6 +3882,10 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
 
     if (groupLabel === "System" && hiddenSystemLeafs.has(item)) {
       return false;
+    }
+
+    if (isMenuOnlyNavigationItem(groupLabel, item)) {
+      return true;
     }
 
     if (item === "Switch Store" || item === "Logout" || item === "Exit") {
@@ -4840,7 +5316,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                   workspaceTitle = "Sandbox";
                 } else if (workspaceIdForItem === "website" && isSandboxSession) {
                   workspaceTitle = "Sandbox";
-                } else if (workspaceIdForItem === workspaceId && (activeGeneralLedgerPage !== null || activeFinovoPayablesPage || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage || activeForgeFormPage)) {
+                } else if (workspaceIdForItem === workspaceId && (activeGeneralLedgerPage !== null || activeFinovoPayablesPage || activePartsInventoryUpdatePage || activeVendorListPage || activeVendorInvoicePage || activeARAgingDocPage || activeManagementActivitiesPage || activeCashierAccountabilityPage || activeForgeFormPage)) {
                   workspaceTitle = activeWorkspace.title;
                 } else if (workspaceRouteMetadata?.label) {
                   workspaceTitle = workspaceRouteMetadata.label;
@@ -4854,6 +5330,10 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
               const partsDetailTitle = partsDetailWindow ? formatPartsInventoryDetailWindowTitle(partsDetailWindow) : null;
               const salesDealWindow = item.kind === "salesDeal" ? item.windowEntry : null;
               const salesDealTitle = salesDealWindow ? formatSalesDealWindowTitle(salesDealWindow) : null;
+              const vendorDetailWindow = item.kind === "vendorDetail" ? item.windowEntry : null;
+              const vendorDetailTitle = vendorDetailWindow ? formatVendorDisplayTitle(vendorDetailWindow) : null;
+              const partsInventoryUpdateDetailWindow = item.kind === "partsInventoryUpdateDetail" ? item.windowEntry : null;
+              const partsInventoryUpdateDetailTitle = partsInventoryUpdateDetailWindow ? formatPartsInventoryUpdateDisplayTitle(partsInventoryUpdateDetailWindow) : null;
               const isContextTarget = isWorkspaceItem && contextMenuTargetWorkspaceId === workspaceIdForItem;
               const dropStateClass = openWindowDropState?.key === item.key ? ` is-drop-${openWindowDropState.position}` : "";
 
@@ -4967,6 +5447,54 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                         x
                       </button>
                     </Fragment>
+                  ) : vendorDetailWindow && vendorDetailTitle ? (
+                    <Fragment>
+                      <button
+                        className={`legacy-window-link legacy-window-link-detail${item.isActive ? " active" : ""}`}
+                        draggable
+                        onDragEnd={handleOpenWindowDragEnd}
+                        onDragStart={(event) => handleOpenWindowDragStart(event, item.key, null)}
+                        onClick={() => navigate(`/dashboard/${vendorDetailWindow.storeId}/analytics?${buildVendorDetailQuery(vendorDetailWindow.vendorId)}`)}
+                        type="button"
+                      >
+                        <span aria-hidden="true" className="legacy-window-link-grip">
+                          ::
+                        </span>
+                        <span className="legacy-window-link-copy">{vendorDetailTitle}</span>
+                      </button>
+                      <button
+                        aria-label={`Close ${vendorDetailTitle}`}
+                        className="legacy-window-link-context-button legacy-window-link-detail-close"
+                        onClick={() => closeVendorDetailWindow(vendorDetailWindow.vendorId, vendorDetailWindow.storeId)}
+                        type="button"
+                      >
+                        x
+                      </button>
+                    </Fragment>
+                  ) : partsInventoryUpdateDetailWindow && partsInventoryUpdateDetailTitle ? (
+                    <Fragment>
+                      <button
+                        className={`legacy-window-link legacy-window-link-detail${item.isActive ? " active" : ""}`}
+                        draggable
+                        onDragEnd={handleOpenWindowDragEnd}
+                        onDragStart={(event) => handleOpenWindowDragStart(event, item.key, null)}
+                        onClick={() => navigate(`/dashboard/${partsInventoryUpdateDetailWindow.storeId}/analytics?${buildPartsInventoryUpdateDetailQuery(partsInventoryUpdateDetailWindow.statementId)}`)}
+                        type="button"
+                      >
+                        <span aria-hidden="true" className="legacy-window-link-grip">
+                          ::
+                        </span>
+                        <span className="legacy-window-link-copy">{partsInventoryUpdateDetailTitle}</span>
+                      </button>
+                      <button
+                        aria-label={`Close ${partsInventoryUpdateDetailTitle}`}
+                        className="legacy-window-link-context-button legacy-window-link-detail-close"
+                        onClick={() => closePartsInventoryUpdateDetailWindow(partsInventoryUpdateDetailWindow.statementId, partsInventoryUpdateDetailWindow.storeId)}
+                        type="button"
+                      >
+                        x
+                      </button>
+                    </Fragment>
                   ) : salesDealWindow && salesDealTitle ? (
                     <Fragment>
                       <button
@@ -5006,7 +5534,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         </aside>
 
         <section
-          className={`legacy-workspace${workspaceId === "service" ? " is-service-workspace" : ""}${workspaceId === "parts" ? " is-parts-workspace" : ""}${useForgeFormStudioShell ? " is-forgeform-workspace" : ""}`}
+          className={`legacy-workspace${workspaceId === "service" ? " is-service-workspace" : ""}${workspaceId === "parts" ? " is-parts-workspace" : ""}${useForgeFormStudioShell ? " is-forgeform-workspace" : ""}${activePartsInventoryUpdatePage ? " is-parts-inventory-update-workspace" : ""}${activePartsInventoryUpdateDetailPage ? " is-parts-inventory-update-detail-workspace" : ""}${activeVendorDetailPage ? " is-vendor-detail-workspace" : ""}${activeVendorListPage ? " is-vendor-list-workspace" : ""}${activeVendorInvoicePage ? " is-vendor-invoice-workspace" : ""}`}
           data-workspace-id={workspaceId}
           style={isPhoneViewport ? { order: 1 } : undefined}
         >
@@ -5461,7 +5989,29 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
                         purchasePadRows,
                         workspaceView: partsWorkspaceView
                       },
+                      {
+                        activeDetailRecord: activePartsInventoryUpdateDetailRecord,
+                        onOpenStatementDetail: openPartsInventoryUpdateDetailPage,
+                        onOpenStatementList: () => {
+                          openExplicitPageLeaf("System", "Parts Inventory Update");
+                        },
+                        onStatementsChange: setPartsInventoryUpdateStatementRecords,
+                        statements: partsInventoryUpdateStatementRecords,
+                        storeId: activeStore.id
+                      },
+                      {
+                        activeDetailRecord: activeVendorDetailRecord,
+                        onOpenVendorDetail: openVendorDetailPage,
+                        onOpenVendorList: () => {
+                          openExplicitPageLeaf("Payables", "Vendor List");
+                        }
+                      },
                       activeFinovoPayablesPage,
+                      activePartsInventoryUpdatePage,
+                      activePartsInventoryUpdateDetailPage,
+                      activeVendorDetailPage,
+                      activeVendorListPage,
+                      activeVendorInvoicePage,
                       activeARAgingDocPage,
                       activeGeneralLedgerPage,
                       activeManagementActivitiesPage,
@@ -6402,7 +6952,25 @@ function renderWorkspace(
     purchasePadRows: PartsWorkspaceRow[];
     workspaceView: PartsWorkspaceView;
   },
+  partsInventoryUpdateControls: {
+    activeDetailRecord: PartsInventoryUpdateStatement | null;
+    onOpenStatementDetail: (statementId: string, sourceLabel?: string) => void;
+    onOpenStatementList: () => void;
+    onStatementsChange: React.Dispatch<React.SetStateAction<PartsInventoryUpdateStatement[]>>;
+    statements: PartsInventoryUpdateStatement[];
+    storeId: string;
+  },
+  vendorControls: {
+    activeDetailRecord: VendorDirectoryRecord | null;
+    onOpenVendorDetail: (vendorId: string, sourceLabel?: string) => void;
+    onOpenVendorList: () => void;
+  },
   activeFinovoPayablesPage: boolean,
+  activePartsInventoryUpdatePage: boolean,
+  activePartsInventoryUpdateDetailPage: boolean,
+  activeVendorDetailPage: boolean,
+  activeVendorListPage: boolean,
+  activeVendorInvoicePage: boolean,
   activeARAgingDocPage: boolean,
   activeGeneralLedgerPage: "chartOfAccounts" | "profitLoss" | null,
   activeManagementActivitiesPage: boolean,
@@ -6609,6 +7177,51 @@ function renderWorkspace(
 
       if (activeFinovoPayablesPage) {
         return <FinovoPayablesWorkspace storeId={dashboard?.store.id ?? auditControls.activeStoreId} storeName={dashboard?.store.name ?? "Premier Marine"} />;
+      }
+
+      if (activePartsInventoryUpdateDetailPage && partsInventoryUpdateControls.activeDetailRecord) {
+        return (
+          <PartsInventoryUpdateDetailWorkspace
+            onOpenStatementDetail={partsInventoryUpdateControls.onOpenStatementDetail}
+            onOpenStatementList={partsInventoryUpdateControls.onOpenStatementList}
+            onStatementsChange={partsInventoryUpdateControls.onStatementsChange}
+            statement={partsInventoryUpdateControls.activeDetailRecord}
+            statements={partsInventoryUpdateControls.statements}
+            storeId={partsInventoryUpdateControls.storeId}
+            storeName={dashboard?.store.name ?? "Premier Marine"}
+          />
+        );
+      }
+
+      if (activePartsInventoryUpdatePage) {
+        return (
+          <PartsInventoryUpdateWorkspace
+            onOpenStatementDetail={partsInventoryUpdateControls.onOpenStatementDetail}
+            onStatementsChange={partsInventoryUpdateControls.onStatementsChange}
+            statements={partsInventoryUpdateControls.statements}
+            storeId={partsInventoryUpdateControls.storeId}
+            storeName={dashboard?.store.name ?? "Premier Marine"}
+          />
+        );
+      }
+
+      if (activeVendorDetailPage && vendorControls.activeDetailRecord) {
+        return (
+          <VendorDetailWorkspace
+            onOpenVendorDetail={vendorControls.onOpenVendorDetail}
+            onOpenVendorList={vendorControls.onOpenVendorList}
+            record={vendorControls.activeDetailRecord}
+            storeName={dashboard?.store.name ?? "Premier Marine"}
+          />
+        );
+      }
+
+      if (activeVendorListPage) {
+        return <VendorListWorkspace onOpenVendorDetail={vendorControls.onOpenVendorDetail} storeName={dashboard?.store.name ?? "Premier Marine"} />;
+      }
+
+      if (activeVendorInvoicePage) {
+        return <VendorInvoiceWorkspace storeName={dashboard?.store.name ?? "Premier Marine"} />;
       }
 
       if (activeARAgingDocPage) {
@@ -18236,7 +18849,9 @@ function readInitialDismissedOpenWindowKeyPreference(userId: string, workspaceId
     readOpenWorkspacePreference(userId).length > 0 ||
     readOpenServiceDetailWindowPreference(userId).length > 0 ||
     readOpenPartsInventoryDetailWindowPreference(userId).length > 0 ||
-    readOpenSalesDealDetailWindowPreference(userId).length > 0;
+    readOpenSalesDealDetailWindowPreference(userId).length > 0 ||
+    readOpenVendorDetailWindowPreference(userId).length > 0 ||
+    readOpenPartsInventoryUpdateDetailWindowPreference(userId).length > 0;
 
   return hasPersistedOpenWindows ? null : buildOpenWindowWorkspaceKey(workspaceId);
 }
@@ -18349,6 +18964,10 @@ function normalizeOpenWorkspaceRouteMetadataPreference(value: unknown) {
     const label = (metadata as { label?: unknown }).label;
 
     if (typeof groupLabel !== "string" || typeof item !== "string") {
+      continue;
+    }
+
+    if (parseVendorDetailRouteItem(groupLabel, item)) {
       continue;
     }
 
@@ -20314,18 +20933,30 @@ function buildOpenWindowSalesDealKey(windowEntry: Pick<SalesDealDetailWindow, "d
   return `sales-deal:${windowEntry.storeId}:${windowEntry.dealId}`;
 }
 
+function buildOpenWindowVendorDetailKey(windowEntry: Pick<VendorDetailWindow, "storeId" | "vendorId">) {
+  return `vendor-detail:${windowEntry.storeId}:${windowEntry.vendorId}`;
+}
+
+function buildOpenWindowPartsInventoryUpdateDetailKey(windowEntry: Pick<PartsInventoryUpdateDetailWindow, "storeId" | "statementId">) {
+  return `parts-update-detail:${windowEntry.storeId}:${windowEntry.statementId}`;
+}
+
 function normalizeOpenWindowOrderPreference(
   orderKeys: string[],
   workspaceIds: WorkspaceId[],
   serviceWindows: ServiceDetailWindow[],
   partsInventoryWindows: PartsInventoryDetailWindow[],
-  salesDealWindows: SalesDealDetailWindow[] = []
+  salesDealWindows: SalesDealDetailWindow[] = [],
+  vendorDetailWindows: VendorDetailWindow[] = [],
+  partsInventoryUpdateDetailWindows: PartsInventoryUpdateDetailWindow[] = []
 ) {
   const candidateKeys = [
     ...workspaceIds.map((workspaceId) => buildOpenWindowWorkspaceKey(workspaceId)),
     ...serviceWindows.map((windowEntry) => buildOpenWindowDetailKey(windowEntry)),
     ...partsInventoryWindows.map((windowEntry) => buildOpenWindowPartsInventoryDetailKey(windowEntry)),
-    ...salesDealWindows.map((windowEntry) => buildOpenWindowSalesDealKey(windowEntry))
+    ...salesDealWindows.map((windowEntry) => buildOpenWindowSalesDealKey(windowEntry)),
+    ...vendorDetailWindows.map((windowEntry) => buildOpenWindowVendorDetailKey(windowEntry)),
+    ...partsInventoryUpdateDetailWindows.map((windowEntry) => buildOpenWindowPartsInventoryUpdateDetailKey(windowEntry))
   ];
   const candidateKeySet = new Set(candidateKeys);
   const normalized: string[] = [];
@@ -20387,6 +21018,20 @@ function sortPartsInventoryDetailWindowsByOpenWindowOrder(windows: PartsInventor
 function sortSalesDealDetailWindowsByOpenWindowOrder(windows: SalesDealDetailWindow[], orderKeys: string[]) {
   return sortOpenWindowRailItems(
     windows.map((windowEntry) => ({ key: buildOpenWindowSalesDealKey(windowEntry), windowEntry })),
+    orderKeys
+  ).map((item) => item.windowEntry);
+}
+
+function sortVendorDetailWindowsByOpenWindowOrder(windows: VendorDetailWindow[], orderKeys: string[]) {
+  return sortOpenWindowRailItems(
+    windows.map((windowEntry) => ({ key: buildOpenWindowVendorDetailKey(windowEntry), windowEntry })),
+    orderKeys
+  ).map((item) => item.windowEntry);
+}
+
+function sortPartsInventoryUpdateDetailWindowsByOpenWindowOrder(windows: PartsInventoryUpdateDetailWindow[], orderKeys: string[]) {
+  return sortOpenWindowRailItems(
+    windows.map((windowEntry) => ({ key: buildOpenWindowPartsInventoryUpdateDetailKey(windowEntry), windowEntry })),
     orderKeys
   ).map((item) => item.windowEntry);
 }
@@ -20612,6 +21257,104 @@ function upsertSalesDealDetailWindow(current: SalesDealDetailWindow[], nextWindo
   ]);
 }
 
+function normalizeVendorDetailWindows(windows: VendorDetailWindow[]) {
+  const seen = new Set<string>();
+  const normalized: VendorDetailWindow[] = [];
+
+  for (const windowEntry of windows) {
+    const storeId = windowEntry.storeId.trim();
+    const vendorId = windowEntry.vendorId.trim();
+
+    if (!storeId || !vendorId) {
+      continue;
+    }
+
+    const key = `${storeId}:${vendorId}`;
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    normalized.push({
+      name: windowEntry.name.trim(),
+      storeId,
+      vendorId
+    });
+
+    if (normalized.length >= 12) {
+      break;
+    }
+  }
+
+  return normalized;
+}
+
+function normalizePartsInventoryUpdateDetailWindows(windows: PartsInventoryUpdateDetailWindow[]) {
+  const seen = new Set<string>();
+  const normalized: PartsInventoryUpdateDetailWindow[] = [];
+
+  for (const windowEntry of windows) {
+    const storeId = windowEntry.storeId.trim();
+    const statementId = windowEntry.statementId.trim();
+
+    if (!storeId || !statementId) {
+      continue;
+    }
+
+    const key = `${storeId}:${statementId}`;
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    normalized.push({
+      name: windowEntry.name.trim(),
+      statementId,
+      storeId
+    });
+
+    if (normalized.length >= 12) {
+      break;
+    }
+  }
+
+  return normalized;
+}
+
+function upsertVendorDetailWindow(current: VendorDetailWindow[], nextWindow: VendorDetailWindow) {
+  const existingWindow = current.find(
+    (windowEntry) => windowEntry.storeId === nextWindow.storeId && windowEntry.vendorId === nextWindow.vendorId
+  );
+
+  return normalizeVendorDetailWindows([
+    {
+      ...nextWindow,
+      name: nextWindow.name || existingWindow?.name || ""
+    },
+    ...current.filter(
+      (windowEntry) => !(windowEntry.storeId === nextWindow.storeId && windowEntry.vendorId === nextWindow.vendorId)
+    )
+  ]);
+}
+
+function upsertPartsInventoryUpdateDetailWindow(current: PartsInventoryUpdateDetailWindow[], nextWindow: PartsInventoryUpdateDetailWindow) {
+  const existingWindow = current.find(
+    (windowEntry) => windowEntry.storeId === nextWindow.storeId && windowEntry.statementId === nextWindow.statementId
+  );
+
+  return normalizePartsInventoryUpdateDetailWindows([
+    {
+      ...nextWindow,
+      name: nextWindow.name || existingWindow?.name || ""
+    },
+    ...current.filter(
+      (windowEntry) => !(windowEntry.storeId === nextWindow.storeId && windowEntry.statementId === nextWindow.statementId)
+    )
+  ]);
+}
+
 function readOpenSalesDealDetailWindowPreference(userId: string) {
   if (typeof window === "undefined") {
     return [];
@@ -20649,6 +21392,78 @@ function readOpenSalesDealDetailWindowPreference(userId: string) {
   }
 }
 
+function readOpenVendorDetailWindowPreference(userId: string) {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const raw = window.sessionStorage.getItem(`${OPEN_VENDOR_DETAIL_WINDOWS_STORAGE_PREFIX}:${userId}`);
+
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return normalizeVendorDetailWindows(
+      parsed.flatMap((entry) => {
+        if (!entry || typeof entry !== "object") {
+          return [];
+        }
+
+        const name = "name" in entry && typeof entry.name === "string" ? entry.name : "";
+        const storeId = "storeId" in entry && typeof entry.storeId === "string" ? entry.storeId : "";
+        const vendorId = "vendorId" in entry && typeof entry.vendorId === "string" ? entry.vendorId : "";
+
+        return storeId && vendorId ? [{ name, storeId, vendorId }] : [];
+      })
+    );
+  } catch {
+    return [];
+  }
+}
+
+function readOpenPartsInventoryUpdateDetailWindowPreference(userId: string) {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const raw = window.sessionStorage.getItem(`${OPEN_PARTS_INVENTORY_UPDATE_DETAIL_WINDOWS_STORAGE_PREFIX}:${userId}`);
+
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return normalizePartsInventoryUpdateDetailWindows(
+      parsed.flatMap((entry) => {
+        if (!entry || typeof entry !== "object") {
+          return [];
+        }
+
+        const name = "name" in entry && typeof entry.name === "string" ? entry.name : "";
+        const statementId = "statementId" in entry && typeof entry.statementId === "string" ? entry.statementId : "";
+        const storeId = "storeId" in entry && typeof entry.storeId === "string" ? entry.storeId : "";
+
+        return storeId && statementId ? [{ name, statementId, storeId }] : [];
+      })
+    );
+  } catch {
+    return [];
+  }
+}
+
 function reorderOpenWindowOrderPreference(
   currentOrderKeys: string[],
   visibleKeys: string[],
@@ -20658,9 +21473,19 @@ function reorderOpenWindowOrderPreference(
   workspaceIds: WorkspaceId[],
   serviceWindows: ServiceDetailWindow[],
   partsInventoryWindows: PartsInventoryDetailWindow[],
-  salesDealWindows: SalesDealDetailWindow[] = []
+  salesDealWindows: SalesDealDetailWindow[] = [],
+  vendorDetailWindows: VendorDetailWindow[] = [],
+  partsInventoryUpdateDetailWindows: PartsInventoryUpdateDetailWindow[] = []
 ) {
-  const normalizedOrder = normalizeOpenWindowOrderPreference(currentOrderKeys, workspaceIds, serviceWindows, partsInventoryWindows, salesDealWindows);
+  const normalizedOrder = normalizeOpenWindowOrderPreference(
+    currentOrderKeys,
+    workspaceIds,
+    serviceWindows,
+    partsInventoryWindows,
+    salesDealWindows,
+    vendorDetailWindows,
+    partsInventoryUpdateDetailWindows
+  );
   const sourceIndex = visibleKeys.indexOf(sourceKey);
   const targetIndex = visibleKeys.indexOf(targetKey);
 

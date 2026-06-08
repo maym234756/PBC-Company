@@ -440,6 +440,130 @@ test.describe("top navigation smoke", () => {
     await expect(page.getByText("Purchase Packet and Consignment Packets and Trade Packets", { exact: true }).first()).toBeVisible();
   });
 
+  test("opens Parts Inventory Update from the System menu and reopens it from a saved top tab", async ({ page, request }) => {
+    await openWorkspace(page, request, "desktop");
+
+    await menuButton(page, "System").click();
+    await expect(menuButton(page, "Data Updating")).toBeVisible();
+    await menuButton(page, "Data Updating").hover();
+    await expect(menuButton(page, "Parts Inventory Update")).toBeVisible();
+    await menuButton(page, "Parts Inventory Update").click();
+
+    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/analytics\?view=parts-inventory-update$/);
+    await expect(page.getByRole("heading", { name: "Parts Inventory Update Statements", exact: true })).toBeVisible();
+    await expect(page.locator(".parts-update-list-found-count")).toContainText("Found");
+    await expect(page.locator(".legacy-open-windows")).toContainText("Parts Inventory Update");
+
+    await menuButton(page, "System").click();
+    await menuButton(page, "Data Updating").hover();
+    await expect(menuButton(page, "Parts Inventory Update")).toBeVisible();
+    await menuButton(page, "Parts Inventory Update").click({ button: "right" });
+    await expect(page.locator(".legacy-launch-strip .legacy-launch-button").first().locator("strong")).toHaveText("Parts Inventory Update");
+
+    await menuButton(page, "Application").click();
+    await expect(menuButton(page, "View")).toBeVisible();
+    await menuButton(page, "View").hover();
+    await expect(menuButton(page, "Workspace Surface")).toBeVisible();
+    await menuButton(page, "Workspace Surface").hover();
+    await expect(menuButton(page, "Desktop Shell")).toBeVisible();
+    await menuButton(page, "Desktop Shell").hover();
+    await expect(menuButton(page, "Desktop")).toBeVisible();
+    await menuButton(page, "Desktop").click();
+
+    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/desktop$/);
+    await page.locator(".legacy-launch-strip .legacy-launch-button").first().click();
+
+    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/analytics\?view=parts-inventory-update$/);
+    await expect(page.getByRole("heading", { name: "Parts Inventory Update Statements", exact: true })).toBeVisible();
+    await expect(page.locator(".legacy-open-windows")).toContainText("Parts Inventory Update");
+  });
+
+  test("opens Parts Inventory Update detail and shows a separate Open Windows entry", async ({ page, request }) => {
+    await openWorkspace(page, request, "desktop");
+
+    await menuButton(page, "System").click();
+    await menuButton(page, "Data Updating").hover();
+    await expect(menuButton(page, "Parts Inventory Update")).toBeVisible();
+    await menuButton(page, "Parts Inventory Update").click();
+
+    await expect(page.getByRole("heading", { name: "Parts Inventory Update Statements", exact: true })).toBeVisible();
+    await page.locator(".parts-update-list-table tbody tr").nth(1).click();
+    await page.getByRole("button", { name: "Detail", exact: true }).click();
+
+    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/analytics\?view=parts-inventory-update-detail&statementId=parts-update-1$/);
+    await expect(page.getByRole("heading", { name: "Parts Inventory Update - BE-CLEAR BINS ON INACTIVE PARTS BMT", exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Designer", exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "History", exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Calculated Fields", exact: true })).toBeVisible();
+    await expect(page.locator(".legacy-open-windows")).toContainText("Parts Inventory Update");
+    await expect(page.locator(".legacy-open-windows")).toContainText("Parts Inventory Update - BE-CLEAR BINS ON INACTIVE PARTS BMT");
+  });
+
+  test("renames a Parts Inventory Update row inline and carries the new title into detail windows", async ({ page, request }) => {
+    await openWorkspace(page, request, "desktop");
+
+    await menuButton(page, "System").click();
+    await menuButton(page, "Data Updating").hover();
+    await expect(menuButton(page, "Parts Inventory Update")).toBeVisible();
+    await menuButton(page, "Parts Inventory Update").click();
+
+    await expect(page.getByRole("heading", { name: "Parts Inventory Update Statements", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "New", exact: true }).click();
+
+    const firstNameCell = page.locator(".parts-update-list-table tbody tr").first().locator("td").first();
+    await expect(firstNameCell.locator(".parts-update-list-name-input")).toBeVisible();
+    await firstNameCell.locator(".parts-update-list-name-input").press("Escape");
+    await expect(firstNameCell).toContainText("BE-NEW PARTS UPDATE BMT");
+
+    await firstNameCell.dblclick();
+    await expect(firstNameCell.locator(".parts-update-list-name-input")).toBeVisible();
+    await firstNameCell.locator(".parts-update-list-name-input").fill("PW-ROW INLINE TITLE");
+    await firstNameCell.locator(".parts-update-list-name-input").press("Enter");
+
+    await expect(firstNameCell).toContainText("PW-ROW INLINE TITLE");
+    await page.getByRole("button", { name: "Detail", exact: true }).click();
+
+    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/analytics\?view=parts-inventory-update-detail&statementId=/);
+    await expect(page.getByRole("heading", { name: "Parts Inventory Update - PW-ROW INLINE TITLE", exact: true })).toBeVisible();
+    await expect(page.locator(".legacy-open-windows")).toContainText("Parts Inventory Update - PW-ROW INLINE TITLE");
+  });
+
+  test("shows menu-only System branches without routing them to a default page", async ({ page, request }) => {
+    await openWorkspace(page, request, "desktop");
+
+    const initialUrl = page.url();
+
+    await menuButton(page, "System").click();
+    await expect(menuButton(page, "Customers")).toBeVisible();
+    await expect(menuButton(page, "System Alerts")).toBeVisible();
+    await expect(menuButton(page, "Lists")).toBeVisible();
+    await expect(menuButton(page, "Data Updating")).toBeVisible();
+    await expect(menuButton(page, "Custom Reports")).toBeVisible();
+    await expect(menuButton(page, "All Custom Reports")).toBeVisible();
+    await expect(menuButton(page, "Spreadsheet Reports")).toBeVisible();
+
+    await menuButton(page, "Customers").click();
+    await expect(page).toHaveURL(initialUrl);
+
+    await menuButton(page, "System").click();
+
+    await menuButton(page, "Lists").hover();
+    await expect(menuButton(page, "Paid-Out Types")).toBeVisible();
+    await expect(menuButton(page, "Warranty Companies")).toBeVisible();
+
+    await menuButton(page, "Tools").hover();
+    await expect(menuButton(page, "Vendor Merge")).toBeVisible();
+    await expect(menuButton(page, "Spell Check Dictionary")).toBeVisible();
+
+    await menuButton(page, "Data Updating").hover();
+    await expect(menuButton(page, "Parts Inventory Update")).toBeVisible();
+    await expect(menuButton(page, "Major Unit Inventory Update")).toBeVisible();
+
+    await menuButton(page, "Custom Reports").hover();
+    await expect(menuButton(page, "Credit Card Logging")).toBeVisible();
+    await expect(menuButton(page, "Workstation Info")).toBeVisible();
+  });
+
   test("dealer setup onboarding wizard supports OEM multi-select, collapsible cards, guided setup steps, and structured billing", async ({ page, request }) => {
     await openWorkspace(page, request, "desktop");
 
@@ -610,6 +734,60 @@ test.describe("top navigation smoke", () => {
     await expect(page.getByText("Distribution Info", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Save", exact: true })).toBeVisible();
     await expect(page.locator(".legacy-open-windows .legacy-window-link-copy")).toHaveText("Vendor Invoice");
+  });
+
+  test("opens Vendor List from the Payables menu and reopens it from a saved top tab", async ({ page, request }) => {
+    await openWorkspace(page, request, "desktop");
+
+    await menuButton(page, "Payables").click();
+    await expect(menuButton(page, "Vendor List")).toBeVisible();
+    await menuButton(page, "Vendor List").click();
+
+    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/analytics\?view=vendor-list$/);
+    await expect(page.getByRole("heading", { name: "Vendor List", exact: true })).toBeVisible();
+    await expect(page.locator(".vendor-list-found-count")).toContainText("Found");
+    await expect(page.locator(".legacy-open-windows .legacy-window-link-copy")).toHaveText("Vendor List");
+
+    await menuButton(page, "Payables").click();
+    await expect(menuButton(page, "Vendor List")).toBeVisible();
+    await menuButton(page, "Vendor List").click({ button: "right" });
+    await expect(page.locator(".legacy-launch-strip .legacy-launch-button").first().locator("strong")).toHaveText("Vendor List");
+
+    await menuButton(page, "Application").click();
+    await expect(menuButton(page, "View")).toBeVisible();
+    await menuButton(page, "View").hover();
+    await expect(menuButton(page, "Workspace Surface")).toBeVisible();
+    await menuButton(page, "Workspace Surface").hover();
+    await expect(menuButton(page, "Desktop Shell")).toBeVisible();
+    await menuButton(page, "Desktop Shell").hover();
+    await expect(menuButton(page, "Desktop")).toBeVisible();
+    await menuButton(page, "Desktop").click();
+
+    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/desktop$/);
+    await page.locator(".legacy-launch-strip .legacy-launch-button").first().click();
+
+    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/analytics\?view=vendor-list$/);
+    await expect(page.getByRole("heading", { name: "Vendor List", exact: true })).toBeVisible();
+    await expect(page.locator(".legacy-open-windows")).toContainText("Vendor List");
+  });
+
+  test("opens Vendor detail from Vendor List and shows the vendor name in Open Windows", async ({ page, request }) => {
+    await openWorkspace(page, request, "desktop");
+
+    await menuButton(page, "Payables").click();
+    await expect(menuButton(page, "Vendor List")).toBeVisible();
+    await menuButton(page, "Vendor List").click();
+
+    await expect(page.getByRole("heading", { name: "Vendor List", exact: true })).toBeVisible();
+    await page.locator(".vendor-list-table tbody tr").first().click();
+    await page.getByRole("button", { name: "Detail", exact: true }).click();
+
+    await expect(page).toHaveURL(/\/dashboard\/[^/]+\/analytics\?view=vendor-detail&vendorId=vendor-0$/);
+    await expect(page.getByRole("heading", { name: "Vendor - DO NOT USE HUNTINGTON NATIONAL BANK", exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "General", exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Attachments", exact: true })).toBeVisible();
+    await expect(page.locator(".legacy-open-windows")).toContainText("Vendor List");
+    await expect(page.locator(".legacy-open-windows")).toContainText("Vendor - DO NOT USE HUNTINGTON NATIONAL BANK");
   });
 
   test("opens deal posting from the General Ledger menu", async ({ page, request }) => {

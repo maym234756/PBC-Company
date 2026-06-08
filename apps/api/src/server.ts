@@ -53,6 +53,16 @@ import {
   updateSandboxRecord,
   updateSandboxTemplateRecord
 } from "./sandboxWorkspace.js";
+import {
+  createPartsInventoryUpdateStatement as createStoredPartsInventoryUpdateStatement,
+  deletePartsInventoryUpdateStatement as deleteStoredPartsInventoryUpdateStatement,
+  duplicatePartsInventoryUpdateStatement as duplicateStoredPartsInventoryUpdateStatement,
+  getPartsInventoryUpdateStatements as getStoredPartsInventoryUpdateStatements,
+  runPartsInventoryUpdateStatement as runStoredPartsInventoryUpdateStatement,
+  updatePartsInventoryUpdateStatement as updateStoredPartsInventoryUpdateStatement,
+  type PartsInventoryUpdateChange,
+  type PartsInventoryUpdateCriterion
+} from "./partsInventoryUpdateStore.js";
 import { resolveWorkflowActionPlan } from "./workflowActionPlans.js";
 
 const serverModuleDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -67,6 +77,10 @@ const localHostnames = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const authLoginAttempts = new Map<string, { count: number; resetAt: number }>();
 const authLoginWindowMs = 60_000;
 const authLoginMaxAttempts = 60;
+const PUBLIC_LAUNCH_INTAKE_STORE_CODE = "PMC-KW";
+const PUBLIC_LAUNCH_INTAKE_ACTOR = "Premier Marine Launch Desk";
+const launchReviewTrackValues = ["Executive Launch", "Advanced CRM", "Service Operations", "Integration Connect", "Mobile + Install"] as const;
+const launchReviewTimelineValues = ["Immediate", "This Month", "This Quarter", "Exploring"] as const;
 type DealerSetupPersistedLocation = {
   address: string;
   id: string;
@@ -2444,6 +2458,25 @@ const approvalCreateSchema = z.object({
   impact: z.string().trim().max(200).default(""),
   reason: z.string().trim().max(1000).default("")
 });
+const partsInventoryUpdateCriterionSchema = z.object({
+  id: z.string().trim().min(1).max(80),
+  field: z.string().trim().min(1).max(240),
+  operator: z.string().trim().min(1).max(120),
+  value: z.string().max(240)
+});
+const partsInventoryUpdateChangeSchema = z.object({
+  id: z.string().trim().min(1).max(80),
+  sourceField: z.string().trim().min(1).max(240),
+  targetField: z.string().trim().min(1).max(240)
+});
+const partsInventoryUpdateCreateSchema = z.object({
+  name: z.string().trim().min(1).max(160).optional()
+});
+const partsInventoryUpdateUpdateSchema = z.object({
+  changeSet: z.array(partsInventoryUpdateChangeSchema).optional(),
+  criteria: z.array(partsInventoryUpdateCriterionSchema).optional(),
+  name: z.string().trim().min(1).max(160).optional()
+});
 const approvalUpdateSchema = z.object({
   status: z.string().trim().min(1).max(80),
   reviewedBy: z.string().trim().max(120).optional(),
@@ -2511,7 +2544,20 @@ const crmThreadCreateSchema = z.object({
   actorName: z.string().trim().min(1).max(120),
   name: z.string().trim().min(1).max(120),
   phone: z.string().trim().min(1).max(40),
-  email: z.string().trim().email().max(160).optional().or(z.literal(""))
+  email: z.string().trim().email().max(160).optional().or(z.literal("")),
+  company: z.string().trim().max(160).optional().or(z.literal("")),
+  interestLane: z.enum(launchReviewTrackValues).optional(),
+  timeline: z.enum(launchReviewTimelineValues).optional(),
+  message: z.string().trim().max(1600).optional().or(z.literal(""))
+});
+const publicLaunchIntakeSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  company: z.string().trim().max(160).optional().or(z.literal("")),
+  email: z.string().trim().email().max(160),
+  phone: z.string().trim().min(1).max(40),
+  interestLane: z.enum(launchReviewTrackValues),
+  timeline: z.enum(launchReviewTimelineValues),
+  message: z.string().trim().min(1).max(1600)
 });
 const crmContactUpdateSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
@@ -2744,6 +2790,53 @@ app.get("/api/stores/:storeId/crm/communicate", async (request, response) => {
   }
 
   response.json(payload);
+});
+
+app.post("/api/public/launch-intake", async (request, response) => {
+  const parsed = publicLaunchIntakeSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter a valid launch review request." });
+    return;
+  }
+
+  const launchStore =
+    (await prisma.store.findFirst({
+      where: { code: PUBLIC_LAUNCH_INTAKE_STORE_CODE },
+      select: { id: true, code: true, name: true }
+    })) ??
+    (await prisma.store.findFirst({
+      orderBy: { name: "asc" },
+      select: { id: true, code: true, name: true }
+    }));
+
+  if (!launchStore) {
+    response.status(503).json({ message: "No launch intake store is configured." });
+    return;
+  }
+
+  const result = await createCrmCommunicateThread(launchStore.id, {
+    actorName: PUBLIC_LAUNCH_INTAKE_ACTOR,
+    name: parsed.data.name,
+    phone: parsed.data.phone,
+    email: parsed.data.email,
+    company: parsed.data.company,
+    interestLane: parsed.data.interestLane,
+    timeline: parsed.data.timeline,
+    message: parsed.data.message,
+    source: "landing-page"
+  });
+
+  if (!result) {
+    response.status(404).json({ message: "Launch intake store not found." });
+    return;
+  }
+
+  response.status(201).json({
+    message: `${parsed.data.name.trim()}, your launch review request is now in the Premier Marine queue.`,
+    assignedStoreName: launchStore.name,
+    ...result
+  });
 });
 
 app.post("/api/stores/:storeId/crm/threads", async (request, response) => {
@@ -4103,6 +4196,199 @@ app.post("/api/stores/:storeId/dealer-setup/dealers", async (request, response) 
   response.status(201).json({
     dealer: nextDealer,
     message: `${nextDealer.name} was saved for ${store.name} and will remain available after reload.`
+  });
+});
+
+app.get("/api/stores/:storeId/parts-inventory-update/statements", async (request, response) => {
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    select: {
+      id: true
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  response.json({
+    statements: await getStoredPartsInventoryUpdateStatements(store.id)
+  });
+});
+
+app.post("/api/stores/:storeId/parts-inventory-update/statements", async (request, response) => {
+  if (!(await ensureOptionalBearerActor(request, response))) return;
+
+  const parsedBody = partsInventoryUpdateCreateSchema.safeParse(request.body);
+
+  if (!parsedBody.success) {
+    response.status(400).json({ message: "Enter a valid Parts Inventory Update statement name." });
+    return;
+  }
+
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    select: {
+      id: true,
+      name: true
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  const statement = await createStoredPartsInventoryUpdateStatement(store.id, parsedBody.data.name);
+
+  response.status(201).json({
+    message: `${statement.name} was created for ${store.name}.`,
+    statement,
+    statements: await getStoredPartsInventoryUpdateStatements(store.id)
+  });
+});
+
+app.put("/api/stores/:storeId/parts-inventory-update/statements/:statementId", async (request, response) => {
+  if (!(await ensureOptionalBearerActor(request, response))) return;
+
+  const parsedBody = partsInventoryUpdateUpdateSchema.safeParse(request.body);
+
+  if (!parsedBody.success) {
+    response.status(400).json({ message: "Enter valid Parts Inventory Update statement changes." });
+    return;
+  }
+
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    select: {
+      id: true,
+      name: true
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  const statement = await updateStoredPartsInventoryUpdateStatement(store.id, request.params.statementId, {
+    changeSet: parsedBody.data.changeSet as PartsInventoryUpdateChange[] | undefined,
+    criteria: parsedBody.data.criteria as PartsInventoryUpdateCriterion[] | undefined,
+    name: parsedBody.data.name
+  });
+
+  if (!statement) {
+    response.status(404).json({ message: "Parts Inventory Update statement not found." });
+    return;
+  }
+
+  response.json({
+    message: `${statement.name} was saved for ${store.name}.`,
+    statement,
+    statements: await getStoredPartsInventoryUpdateStatements(store.id)
+  });
+});
+
+app.post("/api/stores/:storeId/parts-inventory-update/statements/:statementId/duplicate", async (request, response) => {
+  if (!(await ensureOptionalBearerActor(request, response))) return;
+
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    select: {
+      id: true,
+      name: true
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  const statement = await duplicateStoredPartsInventoryUpdateStatement(store.id, request.params.statementId);
+
+  if (!statement) {
+    response.status(404).json({ message: "Parts Inventory Update statement not found." });
+    return;
+  }
+
+  response.status(201).json({
+    message: `${statement.name} was duplicated for ${store.name}.`,
+    statement,
+    statements: await getStoredPartsInventoryUpdateStatements(store.id)
+  });
+});
+
+app.post("/api/stores/:storeId/parts-inventory-update/statements/:statementId/run", async (request, response) => {
+  if (!(await ensureOptionalBearerActor(request, response))) return;
+
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    select: {
+      id: true,
+      name: true
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  const statement = await runStoredPartsInventoryUpdateStatement(store.id, request.params.statementId);
+
+  if (!statement) {
+    response.status(404).json({ message: "Parts Inventory Update statement not found." });
+    return;
+  }
+
+  response.json({
+    message: `${statement.name} preview completed for ${store.name}.`,
+    statement,
+    statements: await getStoredPartsInventoryUpdateStatements(store.id)
+  });
+});
+
+app.delete("/api/stores/:storeId/parts-inventory-update/statements/:statementId", async (request, response) => {
+  if (!(await ensureOptionalBearerActor(request, response))) return;
+
+  const store = await prisma.store.findUnique({
+    where: {
+      id: request.params.storeId
+    },
+    select: {
+      id: true,
+      name: true
+    }
+  });
+
+  if (!store) {
+    response.status(404).json({ message: "Store not found." });
+    return;
+  }
+
+  const deleted = await deleteStoredPartsInventoryUpdateStatement(store.id, request.params.statementId);
+
+  if (!deleted) {
+    response.status(404).json({ message: "Parts Inventory Update statement not found." });
+    return;
+  }
+
+  response.json({
+    deletedStatementId: request.params.statementId,
+    message: `Statement deleted for ${store.name}.`,
+    statements: await getStoredPartsInventoryUpdateStatements(store.id)
   });
 });
 

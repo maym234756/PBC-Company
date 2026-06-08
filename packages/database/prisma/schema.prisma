@@ -47,6 +47,7 @@ model Store {
   state         String
   dealerGroupId String
   dealerGroup   DealerGroup   @relation(fields: [dealerGroupId], references: [id])
+  partsInventoryUpdateInitialized Boolean @default(false)
   userStores    UserStore[]
   modules       StoreModule[]
   activities    StoreActivity[]
@@ -60,6 +61,7 @@ model Store {
   posConnectors PosConnector[]
   posConnectionRequests PosConnectionRequest[]
   vendors         Vendor[]
+  partsInventoryUpdateStatements PartsInventoryUpdateStatement[]
   pricingRules    PricingRule[]
   approvalRequests ApprovalRequest[]
   boatInventoryUnits BoatInventoryUnit[]
@@ -580,6 +582,31 @@ model Vendor {
   updatedAt   DateTime @updatedAt
 
   @@index([storeId, name])
+}
+
+model PartsInventoryUpdateStatement {
+  id                   String
+  name                 String
+  displayOrder         Int      @default(0)
+  lastUpdatedBy        String
+  lastUpdatedAtLabel   String
+  createdBy            String
+  createdDateLabel     String
+  fieldCatalogJson     String   @default("[]")
+  criteriaJson         String   @default("[]")
+  changeSetJson        String   @default("[]")
+  previewRowsJson      String   @default("[]")
+  historyJson          String   @default("[]")
+  calculatedFieldsJson String   @default("[]")
+  previewSummary       String   @default("")
+  storeId              String
+  store                Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@id([storeId, id])
+  @@index([storeId, displayOrder])
+  @@index([storeId, updatedAt])
 }
 
 model PricingRule {

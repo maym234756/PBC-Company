@@ -1,5 +1,42 @@
 import type { NavigationGroup, NavigationMenuItem, WorkspaceId } from "./types";
 
+const MENU_ONLY_NAVIGATION_KEYS = new Set([
+  "system:customers",
+  "system:customer units",
+  "system:marketing",
+  "system:time clock",
+  "system:calendar",
+  "system:desktop",
+  "system:send email",
+  "system:lightspeed subscriptions",
+  "system:workstation preferences",
+  "system:user preferences",
+  "system:system alerts",
+  "system:system alert history",
+  "system:paid-out types",
+  "system:sales categories",
+  "system:scheduled tasks",
+  "system:unit makes",
+  "system:unit types",
+  "system:warranty companies",
+  "system:change login credentials",
+  "system:system messages",
+  "system:vendor merge",
+  "system:supplier merge",
+  "system:spell check dictionary",
+  "system:major unit inventory update",
+  "system:credit card logging",
+  "system:customer",
+  "system:customer unit",
+  "system:email summaries",
+  "system:sales category",
+  "system:tax category",
+  "system:time card",
+  "system:workstation info",
+  "system:all custom reports",
+  "system:spreadsheet reports"
+]);
+
 const VISIBLE_NAVIGATION_KEYS = new Set([
   "application:desktop",
   "application:estimate worksheets",
@@ -33,6 +70,7 @@ const VISIBLE_NAVIGATION_KEYS = new Set([
   "management activity:website activity",
   "management activity:audit trail",
   "payables:finovo",
+  "payables:vendor list",
   "payables:vendor invoice",
   "receivables:ar aging doc",
   "general ledger:chart of accounts",
@@ -42,8 +80,10 @@ const VISIBLE_NAVIGATION_KEYS = new Set([
   "system:my stores",
   "system:connection points",
   "system:my pos",
+  "system:parts inventory update",
   "system:sandbox",
-  "system:forgeform"
+  "system:forgeform",
+  ...MENU_ONLY_NAVIGATION_KEYS
 ]);
 
 function filterNavigationItems(groupLabel: string, items: NavigationMenuItem[]): NavigationMenuItem[] {
@@ -1352,7 +1392,7 @@ export const legacyFallbackNavigation: NavigationGroup[] = filterNavigationGroup
   },
   {
     label: "Payables",
-    items: ["Finovo", "Vendor Invoice"]
+    items: ["Finovo", "Vendor List", "Vendor Invoice"]
   },
   {
     label: "Receivables",
@@ -1574,6 +1614,43 @@ export const legacyFallbackNavigation: NavigationGroup[] = filterNavigationGroup
   {
     label: "System",
     items: [
+      "Customers",
+      "Customer Units",
+      "Marketing",
+      "Time Clock",
+      "Calendar",
+      "Desktop",
+      "Send Email",
+      "Lightspeed Subscriptions",
+      "Workstation Preferences",
+      "User Preferences",
+      "System Alerts",
+      "System Alert History",
+      {
+        label: "Lists",
+        items: ["Paid-Out Types", "Sales Categories", "Scheduled Tasks", "Unit Makes", "Unit Types", "Warranty Companies"]
+      },
+      "Change Login Credentials",
+      "System Messages",
+      {
+        label: "Data Updating",
+        items: ["Parts Inventory Update", "Major Unit Inventory Update"]
+      },
+      {
+        label: "Custom Reports",
+        items: [
+          "Credit Card Logging",
+          "Customer",
+          "Customer Unit",
+          "Email Summaries",
+          "Sales Category",
+          "Tax Category",
+          "Time Card",
+          "Workstation Info"
+        ]
+      },
+      "All Custom Reports",
+      "Spreadsheet Reports",
       {
         label: "Website Publishing",
         items: [
@@ -1606,7 +1683,7 @@ export const legacyFallbackNavigation: NavigationGroup[] = filterNavigationGroup
       },
       {
         label: "Tools",
-        items: ["ForgeForm"]
+        items: ["Vendor Merge", "Supplier Merge", "Spell Check Dictionary", "ForgeForm"]
       },
       {
         label: "Access & Security",
@@ -1983,6 +2060,7 @@ const navigationMenuWorkspaceLookup: Record<string, WorkspaceId> = {
     "management activity:favorite website pulse": "website",
     "management activity:favorite approval log": "audit",
     "payables:finovo": "analytics",
+    "payables:vendor list": "analytics",
     "payables:vendor invoice": "analytics",
     "receivables:ar aging doc": "analytics",
     "receivables:customer inquiry": "analytics",
@@ -2035,6 +2113,7 @@ const navigationMenuWorkspaceLookup: Record<string, WorkspaceId> = {
     "system:my stores": "analytics",
     "system:connection points": "analytics",
     "system:my pos": "analytics",
+    "system:parts inventory update": "analytics",
     "system:sandbox": "website",
     "system:forgeform": "analytics",
     "system:feed health": "website",
@@ -2073,6 +2152,10 @@ export function hasExplicitWorkspaceAssignment(groupLabel: string, item: string)
   return `${groupLabel}:${item}`.toLowerCase() in navigationMenuWorkspaceLookup;
 }
 
+export function isMenuOnlyNavigationItem(groupLabel: string, item: string): boolean {
+  return MENU_ONLY_NAVIGATION_KEYS.has(`${groupLabel}:${item}`.toLowerCase());
+}
+
 export function resolveWorkspaceFromMenuItem(groupLabel: string, item: string): WorkspaceId | null {
   const groupFallbackLookup: Record<string, WorkspaceId> = {
     application: "desktop",
@@ -2092,7 +2175,15 @@ export function resolveWorkspaceFromMenuItem(groupLabel: string, item: string): 
   const lookupKey = `${groupLabel}:${item}`.toLowerCase();
   const groupKey = groupLabel.toLowerCase();
 
-  return navigationMenuWorkspaceLookup[lookupKey] ?? groupFallbackLookup[groupKey] ?? null;
+  if (lookupKey in navigationMenuWorkspaceLookup) {
+    return navigationMenuWorkspaceLookup[lookupKey];
+  }
+
+  if (isMenuOnlyNavigationItem(groupLabel, item)) {
+    return null;
+  }
+
+  return groupFallbackLookup[groupKey] ?? null;
 }
 
 export function isWorkspaceId(value: string): value is WorkspaceId {

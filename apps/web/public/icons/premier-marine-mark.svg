@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Premier Marine app icon</title>
+  <desc id="desc">Premier Marine monogram on a dark marine gradient background.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#0f3550" />
+      <stop offset="55%" stop-color="#08263a" />
+      <stop offset="100%" stop-color="#04131f" />
+    </linearGradient>
+    <linearGradient id="wave" x1="0%" x2="100%" y1="0%" y2="0%">
+      <stop offset="0%" stop-color="#ff9362" />
+      <stop offset="100%" stop-color="#47c5cb" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)" />
+  <circle cx="408" cy="108" r="88" fill="#ff9362" opacity="0.18" />
+  <circle cx="118" cy="404" r="96" fill="#3bc0c6" opacity="0.1" />
+  <path d="M76 332c52-42 112-63 180-63 76 0 137 25 180 63v72H76z" fill="url(#wave)" opacity="0.92" />
+  <text x="92" y="236" fill="#eff7ff" font-family="'Space Grotesk', Arial, sans-serif" font-size="176" font-weight="700" letter-spacing="-12">PM</text>
+  <text x="96" y="286" fill="#c8dde9" font-family="'Sora', Arial, sans-serif" font-size="30" font-weight="700" letter-spacing="8">PREMIER MARINE</text>
+</svg>

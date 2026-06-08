@@ -11,9 +11,14 @@ import {
 
 interface CreateCrmThreadInput {
   actorName: string;
+  company?: string;
   email?: string;
+  interestLane?: string;
+  message?: string;
   name: string;
   phone: string;
+  source?: "communicate" | "landing-page";
+  timeline?: string;
 }
 
 interface SendCrmConversationSmsInput {
@@ -260,6 +265,36 @@ export async function createCrmCommunicateThread(storeId: string, input: CreateC
 
   const now = new Date();
   const timeLabel = formatLiveTimeLabel(now);
+  const isLandingPageIntake = input.source === "landing-page";
+  const normalizedCompany = input.company?.trim() || input.name.trim();
+  const normalizedInterestLane = input.interestLane?.trim() ?? "";
+  const normalizedTimeline = input.timeline?.trim() ?? "";
+  const normalizedMessage = input.message?.trim() ?? "";
+  const previewText = normalizedMessage
+    ? normalizedMessage.length > 120
+      ? `${normalizedMessage.slice(0, 117)}...`
+      : normalizedMessage
+    : isLandingPageIntake
+      ? "Launch review request ready for follow-up."
+      : "Ready for first outbound SMS.";
+  const contactTags = ["New Message"];
+
+  if (isLandingPageIntake) {
+    contactTags.unshift("Launch Intake");
+  }
+
+  if (normalizedInterestLane) {
+    contactTags.push(normalizedInterestLane);
+  }
+
+  if (normalizedTimeline) {
+    contactTags.push(`${normalizedTimeline} Timeline`);
+  }
+
+  if (normalizedMessage) {
+    contactTags.push("Needs Follow-Up");
+  }
+
   const contact = await prisma.crmContact.create({
     data: {
       name: input.name.trim(),
@@ -267,21 +302,21 @@ export async function createCrmCommunicateThread(storeId: string, input: CreateC
       location: store.name,
       phone: input.phone.trim(),
       email: input.email?.trim() ?? "",
-      company: input.name.trim(),
+      company: normalizedCompany,
       stage: "Lead",
-      tagsJson: JSON.stringify(["New Message"]),
+      tagsJson: JSON.stringify(contactTags),
       consentText: "Allowed",
       consentEmail: "Pending",
       lastTouchLabel: timeLabel,
       lastTouchAt: now,
       lastChannel: "SMS",
-      nextAction: "Draft first outbound message",
+      nextAction: isLandingPageIntake ? "Review launch intake request" : "Draft first outbound message",
       healthScore: 72,
       openBalance: 0,
       opportunityValue: 0,
       reviewScore: 0,
       integrationId: `PENDING-${now.getTime()}`,
-      dealReference: "New Conversation",
+      dealReference: isLandingPageIntake ? normalizedInterestLane || "Launch Review" : "New Conversation",
       storeId
     }
   });
@@ -291,9 +326,9 @@ export async function createCrmCommunicateThread(storeId: string, input: CreateC
       storeId,
       contactId: contact.id,
       channel: "SMS",
-      subject: "New text conversation",
-      preview: "Ready for first outbound SMS.",
-      queueLabel: "Open Conversations",
+      subject: isLandingPageIntake ? "Premier Marine launch review request" : "New text conversation",
+      preview: previewText,
+      queueLabel: isLandingPageIntake ? "Launch Requests" : "Open Conversations",
       assignment: input.actorName.trim(),
       status: "Open",
       unreadCount: 0,

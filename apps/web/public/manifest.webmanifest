@@ -1,0 +1,18 @@
+{
+  "name": "Premier Marine",
+  "short_name": "Premier Marine",
+  "description": "Premier Marine is an installable marine dealership operating cloud for sales, service, inventory, CRM, and finance.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#04131f",
+  "theme_color": "#0b2538",
+  "icons": [
+    {
+      "src": "/icons/premier-marine-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

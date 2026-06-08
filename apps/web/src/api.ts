@@ -12,6 +12,11 @@ import type {
   WorkspaceId,
   WorkspacePayload
 } from "./types";
+import type {
+  PartsInventoryUpdateChange,
+  PartsInventoryUpdateCriterion,
+  PartsInventoryUpdateStatement
+} from "./pages/partsInventoryUpdateDirectory";
 
 export interface CreateActivityRequest {
   workspaceId: WorkspaceId;
@@ -993,13 +998,34 @@ export interface CrmCommunicatePayload {
 
 export interface CreateCrmThreadRequest {
   actorName: string;
+  company?: string;
   name: string;
   phone: string;
   email?: string;
+  interestLane?: string;
+  timeline?: string;
+  message?: string;
 }
 
 export interface CreateCrmThreadResponse {
   message: string;
+  contactId: string;
+  conversationId: string;
+}
+
+export interface PublicLaunchIntakeRequest {
+  name: string;
+  company?: string;
+  email: string;
+  phone: string;
+  interestLane: string;
+  timeline: string;
+  message: string;
+}
+
+export interface PublicLaunchIntakeResponse {
+  message: string;
+  assignedStoreName: string;
   contactId: string;
   conversationId: string;
 }
@@ -1041,6 +1067,13 @@ export async function login(email: string, password: string, sandboxId?: string 
   return request<LoginPayload>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password, sandboxId: sandboxId ?? null })
+  });
+}
+
+export async function submitPublicLaunchIntake(payload: PublicLaunchIntakeRequest) {
+  return request<PublicLaunchIntakeResponse>("/public/launch-intake", {
+    method: "POST",
+    body: JSON.stringify(payload)
   });
 }
 
@@ -1229,6 +1262,62 @@ export async function runTaskSlaPolicyAction(storeId: string, payload: TaskSlaPo
 
 export async function getVendors(storeId: string) {
   return request<VendorRecord[]>(`/stores/${storeId}/vendors`);
+}
+
+export interface PartsInventoryUpdateStatementsResponse {
+  statements: PartsInventoryUpdateStatement[];
+}
+
+export interface PartsInventoryUpdateStatementMutationResponse extends PartsInventoryUpdateStatementsResponse {
+  message: string;
+  statement: PartsInventoryUpdateStatement;
+}
+
+export interface DeletePartsInventoryUpdateStatementResponse extends PartsInventoryUpdateStatementsResponse {
+  deletedStatementId: string;
+  message: string;
+}
+
+export interface UpdatePartsInventoryUpdateStatementRequest {
+  changeSet?: PartsInventoryUpdateChange[];
+  criteria?: PartsInventoryUpdateCriterion[];
+  name?: string;
+}
+
+export async function getPartsInventoryUpdateStatements(storeId: string) {
+  return request<PartsInventoryUpdateStatementsResponse>(`/stores/${storeId}/parts-inventory-update/statements`);
+}
+
+export async function createPartsInventoryUpdateStatement(storeId: string, data?: { name?: string }) {
+  return request<PartsInventoryUpdateStatementMutationResponse>(`/stores/${storeId}/parts-inventory-update/statements`, {
+    method: "POST",
+    body: JSON.stringify(data ?? {})
+  });
+}
+
+export async function updatePartsInventoryUpdateStatement(storeId: string, statementId: string, data: UpdatePartsInventoryUpdateStatementRequest) {
+  return request<PartsInventoryUpdateStatementMutationResponse>(`/stores/${storeId}/parts-inventory-update/statements/${statementId}`, {
+    method: "PUT",
+    body: JSON.stringify(data)
+  });
+}
+
+export async function duplicatePartsInventoryUpdateStatement(storeId: string, statementId: string) {
+  return request<PartsInventoryUpdateStatementMutationResponse>(`/stores/${storeId}/parts-inventory-update/statements/${statementId}/duplicate`, {
+    method: "POST"
+  });
+}
+
+export async function runPartsInventoryUpdateStatement(storeId: string, statementId: string) {
+  return request<PartsInventoryUpdateStatementMutationResponse>(`/stores/${storeId}/parts-inventory-update/statements/${statementId}/run`, {
+    method: "POST"
+  });
+}
+
+export async function deletePartsInventoryUpdateStatement(storeId: string, statementId: string) {
+  return request<DeletePartsInventoryUpdateStatementResponse>(`/stores/${storeId}/parts-inventory-update/statements/${statementId}`, {
+    method: "DELETE"
+  });
 }
 
 export async function createVendor(storeId: string, data: { name: string; contact: string; phone: string; email: string; terms: string; leadDays: number; notes: string }) {
