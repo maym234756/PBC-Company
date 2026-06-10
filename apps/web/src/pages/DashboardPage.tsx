@@ -54,6 +54,7 @@ import { CrmCommunicateWorkspace } from "./CrmCommunicateWorkspace";
 import { DealerSetupWorkspace } from "./DealerSetupWorkspace";
 import { FinovoPayablesWorkspace } from "./FinovoPayablesWorkspace";
 import { ForgeFormWorkspace } from "./ForgeFormWorkspace";
+import { JournalEntryWorkspace } from "./JournalEntryWorkspace";
 import { ManagementActivitiesWorkspace } from "./ManagementActivitiesWorkspace";
 import { MyStoresWorkspace } from "./MyStoresWorkspace";
 import { PartsInventoryUpdateDetailWorkspace } from "./PartsInventoryUpdateDetailWorkspace";
@@ -66,6 +67,7 @@ import {
 import { ProfitLossWorkspace } from "./ProfitLossWorkspace";
 import { ReportCenterWorkspace, fiProductLibrary } from "./ReportCenterWorkspace";
 import { TechnicianWorkloadWorkspace } from "./TechnicianWorkloadWorkspace";
+import { TransactionInquiryWorkspace } from "./TransactionInquiryWorkspace";
 import { VendorDetailWorkspace } from "./VendorDetailWorkspace";
 import { VendorListWorkspace } from "./VendorListWorkspace";
 import { VendorInvoiceWorkspace } from "./VendorInvoiceWorkspace";
@@ -332,7 +334,42 @@ const QUICK_LAUNCH_ROUTE_STORAGE_PREFIX = "marine-cloud-quick-launch-routes";
 const QUICK_LAUNCH_SLOT_DRAG_MIME = "application/x-marine-quick-launch-slot";
 const OPEN_SERVICE_DETAIL_WINDOWS_STORAGE_PREFIX = "marine-cloud-open-service-detail-windows";
 const defaultPageOnlyDropdownGroups = new Set<string>();
-const generalLedgerVisibleLeafs = new Set(["Chart of Accounts", "Profit & Loss"]);
+const generalLedgerVisibleLeafs = new Set([
+  "Journal Entry",
+  "Chart of Accounts",
+  "Transaction Inquiry",
+  "Financial Accounts",
+  "Trial Balance",
+  "Trial Balance Worksheet",
+  "Reconciliation",
+  "GL Schedules",
+  "COA Comparison",
+  "Schedules",
+  "GL History",
+  "Departments",
+  "Journal Types",
+  "Bank Reconciliation",
+  "Profit & Loss",
+  "Store Summary",
+  "Department P&L",
+  "Flash Report",
+  "Expense Variance",
+  "Deal Posting",
+  "Funding to GL",
+  "Contract-in-Transit",
+  "Funding Exception Review",
+  "Deposits",
+  "Deposit Exceptions",
+  "Cash Clearing",
+  "Deposit Slip Match",
+  "Month End",
+  "Close Checklist",
+  "Accrual Review",
+  "Schedule Review",
+  "Journal Entry Queue",
+  "Trial Balance Review",
+  "Recurring Journal Review"
+]);
 const hiddenSystemLeafs = new Set([
   "Users & Roles",
   "Store Access Matrix",
@@ -1370,8 +1407,12 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const activeTechnicianWorkloadPage = workspaceId === "service" && searchParams.get("view") === "technician-workload";
   const partsWorkspaceView: PartsWorkspaceView = workspaceId === "parts" && searchParams.get("view") === "inventory" ? "inventory" : "ordering";
   const activePartsInventoryPartNumber = workspaceId === "parts" && partsWorkspaceView === "inventory" ? searchParams.get("inventoryPart") : null;
-  const activeGeneralLedgerPage: "chartOfAccounts" | "profitLoss" | null =
-    workspaceId === "analytics" && searchParams.get("view") === "chart-of-accounts"
+  const activeGeneralLedgerPage: "chartOfAccounts" | "journalEntry" | "profitLoss" | "transactionInquiry" | null =
+    workspaceId === "analytics" && searchParams.get("view") === "journal-entry"
+      ? "journalEntry"
+      : workspaceId === "analytics" && searchParams.get("view") === "transaction-inquiry"
+        ? "transactionInquiry"
+      : workspaceId === "analytics" && searchParams.get("view") === "chart-of-accounts"
       ? "chartOfAccounts"
       : workspaceId === "analytics" && searchParams.get("view") === "profit-loss"
         ? "profitLoss"
@@ -1398,7 +1439,11 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
   const activeMyStoresPage = workspaceId === "analytics" && searchParams.get("view") === "my-stores";
   const activeForgeFormPage = workspaceId === "analytics" && searchParams.get("view") === "forgeform";
   const activeAnalyticsQuery =
-    activeGeneralLedgerPage === "chartOfAccounts"
+    activeGeneralLedgerPage === "journalEntry"
+      ? "view=journal-entry"
+      : activeGeneralLedgerPage === "transactionInquiry"
+        ? "view=transaction-inquiry"
+      : activeGeneralLedgerPage === "chartOfAccounts"
       ? "view=chart-of-accounts"
       : activeGeneralLedgerPage === "profitLoss"
         ? "view=profit-loss"
@@ -1650,6 +1695,20 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
             subtitle: "Date-range operator activity review for store-side cashier accountability reporting",
             tools: [] as string[]
           }
+      : activeGeneralLedgerPage === "journalEntry"
+      ? {
+          ...workspaceDefinitions.analytics,
+          title: "Journal Entry",
+          subtitle: "Batch journal entry, transaction lines, and balancing controls for general ledger posting",
+          tools: [] as string[]
+        }
+      : activeGeneralLedgerPage === "transactionInquiry"
+      ? {
+          ...workspaceDefinitions.analytics,
+          title: "Transaction Inquiry",
+          subtitle: "Search posted transactions, inspect journal lines, and review source posting details",
+          tools: [] as string[]
+        }
       : activeGeneralLedgerPage === "chartOfAccounts"
       ? {
           ...workspaceDefinitions.analytics,
@@ -2747,6 +2806,10 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         return { workspaceId: "analytics", view: "vendor-list" };
       case "payables:vendor invoice":
         return { workspaceId: "analytics", view: "vendor-invoice" };
+      case "general ledger:journal entry":
+        return { workspaceId: "analytics", view: "journal-entry" };
+      case "general ledger:transaction inquiry":
+        return { workspaceId: "analytics", view: "transaction-inquiry" };
       case "receivables:ar aging doc":
         return { workspaceId: "analytics", view: "ar-aging-doc" };
       case "system:parts inventory update":
@@ -5534,7 +5597,7 @@ export function DashboardPage({ session, activeStoreId, workspaceId, onSelectSto
         </aside>
 
         <section
-          className={`legacy-workspace${workspaceId === "service" ? " is-service-workspace" : ""}${workspaceId === "parts" ? " is-parts-workspace" : ""}${useForgeFormStudioShell ? " is-forgeform-workspace" : ""}${activePartsInventoryUpdatePage ? " is-parts-inventory-update-workspace" : ""}${activePartsInventoryUpdateDetailPage ? " is-parts-inventory-update-detail-workspace" : ""}${activeVendorDetailPage ? " is-vendor-detail-workspace" : ""}${activeVendorListPage ? " is-vendor-list-workspace" : ""}${activeVendorInvoicePage ? " is-vendor-invoice-workspace" : ""}`}
+          className={`legacy-workspace${workspaceId === "service" ? " is-service-workspace" : ""}${workspaceId === "parts" ? " is-parts-workspace" : ""}${useForgeFormStudioShell ? " is-forgeform-workspace" : ""}${activePartsInventoryUpdatePage ? " is-parts-inventory-update-workspace" : ""}${activePartsInventoryUpdateDetailPage ? " is-parts-inventory-update-detail-workspace" : ""}${activeVendorDetailPage ? " is-vendor-detail-workspace" : ""}${activeVendorListPage ? " is-vendor-list-workspace" : ""}${activeVendorInvoicePage ? " is-vendor-invoice-workspace" : ""}${activeGeneralLedgerPage === "journalEntry" ? " is-journal-entry-workspace" : ""}${activeGeneralLedgerPage === "transactionInquiry" ? " is-transaction-inquiry-workspace" : ""}`}
           data-workspace-id={workspaceId}
           style={isPhoneViewport ? { order: 1 } : undefined}
         >
@@ -6972,7 +7035,7 @@ function renderWorkspace(
   activeVendorListPage: boolean,
   activeVendorInvoicePage: boolean,
   activeARAgingDocPage: boolean,
-  activeGeneralLedgerPage: "chartOfAccounts" | "profitLoss" | null,
+  activeGeneralLedgerPage: "chartOfAccounts" | "journalEntry" | "profitLoss" | "transactionInquiry" | null,
   activeManagementActivitiesPage: boolean,
   activeCashierAccountabilityPage: boolean,
   activeDealerSetupPage: boolean,
@@ -7248,6 +7311,14 @@ function renderWorkspace(
         return <ManagementActivitiesWorkspace />;
       }
 
+      if (activeGeneralLedgerPage === "journalEntry") {
+        return <JournalEntryWorkspace storeName={dashboard?.store.name ?? "Premier Marine"} />;
+      }
+
+      if (activeGeneralLedgerPage === "transactionInquiry") {
+        return <TransactionInquiryWorkspace storeName={dashboard?.store.name ?? "Premier Marine"} />;
+      }
+
       if (activeGeneralLedgerPage === "chartOfAccounts") {
         return <ChartOfAccountsWorkspace />;
       }
@@ -7293,22 +7364,17 @@ function renderWorkspace(
           activityEntries={taskControls.activityEntries}
           activeUserEmail={reportContext.session.user.email}
           activeUserName={reportContext.session.user.name}
+          dashboardSummary={dashboard?.websiteSummary ?? null}
           entries={taskControls.entries}
           fallbackStatusLine={fallbackStatusLine}
           sandboxContext={reportContext.session.sandboxContext ?? null}
           isSandboxSession={reportContext.session.mode === "sandbox"}
-          isFilteredByOperator={taskControls.isFilteredByOperator}
-          onAddTaskNote={taskControls.onAddTaskNote}
-          onAssignTask={taskControls.onAssignTask}
           onRunTool={onRunWorkspaceTool}
           onSelectRow={interactionState.onSelectWebsiteRow}
-          onUpdateStatus={taskControls.onUpdateStatus}
-          operators={taskControls.operators}
           onViewChange={websiteControls.onViewChange}
           rows={rows}
           selectedRow={selectedWebsiteRow}
-          selectedRowId={selectedWebsiteRow?.id ?? null}
-          updatingTaskId={taskControls.updatingTaskId}
+          storeName={dashboard?.store.name ?? "Active Store"}
           view={websiteControls.view}
         />
       );

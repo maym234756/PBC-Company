@@ -29,6 +29,10 @@ export interface TaskNoteEntry {
   authorName: string;
   authorInitial: string;
   timeLabel: string;
+  healthScore?: number;
+  liveOnWebsiteCount?: number;
+  mediaCompleteCount?: number;
+  needsReviewCount?: number;
 }
 
 export interface AuditTaskSnapshotField {
@@ -72,6 +76,7 @@ export interface ActivityLogEntry {
   label: string;
   detail: string;
   tone: CommandTone;
+  websiteSummary?: WebsiteDashboardSummary;
   actorUserId: string | null;
   actorName: string;
   actorInitial: string;
@@ -90,6 +95,10 @@ export interface TaskQueueEntry {
   assignedUserId: string | null;
   assignedName: string;
   assignedInitial: string;
+  healthScore?: number;
+  liveOnWebsiteCount?: number;
+  mediaCompleteCount?: number;
+  needsReviewCount?: number;
   lastUpdatedByUserId: string | null;
   lastUpdatedByName: string;
   lastUpdatedByInitial: string;
@@ -186,6 +195,31 @@ export interface WebsiteFeed {
   inventoryCount: number;
   leadsToday: number;
   lastSyncLabel: string;
+  healthScore?: number;
+  liveOnWebsiteCount?: number;
+  mediaCompleteCount?: number;
+  needsReviewCount?: number;
+}
+
+export interface WebsiteDashboardSummary {
+  averageSyncLabel: string;
+  blockedWorkflowCount: number;
+  connectedSiteCount: number;
+  liveOnWebsiteCount: number;
+  mediaCompleteCount: number;
+  needsReviewCount: number;
+  openWorkflowCount: number;
+  overdueWorkflowCount: number;
+  publishingSiteCount: number;
+  readySiteCount: number;
+  reviewSiteCount: number;
+  siteHealthScore: number;
+  topInventoryBrand: string | null;
+  topInventoryCount: number;
+  topLeadBrand: string | null;
+  topLeadCount: number;
+  totalInventoryCount: number;
+  totalLeadCount: number;
 }
 
 export interface ActivityItem {
@@ -208,6 +242,7 @@ export interface DashboardPayload {
   stats: DashboardStat[];
   modules: ModuleCard[];
   websiteFeeds: WebsiteFeed[];
+  websiteSummary?: WebsiteDashboardSummary;
   activity: ActivityItem[];
   operators: StoreOperatorOption[];
   workspaceCounts: {
@@ -325,9 +360,13 @@ export interface WebsiteWorkspaceRow {
   inventoryCount: number;
   leadsToday: number;
   lastSyncLabel: string;
+  healthScore?: number;
+  liveOnWebsiteCount?: number;
+  mediaCompleteCount?: number;
+  needsReviewCount?: number;
 }
 
-export type WebsiteWorkspaceView = "feed" | "customSettings" | "sandbox";
+export type WebsiteWorkspaceView = "feed" | "editor" | "customSettings" | "sandbox";
 
 export type WorkspacePayload =
   | {

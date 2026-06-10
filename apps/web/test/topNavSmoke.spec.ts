@@ -141,14 +141,14 @@ test.describe("top navigation smoke", () => {
 
     await page.getByLabel("Email").fill(SMOKE_EMAIL);
     await page.getByLabel("Password").fill(SMOKE_PASSWORD);
-    await page.getByRole("button", { name: "Enter Website", exact: true }).click();
+    await page.getByRole("button", { name: "Enter Premier Marine", exact: true }).click();
 
     const storePicker = page.getByRole("dialog");
     await expect(storePicker).toBeVisible();
     await storePicker.locator(".store-card").first().click();
 
     await expect(page).toHaveURL(/\/dashboard\/[^/]+\/desktop$/);
-    await expect(page.getByText("Website Feed Integration Console", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Website Feed Command Center", { exact: true })).toHaveCount(0);
     await expect(page.locator(".legacy-open-windows .legacy-window-link")).toHaveCount(0);
     await expect(page.locator(".legacy-workspace-empty-canvas")).toBeVisible();
   });
@@ -172,7 +172,7 @@ test.describe("top navigation smoke", () => {
     await expect(page).toHaveURL(new RegExp(`/dashboard/${storeId}/desktop$`));
     await expect(page.locator(".legacy-launch-strip .legacy-launch-button").first().locator("strong")).toHaveText("Chart of Accounts");
     await expect(page.locator(".legacy-open-windows .legacy-window-link")).toHaveCount(0);
-    await expect(page.getByText("Website Feed Integration Console", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Website Feed Command Center", { exact: true })).toHaveCount(0);
     await expect(page.locator(".legacy-workspace-empty-canvas")).toBeVisible();
   });
 
@@ -248,20 +248,20 @@ test.describe("top navigation smoke", () => {
     await menuButton(page, "Website Feed").click();
 
     await expect(page).toHaveURL(new RegExp(`/dashboard/${storeId}/website$`));
-    await expect(page.getByText("Website Feed Integration Console", { exact: true })).toBeVisible();
+    await expect(page.getByText("Website Feed Command Center", { exact: true })).toBeVisible();
     await expect(page.locator(".legacy-open-windows .legacy-window-link-copy")).toHaveText("Website Feed");
 
     await page.getByRole("button", { name: "Clear All", exact: true }).click();
 
     await expect(page.locator(".legacy-open-windows .legacy-window-link")).toHaveCount(0);
-    await expect(page.getByText("Website Feed Integration Console", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Website Feed Command Center", { exact: true })).toHaveCount(0);
     await expect(page.locator(".legacy-workspace-empty-canvas")).toBeVisible();
 
     await page.reload({ waitUntil: "networkidle" });
 
     await expect(page).toHaveURL(new RegExp(`/dashboard/${storeId}/website$`));
     await expect(page.locator(".legacy-open-windows .legacy-window-link")).toHaveCount(0);
-    await expect(page.getByText("Website Feed Integration Console", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Website Feed Command Center", { exact: true })).toHaveCount(0);
     await expect(page.locator(".legacy-workspace-empty-canvas")).toBeVisible();
   });
 

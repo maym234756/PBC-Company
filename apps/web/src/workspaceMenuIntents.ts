@@ -826,6 +826,138 @@ export function resolveReceivablesMenuIntent(item: string): WorkspaceMenuIntent 
 
 export function resolveGeneralLedgerMenuIntent(item: string): WorkspaceMenuIntent | null {
   switch (item) {
+    case "Journal Entry":
+    case "Transaction Inquiry":
+    case "Financial Accounts":
+      return createWorkspaceMenuIntent("analytics", item, "GL Operational Review", {
+        description:
+          item === "Journal Entry"
+            ? "Open journal-entry work with source, post date, and approver context attached."
+            : item === "Transaction Inquiry"
+              ? "Review transaction inquiry with account, reference, and period filters in place."
+              : "Open financial account maintenance with account type and ownership context attached.",
+        notice:
+          item === "Journal Entry"
+            ? "Journal entry ready."
+            : item === "Transaction Inquiry"
+              ? "Transaction inquiry ready."
+              : "Financial accounts ready.",
+        primaryActionLabel:
+          item === "Journal Entry"
+            ? "Open Journal Entry"
+            : item === "Transaction Inquiry"
+              ? "Run Inquiry"
+              : "Open Accounts",
+        submitAction:
+          item === "Journal Entry"
+            ? "GL Journal Entry"
+            : item === "Transaction Inquiry"
+              ? "GL Transaction Inquiry"
+              : "GL Financial Accounts",
+        initialValues:
+          item === "Journal Entry"
+            ? {
+                source: "Manual",
+                postDate: "Today",
+                approver: "Controller"
+              }
+            : item === "Transaction Inquiry"
+              ? {
+                  account: "All accounts",
+                  reference: "Open references",
+                  period: "Current Month"
+                }
+              : {
+                  accountType: "All accounts",
+                  owner: "Accounting",
+                  maintenanceWindow: "This Week"
+                }
+      });
+    case "Trial Balance":
+    case "Trial Balance Worksheet":
+    case "Reconciliation":
+    case "GL Schedules":
+    case "COA Comparison":
+    case "Schedules":
+    case "GL History":
+    case "Departments":
+    case "Journal Types":
+      return createWorkspaceMenuIntent("analytics", item, "GL Reports Library", {
+        description:
+          item === "Trial Balance"
+            ? "Open the standard trial balance report with period and export options ready."
+            : item === "Trial Balance Worksheet"
+              ? "Stage the trial balance worksheet for controller review and reconciliation."
+              : item === "Reconciliation"
+                ? "Open reconciliation reporting with period and account-scope controls."
+                : item === "GL Schedules"
+                  ? "Open GL schedules with balance-sheet grouping and review timing attached."
+                  : item === "COA Comparison"
+                    ? "Compare chart-of-accounts structures across stores or revisions."
+                    : item === "Schedules"
+                      ? "Run the schedules custom report with export-ready filters."
+                      : item === "GL History"
+                        ? "Open GL history with account and date-range filters in place."
+                        : item === "Departments"
+                          ? "Review department report output with current accounting grouping."
+                          : "Open journal-type reporting with posting filters ready.",
+        notice:
+          item === "Trial Balance"
+            ? "Trial balance ready."
+            : item === "Trial Balance Worksheet"
+              ? "Trial balance worksheet ready."
+              : item === "Reconciliation"
+                ? "Reconciliation report ready."
+                : item === "GL Schedules"
+                  ? "GL schedules ready."
+                  : item === "COA Comparison"
+                    ? "COA comparison ready."
+                    : item === "Schedules"
+                      ? "Schedules report ready."
+                      : item === "GL History"
+                        ? "GL history ready."
+                        : item === "Departments"
+                          ? "Departments report ready."
+                          : "Journal types ready.",
+        primaryActionLabel:
+          item === "COA Comparison"
+            ? "Run Comparison"
+            : item === "GL History"
+              ? "Open History"
+              : item === "Departments"
+                ? "Open Departments"
+                : "Open Report",
+        submitAction:
+          item === "Trial Balance"
+            ? "GL Trial Balance"
+            : item === "Trial Balance Worksheet"
+              ? "GL Trial Balance Worksheet"
+              : item === "Reconciliation"
+                ? "GL Reconciliation"
+                : item === "GL Schedules"
+                  ? "GL Schedules"
+                  : item === "COA Comparison"
+                    ? "GL COA Comparison"
+                    : item === "Schedules"
+                      ? "GL Custom Schedules"
+                      : item === "GL History"
+                        ? "GL History"
+                        : item === "Departments"
+                          ? "GL Departments"
+                          : "GL Journal Types",
+        initialValues:
+          item === "COA Comparison"
+            ? {
+                reportName: item,
+                period: "Current Month",
+                delivery: "Operator Queue"
+              }
+            : {
+                reportName: item,
+                period: item === "GL History" ? "90 Days" : "Current Month",
+                delivery: "Operator Queue"
+              }
+      });
     case "Store Summary":
     case "Department P&L":
     case "Flash Report":

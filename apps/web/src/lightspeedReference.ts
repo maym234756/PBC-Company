@@ -33,6 +33,28 @@ const MENU_ONLY_NAVIGATION_KEYS = new Set([
   "system:tax category",
   "system:time card",
   "system:workstation info",
+  "sales:major unit inquiry",
+  "sales:major unit ordering",
+  "sales:major unit receiving",
+  "sales:major unit transfer",
+  "sales:oem import",
+  "sales:700 credit dashboard",
+  "sales:value guide",
+  "sales:eforms library",
+  "sales:extras and fees",
+  "sales:finance formulas",
+  "sales:form batches",
+  "sales:insurance carriers",
+  "sales:lien holders",
+  "sales:major unit sales categories",
+  "sales:menu selling setup",
+  "sales:option categories",
+  "sales:options",
+  "sales:sales follow up chains",
+  "sales:salespeople",
+  "sales:salesperson round robin",
+  "sales:sources",
+  "sales:stages",
   "system:all custom reports",
   "system:spreadsheet reports"
 ]);
@@ -60,7 +82,15 @@ const VISIBLE_NAVIGATION_KEYS = new Set([
   "service:estimates & repair orders",
   "service:technician workload",
   "inventory:boat inventory",
+  "sales:salesperson insights",
+  "sales:new lead",
+  "sales:new quote",
+  "sales:new deal",
   "sales:leads, quotes & deals",
+  "sales:major unit inventory",
+  "sales:major unit locator",
+  "sales:consumer promos",
+  "sales:custom sales reports",
   "crm:communicate",
   "management activity:managements activitie's",
   "management activity:cashier accountability",
@@ -1114,271 +1144,44 @@ export const legacyFallbackNavigation: NavigationGroup[] = filterNavigationGroup
   {
     label: "Sales",
     items: [
+      "Salesperson Insights",
+      "New Lead",
+      "New Quote",
+      "New Deal",
+      "Leads, Quotes & Deals",
+      "Major Unit Inquiry",
+      "Major Unit Inventory",
+      "Major Unit Locator",
+      "Major Unit Ordering",
+      "Major Unit Receiving",
+      "Major Unit Transfer",
+      "OEM Import",
+      "700 Credit Dashboard",
+      "Value Guide",
+      "eForms Library",
+      "Consumer Promos",
       {
-        label: "Lead Desk",
+        label: "Lists",
         items: [
-          {
-            label: "Prospect Capture",
-            items: [
-              {
-                label: "Lead Intake",
-                items: ["New Lead", "Showroom Ups"]
-              },
-              {
-                label: "Remote Intake",
-                items: ["Phone Ups", "Internet Lead Entry"]
-              }
-            ]
-          },
-          {
-            label: "Follow-Up Queues",
-            items: [
-              "Leads, Quotes & Deals",
-              {
-                label: "Open Pipeline",
-                items: ["Unsold Follow-Up"]
-              },
-              {
-                label: "Appointments & Calls",
-                items: ["Appointment Board", "CRM Call List"]
-              }
-            ]
-          },
-          {
-            label: "Board Views",
-            items: [
-              {
-                label: "Lead Views",
-                items: ["Lead Board", "Quote Board"]
-              },
-              {
-                label: "Deal Views",
-                items: ["Open Deal Board", "Deposit Board"]
-              }
-            ]
-          }
+          "Extras and Fees",
+          "Finance Formulas",
+          "Form Batches",
+          "Insurance Carriers",
+          "Lien Holders",
+          "Major Unit Sales Categories",
+          "Menu Selling Setup",
+          "Option Categories",
+          "Options",
+          "Sales Follow Up Chains",
+          "Salespeople",
+          "Salesperson Round Robin",
+          "Sources",
+          "Stages"
         ]
       },
       {
-        label: "Quote & Deal Desk",
-        items: [
-          {
-            label: "Quote Creation",
-            items: [
-              {
-                label: "Quote Drafting",
-                items: ["New Quote", "Payment Quote"]
-              },
-              {
-                label: "Worksheet Review",
-                items: ["Quote Revisions", "Worksheet Builder"]
-              }
-            ]
-          },
-          {
-            label: "Deal Structuring",
-            items: [
-              {
-                label: "Deal Entry",
-                items: ["New Deal", "Deal Jacket Review"]
-              },
-              {
-                label: "Trade & Deposit",
-                items: ["Trade Appraisal Desk", "Deposit Log"]
-              }
-            ]
-          }
-        ]
-      },
-      {
-        label: "Inventory & Availability",
-        items: [
-          {
-            label: "Unit Visibility",
-            items: [
-              {
-                label: "Inventory Lookup",
-                items: ["Major Unit Inventory", "Major Unit Locator"]
-              },
-              {
-                label: "Incoming & Aging",
-                items: ["Incoming Unit Schedule", "Aged Inventory Watch"]
-              }
-            ]
-          },
-          {
-            label: "Pricing & Promotion",
-            items: [
-              {
-                label: "Promotion Controls",
-                items: ["Consumer Promos", "Rebate Matrix"]
-              },
-              {
-                label: "Package Pricing",
-                items: ["Package Builder", "MSRP Override Review"]
-              }
-            ]
-          }
-        ]
-      },
-      {
-        label: "F&I & Delivery",
-        items: [
-          {
-            label: "Finance Workflow",
-            items: [
-              {
-                label: "Deposit & Credit",
-                items: ["Take Deposit", "Credit Application Queue"]
-              },
-              {
-                label: "Funding Follow-Up",
-                items: ["Lender Follow-Up", "Funding Pending"]
-              },
-              {
-                label: "Compliance Review",
-                items: ["Compliance Packet"]
-              }
-            ]
-          },
-          {
-            label: "Delivery Control",
-            items: [
-              {
-                label: "Delivery Prep",
-                items: ["Delivery Checklist", "Sold Not Delivered"]
-              },
-              {
-                label: "We Owe & Calendar",
-                items: ["We Owe Log", "Delivery Calendar"]
-              }
-            ]
-          }
-        ]
-      },
-      {
-        label: "Customer & CRM",
-        items: [
-          {
-            label: "Customer Pipeline",
-            items: [
-              {
-                label: "Prospect Review",
-                items: ["Prospect 360", "Duplicate Customer Review"]
-              },
-              {
-                label: "Recovery & Referral",
-                items: ["Lost Prospect Recovery", "Referral Tracker"]
-              }
-            ]
-          },
-          {
-            label: "Communication",
-            items: [
-              {
-                label: "Campaign Outreach",
-                items: ["Email Campaign Queue", "Text Follow-Up Board"]
-              },
-              {
-                label: "Relationship Lists",
-                items: ["Birthday & Anniversary List", "CSI Outreach"]
-              }
-            ]
-          }
-        ]
-      },
-      {
-        label: "Reporting & Analysis",
-        items: [
-          {
-            label: "Sales Performance",
-            items: [
-              {
-                label: "Rep Performance",
-                items: ["Salesperson Insights", "Closing Ratio Summary"]
-              },
-              {
-                label: "Source & Gross",
-                items: ["Lead Source Mix", "Gross Profit Summary"]
-              }
-            ]
-          },
-          {
-            label: "Forecast & Aging",
-            items: [
-              {
-                label: "Aging Review",
-                items: ["Quote Aging", "Appraisal Aging"]
-              },
-              {
-                label: "Forecast Reporting",
-                items: ["Deal Forecast", "Custom Sales Reports"]
-              }
-            ]
-          }
-        ]
-      },
-      {
-        label: "Administration & Setup",
-        items: [
-          {
-            label: "Desk Setup",
-            items: [
-              {
-                label: "Sales Desk",
-                items: ["Salesperson Assignment", "Lead Source Setup"]
-              },
-              {
-                label: "Quote Rules",
-                items: ["Quote Form Layouts", "Deal Status Rules"]
-              }
-            ]
-          },
-          {
-            label: "Finance Controls",
-            items: [
-              {
-                label: "Rate & Fee",
-                items: ["Rate Tables", "Doc Fee Setup"]
-              },
-              {
-                label: "Menu & Compliance",
-                items: ["Menu Template Library", "Compliance Forms"]
-              }
-            ]
-          }
-        ]
-      },
-      {
-        label: "Favorites",
-        items: [
-          {
-            label: "My Sales Views",
-            items: [
-              {
-                label: "Favorite Boards",
-                items: ["Favorite Lead Queue", "Favorite Deal Desk"]
-              },
-              {
-                label: "Delivery & Reports",
-                items: ["Favorite Delivery Board", "Favorite Sales Reports"]
-              }
-            ]
-          },
-          {
-            label: "My Shortcuts",
-            items: [
-              {
-                label: "Funding & Appraisal",
-                items: ["Favorite Funding Watch", "Favorite Appraisal Log"]
-              },
-              {
-                label: "Promotions & Sold",
-                items: ["Favorite Promotions", "Favorite Sold Board"]
-              }
-            ]
-          }
-        ]
+        label: "Custom Reports",
+        items: ["Custom Sales Reports"]
       }
     ]
   },
@@ -1507,8 +1310,22 @@ export const legacyFallbackNavigation: NavigationGroup[] = filterNavigationGroup
   {
     label: "General Ledger",
     items: [
+      "Journal Entry",
       "Chart of Accounts",
+      "Transaction Inquiry",
       "Profit & Loss",
+      {
+        label: "Lists",
+        items: ["Financial Accounts"]
+      },
+      {
+        label: "Reports",
+        items: ["Trial Balance", "Trial Balance Worksheet", "Reconciliation", "GL Schedules", "COA Comparison"]
+      },
+      {
+        label: "Custom Reports",
+        items: ["Schedules", "Chart of Accounts", "GL History", "Departments", "Journal Types", "Bank Reconciliation"]
+      },
       {
         label: "Financial Views",
         items: [
@@ -2041,6 +1858,10 @@ const navigationMenuWorkspaceLookup: Record<string, WorkspaceId> = {
     "sales:new quote": "sales",
     "sales:new deal": "sales",
     "sales:leads, quotes & deals": "sales",
+    "sales:major unit inventory": "sales",
+    "sales:major unit locator": "sales",
+    "sales:consumer promos": "sales",
+    "sales:custom sales reports": "sales",
     "crm:communicate": "sales",
     "management activity:desktop": "desktop",
     "management activity:executive board": "analytics",
@@ -2087,6 +1908,18 @@ const navigationMenuWorkspaceLookup: Record<string, WorkspaceId> = {
     "receivables:finance follow-up": "analytics",
     "receivables:write-off review": "analytics",
     "general ledger:chart of accounts": "analytics",
+    "general ledger:journal entry": "analytics",
+    "general ledger:transaction inquiry": "analytics",
+    "general ledger:financial accounts": "analytics",
+    "general ledger:trial balance": "analytics",
+    "general ledger:trial balance worksheet": "analytics",
+    "general ledger:reconciliation": "analytics",
+    "general ledger:gl schedules": "analytics",
+    "general ledger:coa comparison": "analytics",
+    "general ledger:schedules": "analytics",
+    "general ledger:gl history": "analytics",
+    "general ledger:departments": "analytics",
+    "general ledger:journal types": "analytics",
     "general ledger:profit & loss": "analytics",
     "general ledger:store summary": "analytics",
     "general ledger:department p&l": "analytics",
